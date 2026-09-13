@@ -178,9 +178,11 @@ const Row = GObject.registerClass({
 
         const meta = new St.BoxLayout({style_class: 'ai-usage-meta'});
         if (ok) {
-            meta.add_child(label(primary?.label ?? '—', 'ai-usage-limit', {
-                y_align: Clutter.ActorAlign.CENTER,
-            }));
+            // With nothing to switch between, the label is not a selection.
+            meta.add_child(label(primary?.label ?? '—',
+                secondary ? 'ai-usage-limit-active' : 'ai-usage-limit', {
+                    y_align: Clutter.ActorAlign.CENTER,
+                }));
             if (secondary) {
                 this._chip = new St.Button({
                     style_class: 'ai-usage-chip',

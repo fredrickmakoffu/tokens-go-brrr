@@ -81,3 +81,9 @@ percentages, and the 70 / 90 thresholds for amber and red. Two things are transl
 rather than copied, since St has no equivalent: the CSS `backdrop-filter` becomes an
 opaque panel, and `:focus-visible` becomes an explicit keyboard-focus class so the accent
 bar never shows on a mouse click.
+
+One deliberate departure: the mockup draws the selected window as plain text beside the
+chip, which leaves the large percentage on the right unattributed once a row has more than
+one window. The selected window is drawn as a filled badge instead, so the number visibly
+belongs to it, and the chip stays outlined as the one you can switch to. A provider with a
+single window keeps the plain text, since nothing is being selected.
