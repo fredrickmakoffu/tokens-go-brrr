@@ -58,8 +58,14 @@ function primaryOf(tool) {
     return metric(tool, tool.primary) ?? tool.metrics?.[0] ?? null;
 }
 
+// The chip offers the next window in order and cycles, so every metric is
+// reachable on providers that report more than two.
 function secondaryOf(tool) {
-    return (tool.metrics ?? []).find(m => m.key !== tool.primary) ?? null;
+    const metrics = tool.metrics ?? [];
+    if (metrics.length < 2)
+        return null;
+    const index = metrics.findIndex(m => m.key === tool.primary);
+    return metrics[(index + 1) % metrics.length];
 }
 
 function clampPct(value) {

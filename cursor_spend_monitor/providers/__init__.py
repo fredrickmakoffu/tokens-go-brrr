@@ -3,12 +3,14 @@ from __future__ import annotations
 from .base import Meter, Provider, ProviderSnapshot
 from .claude import ClaudeProvider
 from .cursor import CursorProvider
+from .opencode import OpenCodeProvider
 
-DEFAULT_PROVIDERS = ["cursor", "claude"]
+DEFAULT_PROVIDERS = ["cursor", "claude", "opencode"]
 
 PROVIDERS: dict[str, type] = {
     "cursor": CursorProvider,
     "claude": ClaudeProvider,
+    "opencode": OpenCodeProvider,
 }
 
 
@@ -26,6 +28,7 @@ def build_providers(enabled: list[str] | None = None) -> list[Provider]:
 __all__ = [
     "Meter",
     "ClaudeProvider",
+    "OpenCodeProvider",
     "DEFAULT_PROVIDERS",
     "Provider",
     "ProviderSnapshot",
