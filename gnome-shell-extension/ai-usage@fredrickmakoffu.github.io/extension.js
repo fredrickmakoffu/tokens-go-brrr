@@ -58,16 +58,6 @@ function primaryOf(tool) {
     return metric(tool, tool.primary) ?? tool.metrics?.[0] ?? null;
 }
 
-// The chip offers the next window in order and cycles, so every metric is
-// reachable on providers that report more than two.
-function secondaryOf(tool) {
-    const metrics = tool.metrics ?? [];
-    if (metrics.length < 2)
-        return null;
-    const index = metrics.findIndex(m => m.key === tool.primary);
-    return metrics[(index + 1) % metrics.length];
-}
-
 function clampPct(value) {
     const n = Number(value);
     if (!Number.isFinite(n))
@@ -133,9 +123,98 @@ class AiUsageBar extends St.Widget {
     }
 });
 
+const BADGE_COLUMN_SPACING = 7;
+const BADGE_ROW_SPACING = 4;
+
+// Badges wrap onto further lines rather than overflowing the row. A provider can
+// report more windows than fit across 360px (Claude adds Opus and Sonnet buckets),
+// and Clutter's own FlowLayout stacks them at the same x instead of wrapping.
+const BadgeFlow = GObject.registerClass(
+class AiUsageBadgeFlow extends St.Widget {
+    _init() {
+        super._init({style_class: 'ai-usage-meta', x_expand: true});
+    }
+
+    _badges() {
+        return this.get_children().filter(child => child.visible);
+    }
+
+    // Greedy line breaking, shared by height reporting and allocation so the two
+    // can never disagree about how many lines there are.
+    _lines(width) {
+        const lines = [];
+        let current = [];
+        let used = 0;
+        let lineHeight = 0;
+        let total = 0;
+
+        for (const child of this._badges()) {
+            const [, childWidth] = child.get_preferred_width(-1);
+            const [, childHeight] = child.get_preferred_height(childWidth);
+            const needed = current.length ? used + BADGE_COLUMN_SPACING + childWidth : childWidth;
+
+            if (current.length && needed > width) {
+                lines.push({items: current, height: lineHeight});
+                total += lineHeight + BADGE_ROW_SPACING;
+                current = [];
+                used = 0;
+                lineHeight = 0;
+            }
+
+            used = current.length ? used + BADGE_COLUMN_SPACING + childWidth : childWidth;
+            lineHeight = Math.max(lineHeight, childHeight);
+            current.push({child, width: childWidth, height: childHeight});
+        }
+
+        if (current.length) {
+            lines.push({items: current, height: lineHeight});
+            total += lineHeight;
+        }
+        return {lines, height: total};
+    }
+
+    vfunc_get_preferred_width(_forHeight) {
+        let min = 0;
+        let natural = 0;
+        this._badges().forEach((child, index) => {
+            const [, childWidth] = child.get_preferred_width(-1);
+            min = Math.max(min, childWidth);           // never narrower than one badge
+            natural += childWidth + (index ? BADGE_COLUMN_SPACING : 0);
+        });
+        return this.get_theme_node().adjust_preferred_width(min, natural);
+    }
+
+    vfunc_get_preferred_height(forWidth) {
+        const themeNode = this.get_theme_node();
+        const inner = themeNode.adjust_for_width(forWidth < 0 ? 0 : forWidth);
+        const {height} = this._lines(inner);
+        return themeNode.adjust_preferred_height(height, height);
+    }
+
+    vfunc_allocate(box) {
+        this.set_allocation(box);
+        const content = this.get_theme_node().get_content_box(box);
+        const {lines} = this._lines(content.x2 - content.x1);
+        let y = content.y1;
+        for (const line of lines) {
+            let x = content.x1;
+            for (const {child, width, height} of line.items) {
+                child.allocate(new Clutter.ActorBox({
+                    x1: x,
+                    y1: y + Math.round((line.height - height) / 2),
+                    x2: x + width,
+                    y2: y + Math.round((line.height - height) / 2) + height,
+                }));
+                x += width + BADGE_COLUMN_SPACING;
+            }
+            y += line.height + BADGE_ROW_SPACING;
+        }
+    }
+});
+
 // Provider row (.row in the mockup). Activation navigates instead of closing the menu.
 const Row = GObject.registerClass({
-    Signals: {'navigate': {}, 'swap': {}},
+    Signals: {'navigate': {}, 'select': {param_types: [GObject.TYPE_STRING]}},
 }, class AiUsageRow extends PopupMenu.PopupBaseMenuItem {
     _init(icons, tool, bump) {
         const ok = !tool.status || tool.status === 'ok';
@@ -146,12 +225,11 @@ const Row = GObject.registerClass({
             hover: ok,
             can_focus: ok,
         });
-        this._chip = null;
+        this._chips = [];
         if (!ok)
             this.add_style_class_name('ai-usage-row-disabled');
 
         const primary = primaryOf(tool);
-        const secondary = ok ? secondaryOf(tool) : null;
         const pct = clampPct(primary?.value ?? 0);
         const color = colorFor(pct);
 
@@ -176,23 +254,34 @@ const Row = GObject.registerClass({
         });
         info.add_child(label(tool.name, 'ai-usage-name'));
 
-        const meta = new St.BoxLayout({style_class: 'ai-usage-meta'});
-        if (ok) {
-            // With nothing to switch between, the label is not a selection.
-            meta.add_child(label(primary?.label ?? '—',
-                secondary ? 'ai-usage-limit-active' : 'ai-usage-limit', {
-                    y_align: Clutter.ActorAlign.CENTER,
-                }));
-            if (secondary) {
-                this._chip = new St.Button({
+        const meta = new BadgeFlow();
+        const windows = ok ? (tool.metrics ?? []) : [];
+        if (windows.length > 1) {
+            // Every window keeps its own place. Picking one moves the fill to it
+            // rather than reordering, so the badges never trade positions.
+            for (const window of windows) {
+                if (window.key === tool.primary) {
+                    // No percentage: the large number to the right is this one's.
+                    meta.add_child(label(window.label, 'ai-usage-limit-active', {
+                        y_align: Clutter.ActorAlign.CENTER,
+                    }));
+                    continue;
+                }
+                const chip = new St.Button({
                     style_class: 'ai-usage-chip',
-                    label: `${secondary.label} ${clampPct(secondary.value)}%`,
+                    label: `${window.label} ${clampPct(window.value)}%`,
                     can_focus: true,
                     y_align: Clutter.ActorAlign.CENTER,
                 });
-                this._chip.connect('clicked', () => this.emit('swap'));
-                meta.add_child(this._chip);
+                chip.connect('clicked', () => this.emit('select', window.key));
+                this._chips.push(chip);
+                meta.add_child(chip);
             }
+        } else if (ok) {
+            // Nothing to choose between, so the label is not a selection.
+            meta.add_child(label(primary?.label ?? '—', 'ai-usage-limit', {
+                y_align: Clutter.ActorAlign.CENTER,
+            }));
         } else {
             meta.add_child(label(tool.error || tool.status, 'ai-usage-limit'));
         }
@@ -267,14 +356,14 @@ const Row = GObject.registerClass({
     }
 
     activate(event) {
-        // Clicks on the chip belong to the chip (mockup: e.stopPropagation()).
+        // Clicks on a badge belong to the badge (mockup: e.stopPropagation()).
         let source = null;
         try {
             source = event ? global.stage.get_event_actor(event) : null;
         } catch {
             source = null;
         }
-        if (this._chip && source && (source === this._chip || this._chip.contains(source)))
+        if (source && this._chips.some(c => c === source || c.contains(source)))
             return;
         this.emit('navigate');
     }
@@ -455,7 +544,7 @@ class AiUsageIndicator extends PanelMenu.Button {
         for (const tool of tools) {
             const row = new Row(this._icons, tool, this._lastSwapped === tool.id);
             row.connect('navigate', () => this._navigate('detail', tool.id));
-            row.connect('swap', () => this._swap(tool));
+            row.connect('select', (_row, key) => this._select(tool, key));
             section.add_child(row);
         }
         this._lastSwapped = null;
@@ -575,13 +664,14 @@ class AiUsageIndicator extends PanelMenu.Button {
         screen.add_child(refresh);
     }
 
-    _swap(tool) {
-        const secondary = secondaryOf(tool);
-        if (!secondary)
+    _select(tool, key) {
+        if (!key || key === tool.primary)
             return;
-        tool.primary = secondary.key;
+        if (!(tool.metrics ?? []).some(m => m.key === key))
+            return;
+        tool.primary = key;
         this._lastSwapped = tool.id;
-        this._ext.setPrimary(tool.id, secondary.key);
+        this._ext.setPrimary(tool.id, key);
         this._updateDot();
         this._render(false);
     }

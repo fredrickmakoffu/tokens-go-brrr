@@ -88,7 +88,7 @@
 .ai-usage-badge-icon { icon-size: 15px; -st-icon-style: regular; }
 
 .ai-usage-name { font-size: 13.5px; font-weight: 600; }
-.ai-usage-meta { spacing: 7px; padding-top: 2px; }
+.ai-usage-meta { padding-top: 2px; }
 .ai-usage-limit { font-size: 11.5px; color: #6c6d70; }
 
 /* The selected window, when there is more than one to choose from. Filled so the
