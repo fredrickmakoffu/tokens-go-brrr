@@ -1,7 +1,7 @@
 # AI usage
 
 GNOME Shell indicator for AI coding limits, plus a small daemon that fetches them.
-Cursor and Claude Code are live; OpenCode is next.
+Cursor, Claude Code and OpenCode are all live.
 
 ## What you see
 
@@ -30,6 +30,7 @@ Log out and back in so GNOME Shell picks up the extension. Needs GNOME Shell 45 
 |----------|--------|--------|
 | Cursor | Monthly limit, Other models | `api2.cursor.sh` dashboard endpoints |
 | Claude Code | 5-hour limit, Weekly (plus Opus and Sonnet weekly when the plan reports them) | `api.anthropic.com/api/oauth/usage` |
+| OpenCode | Rolling limit, Weekly, Monthly | `opencode.ai/zen/go/v1/usage` |
 
 ## Auth
 
@@ -41,6 +42,12 @@ No browser cookies and no scraping. Each provider reuses a login that is already
 as a bearer token. The file is read, never written: Claude Code owns the refresh cycle, and
 rotating the refresh token here could sign you out of the CLI. When the token has expired the
 row shows *Claude login expired* until you next run `claude`, which refreshes it.
+
+**OpenCode** reads the OpenCode Go API key from `~/.local/share/opencode/auth.json`, or from
+`OPENCODE_API_KEY` when that is set. Requires a Go subscription: the free tier reports no
+usage windows. Note that the OpenCode CLI itself only discovers limits reactively, from the
+body of a refused request, so the console endpoint polled here is the only way to see them
+before you hit one.
 
 ## Config
 
