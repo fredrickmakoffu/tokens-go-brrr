@@ -1,7 +1,7 @@
 # AI usage
 
 GNOME Shell indicator for AI coding limits, plus a small daemon that fetches them.
-Cursor is live; OpenCode and Claude Code are next.
+Cursor and Claude Code are live; OpenCode is next.
 
 ## What you see
 
@@ -24,9 +24,23 @@ systemctl --user enable --now cursor-spend-monitor.service
 
 Log out and back in so GNOME Shell picks up the extension. Needs GNOME Shell 45 or newer.
 
+## Providers
+
+| Provider | Meters | Source |
+|----------|--------|--------|
+| Cursor | Monthly limit, Other models | `api2.cursor.sh` dashboard endpoints |
+| Claude Code | 5-hour limit, Weekly (plus Opus and Sonnet weekly when the plan reports them) | `api.anthropic.com/api/oauth/usage` |
+
 ## Auth
 
-Reads the Cursor IDE login from `~/.config/Cursor/User/globalStorage/state.vscdb`. No browser cookies.
+No browser cookies and no scraping. Each provider reuses a login that is already on disk.
+
+**Cursor** reads the IDE login from `~/.config/Cursor/User/globalStorage/state.vscdb`.
+
+**Claude** reads the Claude Code OAuth token from `~/.claude/.credentials.json` and sends it
+as a bearer token. The file is read, never written: Claude Code owns the refresh cycle, and
+rotating the refresh token here could sign you out of the CLI. When the token has expired the
+row shows *Claude login expired* until you next run `claude`, which refreshes it.
 
 ## Config
 

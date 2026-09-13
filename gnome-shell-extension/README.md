@@ -56,7 +56,7 @@ Log out and back in (Wayland) or restart the shell with Alt+F2 r (X11).
 ```
 
 That starts a throwaway headless GNOME Shell with a mock daemon serving the same three
-providers as the mockup. Add a driver extension to the runtime directory if you want
+providers as the mockup (Cursor, Claude Code, OpenCode). Add a driver extension to the runtime directory if you want
 scripted clicks and screenshots.
 
 ## Design parity

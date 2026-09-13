@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .providers import DEFAULT_PROVIDERS
+
 CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "cursor-spend-monitor"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 STATE_FILE = Path(f"/run/user/{os.getuid()}/cursor-spend-monitor/state.json")
@@ -18,7 +20,7 @@ class MonitorConfig:
     poll_interval_seconds: int = 300
     alert_cooldown_hours: int = 6
     primary_alerts: list[int] = field(default_factory=lambda: list(DEFAULT_PRIMARY_ALERTS))
-    enabled_providers: list[str] = field(default_factory=lambda: ["cursor"])
+    enabled_providers: list[str] = field(default_factory=lambda: list(DEFAULT_PROVIDERS))
     # provider_id → preferred primary metric key (chip swap)
     primary_overrides: dict[str, str] = field(default_factory=dict)
 
@@ -34,7 +36,7 @@ class MonitorConfig:
             poll_interval_seconds=int(data.get("poll_interval_seconds", 300)),
             alert_cooldown_hours=int(data.get("alert_cooldown_hours", 6)),
             primary_alerts=[int(x) for x in (alerts or DEFAULT_PRIMARY_ALERTS)],
-            enabled_providers=list(data.get("enabled_providers") or ["cursor"]),
+            enabled_providers=list(data.get("enabled_providers") or DEFAULT_PROVIDERS),
             primary_overrides=dict(data.get("primary_overrides") or {}),
         )
 
