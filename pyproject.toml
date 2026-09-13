@@ -1,0 +1,18 @@
+[project]
+name = "cursor-spend-monitor"
+version = "0.1.0"
+description = "GNOME tray monitor for Cursor AI usage and spend alerts"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+cursor-spend-monitor = "cursor_spend_monitor.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["cursor_spend_monitor*"]
