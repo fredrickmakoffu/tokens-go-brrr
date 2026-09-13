@@ -56,8 +56,12 @@ Log out and back in (Wayland) or restart the shell with Alt+F2 r (X11).
 ```
 
 That starts a throwaway headless GNOME Shell with a mock daemon serving the same three
-providers as the mockup (Cursor, Claude Code, OpenCode). Add a driver extension to the runtime directory if you want
-scripted clicks and screenshots.
+providers as the mockup (Cursor, Claude Code, OpenCode). Add a driver extension to the
+runtime directory if you want scripted clicks and screenshots.
+
+`./devtest/run-nested-real.sh` does the same but runs the real daemon against your real
+logins, so you see live numbers. It copies your config rather than using it, so chip swaps
+made inside the sandbox do not change your settings.
 
 ## Brand marks
 
