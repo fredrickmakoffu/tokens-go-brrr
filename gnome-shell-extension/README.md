@@ -82,8 +82,15 @@ rather than copied, since St has no equivalent: the CSS `backdrop-filter` become
 opaque panel, and `:focus-visible` becomes an explicit keyboard-focus class so the accent
 bar never shows on a mouse click.
 
-One deliberate departure: the mockup draws the selected window as plain text beside the
-chip, which leaves the large percentage on the right unattributed once a row has more than
-one window. The selected window is drawn as a filled badge instead, so the number visibly
-belongs to it, and the chip stays outlined as the one you can switch to. A provider with a
-single window keeps the plain text, since nothing is being selected.
+One deliberate departure: the mockup draws the selected window as plain text followed by a
+single chip for the other one, and swapping trades their places. That leaves the large
+percentage unattributed, and makes the badges jump around under the pointer. Every window
+now gets a badge of its own in the provider's own order, the selected one filled and the
+rest outlined, and picking one moves the fill without moving anything else. A provider
+reporting a single window keeps plain text, since nothing is being selected.
+
+Badges wrap onto further lines when they do not fit, which they will: three windows with
+percentages exceed 360px, and Claude can report four. `BadgeFlow` does the line breaking,
+because Clutter's own `FlowLayout` stacks the children at the same x rather than wrapping
+them. Its greedy line breaking is shared between height reporting and allocation so the two
+cannot disagree about the line count.
