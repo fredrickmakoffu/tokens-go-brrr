@@ -209,16 +209,22 @@ const Row = GObject.registerClass({
             }));
             if (bump)
                 this._bump();
-            this.connect('notify::hover', () => this._syncKeyboardFocus());
+            // The pointer taking over clears the keyboard accent, but never sets it.
+            this.connect('notify::hover', () => {
+                if (this.hover)
+                    this._setKeyboardFocus(false);
+            });
         } else {
             this.opacity = 140;
         }
     }
 
     // Mockup shows the accent bar only for :focus-visible, i.e. keyboard focus.
-    _syncKeyboardFocus() {
-        const focused = global.stage.get_key_focus() === this;
-        if (focused && !this.hover)
+    // Driven purely by focus events: during key-focus-out the stage still reports
+    // this actor as focused, so asking it there would re-add the class on the row
+    // the pointer just left.
+    _setKeyboardFocus(on) {
+        if (on)
             this.add_style_class_name('ai-usage-keyboard-focus');
         else
             this.remove_style_class_name('ai-usage-keyboard-focus');
@@ -226,12 +232,12 @@ const Row = GObject.registerClass({
 
     vfunc_key_focus_in() {
         super.vfunc_key_focus_in();
-        this._syncKeyboardFocus();
+        this._setKeyboardFocus(!this.hover);
     }
 
     vfunc_key_focus_out() {
         super.vfunc_key_focus_out();
-        this._syncKeyboardFocus();
+        this._setKeyboardFocus(false);
     }
 
     // .value.bump keyframes: scale to 1.14 and back over ~220ms.
