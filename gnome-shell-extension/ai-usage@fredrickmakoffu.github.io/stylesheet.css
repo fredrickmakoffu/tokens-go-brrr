@@ -91,6 +91,20 @@
 .ai-usage-meta { spacing: 7px; padding-top: 2px; }
 .ai-usage-limit { font-size: 11.5px; color: #6c6d70; }
 
+/* The selected window, when there is more than one to choose from. Filled so the
+   big percentage on the right visibly belongs to it; the chip beside it stays
+   outlined because it is the one you can switch to. Geometry matches the chip so
+   the two sit on the same baseline. */
+.ai-usage-limit-active {
+  padding: 2px 7px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background-color: #333336;
+  color: #f2f2f3;
+  font-size: 10.5px;
+  font-weight: 400;
+}
+
 .ai-usage-chip {
   padding: 2px 7px;
   border: 1px solid #333336;
