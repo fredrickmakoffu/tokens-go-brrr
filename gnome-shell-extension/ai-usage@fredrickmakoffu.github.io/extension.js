@@ -32,6 +32,11 @@ const IFACE_XML = `
 const UsageProxy = Gio.DBusProxy.makeProxyWrapper(IFACE_XML);
 
 const COLOR = {ok: '#7fd68f', wait: '#e0b158', crit: '#e2726b', error: '#6c6d70'};
+const BADGE_FILES = {
+    cursor: 'cursor.png',
+    claude: 'claude.svg',
+    opencode: 'opencode.svg',
+};
 const CONFIG_PATH = GLib.build_filenamev([
     GLib.get_user_config_dir(), 'cursor-spend-monitor', 'config.json',
 ]);
@@ -150,7 +155,7 @@ const Row = GObject.registerClass({
             child: new St.Icon({
                 style_class: 'ai-usage-badge-icon',
                 gicon: icons.badge(tool.icon),
-                icon_size: 14,
+                icon_size: 15,
                 x_align: Clutter.ActorAlign.CENTER,
                 y_align: Clutter.ActorAlign.CENTER,
             }),
@@ -388,7 +393,7 @@ class AiUsageIndicator extends PanelMenu.Button {
                 child: new St.Icon({
                     style_class: 'ai-usage-badge-icon',
                     gicon: this._icons.badge(icon),
-                    icon_size: 14,
+                    icon_size: 15,
                     x_align: Clutter.ActorAlign.CENTER,
                     y_align: Clutter.ActorAlign.CENTER,
                 }),
@@ -586,7 +591,7 @@ class AiUsageIndicator extends PanelMenu.Button {
 export default class AiUsageExtension extends Extension {
     enable() {
         this.icons = {
-            badge: name => this._icon(`${name || 'cursor'}-symbolic`),
+            badge: name => this._badgeIcon(name),
             chevronRight: this._icon('chevron-right-symbolic'),
             chevronLeft: this._icon('chevron-left-symbolic'),
         };
@@ -633,6 +638,12 @@ export default class AiUsageExtension extends Extension {
 
     _icon(name) {
         return Gio.icon_new_for_string(`${this.path}/icons/${name}.svg`);
+    }
+
+    // Brand marks, taken from the apps themselves, so they keep their own colours.
+    _badgeIcon(name) {
+        const file = BADGE_FILES[name] ?? BADGE_FILES.cursor;
+        return Gio.icon_new_for_string(`${this.path}/icons/${file}`);
     }
 
     _applyJson(json) {

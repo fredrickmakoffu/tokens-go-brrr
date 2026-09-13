@@ -59,6 +59,16 @@ That starts a throwaway headless GNOME Shell with a mock daemon serving the same
 providers as the mockup (Cursor, Claude Code, OpenCode). Add a driver extension to the runtime directory if you want
 scripted clicks and screenshots.
 
+## Brand marks
+
+`icons/` carries each provider's own logo, taken from the app installed on this machine
+rather than redrawn: Claude's is the vector from the Claude Code VS Code extension, Cursor's
+is the app icon shipped with the Cursor editor. They keep their own colours, so the badge
+uses `-st-icon-style: regular` and does not recolour its children. The chevrons stay
+symbolic and follow the text colour. OpenCode has no local asset yet and falls back to a
+bracket glyph. These marks are the trademarks of their respective owners and are used here
+only to identify the service each row reports on.
+
 ## Design parity
 
 `stylesheet.css` carries the mockup's values verbatim: 360px wide with an 11px radius,
