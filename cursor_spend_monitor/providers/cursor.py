@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from ..api import CursorUsageClient
+from ..instances import ProcessSpec
 from ..local_auth import read_local_auth
 from .base import Meter, ProviderSnapshot
 
@@ -12,6 +13,22 @@ DASHBOARD_URL = "https://cursor.com/dashboard/spending"
 class CursorProvider:
     id = "cursor"
     display_name = "Cursor"
+    process_specs = [
+        # The terminal agent: launched through a shell wrapper, so argv[0] is the
+        # node entry point and the distinguishing part is the install path.
+        ProcessSpec(
+            names=frozenset({"agent", "cursor-agent", "node"}),
+            require_args=("cursor-agent",),
+            label="agent",
+        ),
+        # The desktop app. Electron spawns a helper process per window and per
+        # service, all carrying --type=, so only the main process is a session.
+        ProcessSpec(
+            names=frozenset({"cursor"}),
+            exclude_args=("--type=",),
+            label="editor",
+        ),
+    ]
 
     def __init__(self) -> None:
         self._client = CursorUsageClient()

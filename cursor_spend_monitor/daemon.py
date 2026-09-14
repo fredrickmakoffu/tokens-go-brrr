@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import signal
 import sys
 import threading
@@ -11,6 +12,7 @@ from gi.repository import GLib
 from . import __version__
 from .config import MonitorConfig, write_state
 from .dbus_service import UsageService
+from .instances import InstanceReport, scan, signature
 from .notify import AlertManager
 from .providers import build_providers
 from .providers.base import Provider, ProviderSnapshot
@@ -27,6 +29,15 @@ class UsageDaemon:
         self.last_error: str | None = None
         self.last_fetch: datetime | None = None
         self._polling = False
+        self._specs = {
+            provider.id: list(getattr(provider, "process_specs", []))
+            for provider in self.providers
+        }
+        self._instances: dict[str, InstanceReport] = {
+            provider_id: InstanceReport() for provider_id in self._specs
+        }
+        self._published_signature = signature(self._instances)
+        self._candidate_signature: tuple | None = None
         self.loop = GLib.MainLoop()
 
         self.service = UsageService(
@@ -40,7 +51,13 @@ class UsageDaemon:
 
         interval = max(60, self.config.poll_interval_seconds)
         GLib.timeout_add_seconds(interval, self._tick)
+        # Sessions come and go far faster than quota does, and a scan is local and
+        # cheap, so it runs on its own much shorter timer.
+        GLib.timeout_add_seconds(
+            max(1, self.config.instance_poll_seconds), self._scan_instances
+        )
         GLib.idle_add(self.poll)
+        GLib.idle_add(self._scan_instances)
         for sig in (signal.SIGINT, signal.SIGTERM):
             GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, sig, self._on_signal)
 
@@ -90,6 +107,38 @@ class UsageDaemon:
             snapshots.append(snap)
         GLib.idle_add(self._apply_snapshots, snapshots)
 
+    # -- sessions -------------------------------------------------------------
+
+    def _scan_instances(self, *_args) -> bool:
+        try:
+            reports = scan(self._specs, ignore_pids={os.getpid()})
+        except OSError as exc:
+            print(f"Instance scan failed: {exc}", file=sys.stderr, flush=True)
+            return True
+
+        current = signature(reports)
+        if current == self._published_signature:
+            self._candidate_signature = None
+            return True
+
+        # A change has to survive two consecutive scans before it reaches the
+        # panel, so a session that starts and exits between ticks cannot make the
+        # top bar flicker.
+        if current != self._candidate_signature:
+            self._candidate_signature = current
+            return True
+
+        self._candidate_signature = None
+        self._published_signature = current
+        self._instances = reports
+        self._attach_instances()
+        self._publish()
+        return True
+
+    def _attach_instances(self) -> None:
+        for snap in self.snapshots:
+            snap.instances = self._instances.get(snap.provider_id, InstanceReport())
+
     def _apply_snapshots(self, snapshots: list[ProviderSnapshot]) -> bool:
         self._polling = False
         applied: list[ProviderSnapshot] = []
@@ -106,6 +155,7 @@ class UsageDaemon:
         self.last_error = (
             "; ".join(errors) if errors and not any(s.status == "ok" for s in applied) else None
         )
+        self._attach_instances()
         self._publish()
         return False
 
