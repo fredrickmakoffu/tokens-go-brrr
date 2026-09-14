@@ -3,31 +3,33 @@ from __future__ import annotations
 import sys
 
 from .config import CONFIG_DIR, MonitorConfig
-from .local_auth import read_local_auth, state_db_path
+from .providers.cursor import CursorProvider
 
 
 def run_setup() -> int:
-    print("Cursor Spend Monitor — setup")
+    print("AI usage — setup")
     print()
-    print("Primary auth: Cursor IDE login (recommended)")
-    print(f"  Looks for: {state_db_path()}")
-    print("  Just stay signed in to the Cursor desktop app.")
+    print("Providers use local app logins. No browser cookies.")
     print()
 
-    auth = read_local_auth()
-    if auth:
-        print(f"Found Cursor login for: {auth.email or '(email unknown)'}")
-        print(f"Plan: {auth.membership_type or 'unknown'}")
-        print()
-        print("No browser cookie needed. You can run:")
-        print("  cursor-spend-monitor status")
-        print("  systemctl --user restart cursor-spend-monitor.service")
-        # Ensure a config file exists for poll/alert settings
-        config = MonitorConfig.load()
-        config.save()
-        print(f"Config: {CONFIG_DIR / 'config.json'}")
-        return 0
+    cursor = CursorProvider()
+    if cursor.available():
+        snap = cursor.fetch()
+        if snap.status == "ok":
+            print(f"Cursor: ok — {snap.header()}")
+            bits = " · ".join(f"{m.label} {m.percent:.0f}%" for m in snap.metrics)
+            print(f"  {bits}")
+            print(f"  {snap.primary.resets_label()}")
+        else:
+            print(f"Cursor: {snap.error or snap.status}", file=sys.stderr)
+            return 1
+    else:
+        print("Cursor: not signed in. Open the Cursor app and sign in.", file=sys.stderr)
+        return 1
 
-    print("No Cursor IDE login found.", file=sys.stderr)
-    print("Open the Cursor app, sign in, then re-run: cursor-spend-monitor setup", file=sys.stderr)
-    return 1
+    config = MonitorConfig.load()
+    config.save()
+    print()
+    print(f"Config: {CONFIG_DIR / 'config.json'}")
+    print("Start daemon: systemctl --user restart cursor-spend-monitor.service")
+    return 0

@@ -1,0 +1,8 @@
+{
+  "uuid": "ai-usage@fredrickmakoffu.github.io",
+  "name": "AI Usage",
+  "description": "Status dot in the top bar with a popover showing AI coding limits (Cursor, Claude Code, OpenCode).",
+  "shell-version": ["45", "46", "47", "48", "49", "50"],
+  "url": "https://github.com/fredrickmakoffu/cursor-spend-monitor",
+  "version": 1
+}

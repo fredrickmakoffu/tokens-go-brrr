@@ -1,0 +1,50 @@
+from __future__ import annotations
+
+from datetime import datetime, timezone
+
+from ..api import CursorUsageClient
+from ..local_auth import read_local_auth
+from .base import Meter, ProviderSnapshot
+
+DASHBOARD_URL = "https://cursor.com/dashboard/spending"
+
+
+class CursorProvider:
+    id = "cursor"
+    display_name = "Cursor"
+
+    def __init__(self) -> None:
+        self._client = CursorUsageClient()
+
+    def available(self) -> bool:
+        return read_local_auth() is not None
+
+    def fetch(self) -> ProviderSnapshot:
+        if not self.available():
+            return ProviderSnapshot.error_snapshot(
+                provider_id=self.id,
+                display_name=self.display_name,
+                icon="cursor",
+                message="Sign in to Cursor desktop",
+                auth_needed=True,
+                dashboard_url=DASHBOARD_URL,
+            )
+
+        usage = self._client.fetch()
+        plan = usage.membership_type.title() if usage.membership_type else None
+        resets = usage.billing_cycle_end
+        return ProviderSnapshot(
+            provider_id=self.id,
+            display_name=self.display_name,
+            icon="cursor",
+            plan=plan,
+            metrics=[
+                Meter("monthly", "Monthly limit", usage.auto_percent, resets_at=resets),
+                Meter("other", "Other models", usage.api_percent, resets_at=resets),
+            ],
+            primary_key="monthly",
+            dashboard_url=DASHBOARD_URL,
+            status="ok",
+            error=None,
+            fetched_at=datetime.now(timezone.utc),
+        )
