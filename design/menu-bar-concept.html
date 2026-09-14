@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Usage — Menu Bar Concept</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root{
+  --bg-0:#0a0b0d;
+  --bg-1:#1c1c1e;
+  --panel:rgba(28,28,30,.92);
+  --border:#333336;
+  --border-soft:#2a2a2c;
+  --text:#f2f2f3;
+  --text-dim:#98999d;
+  --text-faint:#6c6d70;
+  --ok:#7fd68f;
+  --wait:#e0b158;
+  --crit:#e2726b;
+  --accent:#5b8ef2;
+  --radius:11px;
+  --radius-sm:7px;
+  --ease:cubic-bezier(.2,.8,.2,1);
+}
+*{box-sizing:border-box}
+body{margin:0;height:100vh;overflow:hidden;background:var(--bg-0);color:var(--text);
+  font-family:'Inter',system-ui,sans-serif;font-size:13px;-webkit-font-smoothing:antialiased}
+button{font-family:inherit}
+.desktop{height:100%;position:relative;
+  background:radial-gradient(ellipse at 75% 20%,#1e1f22 0,#141518 36%,var(--bg-0) 72%)}
+
+/* macOS-style menu bar */
+.top{height:26px;background:var(--bg-1);display:flex;align-items:center;justify-content:flex-end;
+  padding:0 12px;gap:13px;position:relative;border-bottom:1px solid var(--border-soft);color:var(--text-dim);
+  font-size:11.5px}
+.ai-dot{width:9px;height:9px;border-radius:50%;cursor:pointer;background:var(--ok);border:0;padding:0}
+.ai-dot:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.ai-dot.caution{background:var(--wait)}
+.ai-dot.critical{background:var(--crit)}
+.clock{font-variant-numeric:tabular-nums}
+
+/* menu */
+.menu{position:absolute;top:32px;right:12px;width:360px;background:var(--panel);
+  backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--border);border-radius:var(--radius);
+  box-shadow:0 20px 48px rgba(0,0,0,.5);overflow:hidden;
+  opacity:0;transform:translateY(-6px) scale(.98);transform-origin:top right;pointer-events:none;
+  transition:opacity .15s var(--ease),transform .15s var(--ease)}
+.menu.show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
+
+/* screen transition */
+.screen{transition:opacity .16s var(--ease),transform .16s var(--ease)}
+.screen.enter{opacity:0;transform:translateY(4px) scale(.99)}
+
+.header{padding:14px 16px 11px;border-bottom:1px solid var(--border-soft)}
+.header b{font-size:13px;font-weight:700}
+
+.section{padding:6px 0}
+
+.row{display:flex;align-items:center;min-height:58px;padding:9px 14px 9px 16px;gap:12px;cursor:pointer;
+  transition:transform .08s var(--ease),background .12s var(--ease)}
+.row:hover{background:#242426}
+.row:active{transform:scale(.985)}
+.row:focus-visible{outline:none;background:#242426;box-shadow:inset 2px 0 0 var(--accent)}
+
+.icon-badge{width:28px;height:28px;border-radius:8px;border:1px solid var(--border);display:flex;
+  align-items:center;justify-content:center;color:var(--text-dim);flex-shrink:0}
+
+.info{min-width:0;flex:1}
+.name{font-weight:600;font-size:13.5px}
+.meta{display:flex;align-items:center;gap:7px;margin-top:2px}
+.limit-label{color:var(--text-faint);font-size:11.5px}
+.chip{border:1px solid var(--border);background:none;color:var(--text-dim);padding:2px 7px;
+  border-radius:999px;font-size:10.5px;cursor:pointer;font-variant-numeric:tabular-nums;
+  transition:background .12s var(--ease),color .12s var(--ease)}
+.chip:hover{background:#2c2c2e;color:var(--text)}
+.chip:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+
+.bar{height:3px;background:var(--border-soft);border-radius:2px;margin-top:8px;overflow:hidden}
+.bar-fill{height:100%;border-radius:2px;transition:width .3s var(--ease)}
+
+.value{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums;flex-shrink:0;letter-spacing:-.01em}
+@keyframes bump{0%{transform:scale(1)}45%{transform:scale(1.14)}100%{transform:scale(1)}}
+.value.bump{animation:bump .22s var(--ease)}
+
+.chevron{color:var(--text-faint);flex-shrink:0;display:flex}
+
+.footer{border-top:1px solid var(--border-soft);display:flex;height:38px}
+.footer button{flex:1;border:0;background:none;color:var(--text-dim);font-size:11px;cursor:pointer;
+  transition:background .12s var(--ease),color .12s var(--ease)}
+.footer button:hover{background:#242426;color:var(--text)}
+.footer button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+
+/* detail + guide screens */
+.detail-header{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border-soft)}
+.back-btn{background:none;border:0;color:var(--text-dim);cursor:pointer;display:flex;align-items:center;
+  padding:3px;border-radius:6px;transition:background .12s var(--ease),color .12s var(--ease)}
+.back-btn:hover{background:#242426;color:var(--text)}
+.back-btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.detail-title{font-weight:700;font-size:13.5px}
+
+.detail-body{padding:14px 16px 4px}
+.detail-metric{margin-bottom:16px}
+.detail-metric:last-child{margin-bottom:0}
+.detail-metric-top{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;color:var(--text-dim)}
+.detail-value{font-weight:700;font-size:14px;font-variant-numeric:tabular-nums}
+.detail-reset{margin-top:5px;font-size:10.5px;color:var(--text-faint)}
+
+.dash-btn{display:block;width:calc(100% - 32px);margin:6px 16px 14px;padding:9px;border-radius:var(--radius-sm);
+  border:1px solid var(--border);background:#232326;color:var(--text);font-size:12px;font-weight:600;
+  cursor:pointer;text-align:center;transition:background .12s var(--ease)}
+.dash-btn:hover{background:#2b2b2e}
+.dash-btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+
+.guide-body{padding:14px 16px 16px;display:flex;flex-direction:column;gap:14px}
+.guide-item{display:flex;gap:10px;align-items:flex-start}
+.guide-dot{width:9px;height:9px;border-radius:50%;margin-top:4px;flex-shrink:0}
+.guide-text b{font-size:12.5px;display:block;margin-bottom:2px}
+.guide-text span{font-size:11.5px;color:var(--text-dim)}
+
+.toast{position:absolute;left:50%;bottom:22px;transform:translate(-50%,8px);opacity:0;
+  background:var(--bg-1);border:1px solid var(--border);padding:7px 12px;border-radius:var(--radius-sm);
+  font-size:11px;transition:opacity .18s var(--ease),transform .18s var(--ease);pointer-events:none}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+.note{position:absolute;bottom:16px;left:16px;color:#4f5259;font-size:10.5px}
+</style>
+</head>
+<body>
+<div class="desktop">
+  <div class="top">
+    <button class="ai-dot" id="aiDot" aria-haspopup="true" aria-expanded="false" aria-label="AI usage"></button>
+    <span>⌁</span><span>▴</span><span>99%</span>
+    <span class="clock" id="clock"></span>
+  </div>
+
+  <div id="menu" class="menu" role="menu">
+    <div id="screenRoot"></div>
+  </div>
+
+  <div class="note">Menu bar concept — click the dot to open</div>
+  <div id="toast" class="toast"></div>
+</div>
+
+<script>
+let tools = [
+  { id:'cursor', name:'Cursor', icon:'cursor',
+    metrics:[ { key:'monthly', label:'Monthly limit', value:74, resets:'Resets in 12 days' } ],
+    primary:'monthly' },
+  { id:'claude', name:'Claude Code', icon:'claude',
+    metrics:[ { key:'5h', label:'5-hour limit', value:42, resets:'Resets in 2h 15m' },
+              { key:'weekly', label:'Weekly', value:81, resets:'Resets in 4 days' } ],
+    primary:'5h' },
+  { id:'opencode', name:'OpenCode', icon:'opencode',
+    metrics:[ { key:'5h', label:'5-hour limit', value:15, resets:'Resets in 4h 50m' },
+              { key:'weekly', label:'Weekly', value:33, resets:'Resets in 6 days' } ],
+    primary:'5h' },
+];
+
+const state = { screen:'list', toolId:null, lastSwapped:null };
+
+const screenRoot = document.getElementById('screenRoot');
+const menu = document.getElementById('menu');
+const aiDot = document.getElementById('aiDot');
+const toastEl = document.getElementById('toast');
+let toastTimer;
+
+const icons = {
+  cursor:'<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M4 3l15 6.4-6 2.1-2 6.3z"/></svg>',
+  claude:'<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M12 2c.6 3.3 1.4 5.5 2.6 6.7C15.8 9.9 18 10.7 21 11.3c-3 .6-5.2 1.4-6.4 2.6-1.2 1.2-2 3.4-2.6 6.7-.6-3.3-1.4-5.5-2.6-6.7C8.2 12.7 6 11.9 3 11.3c3-.6 5.2-1.4 6.4-2.6C10.6 7.5 11.4 5.3 12 2z"/></svg>',
+  opencode:'<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 6 3 12 8 18"/><polyline points="16 6 21 12 16 18"/></svg>'
+};
+const chevronRight = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>';
+const chevronLeft = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg>';
+
+function colorFor(pct){
+  if (pct >= 90) return 'var(--crit)';
+  if (pct >= 70) return 'var(--wait)';
+  return 'var(--ok)';
+}
+function metric(t, key){ return t.metrics.find(m => m.key === key); }
+
+function show(html){
+  screenRoot.innerHTML = `<div class="screen enter">${html}</div>`;
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const el = screenRoot.querySelector('.screen');
+    if (el) el.classList.remove('enter');
+  }));
+  bindScreenEvents();
+}
+
+function navigate(screen, toolId){
+  state.screen = screen;
+  state.toolId = toolId || null;
+  render();
+}
+
+function render(){
+  updateDot();
+  if (state.screen === 'detail') return show(renderDetail(state.toolId));
+  if (state.screen === 'guide') return show(renderGuide());
+  return show(renderList());
+}
+
+function updateDot(){
+  const worst = Math.max(...tools.map(t => metric(t, t.primary).value));
+  aiDot.className = 'ai-dot' + (worst >= 90 ? ' critical' : worst >= 70 ? ' caution' : '');
+}
+
+function renderList(){
+  const rows = tools.map(t => {
+    const primary = metric(t, t.primary);
+    const secondary = t.metrics.find(m => m.key !== t.primary);
+    const color = colorFor(primary.value);
+    const bump = state.lastSwapped === t.id ? ' bump' : '';
+    return `
+      <div class="row" tabindex="0" role="menuitem" data-open="${t.id}">
+        <div class="icon-badge">${icons[t.icon]}</div>
+        <div class="info">
+          <div class="name">${t.name}</div>
+          <div class="meta">
+            <span class="limit-label">${primary.label}</span>
+            ${secondary ? `<button class="chip" data-swap="${t.id}">${secondary.label} ${secondary.value}%</button>` : ''}
+          </div>
+          <div class="bar"><div class="bar-fill" style="width:${primary.value}%;background:${color}"></div></div>
+        </div>
+        <div class="value${bump}" style="color:${color}">${primary.value}%</div>
+        <div class="chevron">${chevronRight}</div>
+      </div>`;
+  }).join('');
+  state.lastSwapped = null;
+
+  return `
+    <div class="header"><b>AI usage</b></div>
+    <div class="section">${rows}</div>
+    <div class="footer">
+      <button data-nav="settings">Settings</button>
+      <button data-nav="guide">Guide</button>
+      <button data-nav="about">About</button>
+    </div>`;
+}
+
+function renderDetail(toolId){
+  const t = tools.find(x => x.id === toolId);
+  const metrics = t.metrics.map(m => `
+    <div class="detail-metric">
+      <div class="detail-metric-top">
+        <span>${m.label}</span>
+        <span class="detail-value" style="color:${colorFor(m.value)}">${m.value}%</span>
+      </div>
+      <div class="bar"><div class="bar-fill" style="width:${m.value}%;background:${colorFor(m.value)}"></div></div>
+      <div class="detail-reset">${m.resets}</div>
+    </div>`).join('');
+
+  return `
+    <div class="detail-header">
+      <button class="back-btn" data-nav="list" aria-label="Back">${chevronLeft}</button>
+      <div class="icon-badge">${icons[t.icon]}</div>
+      <div class="detail-title">${t.name}</div>
+    </div>
+    <div class="detail-body">${metrics}</div>
+    <button class="dash-btn" data-toast="Opening ${t.name} dashboard">Open dashboard</button>`;
+}
+
+function renderGuide(){
+  return `
+    <div class="detail-header">
+      <button class="back-btn" data-nav="list" aria-label="Back">${chevronLeft}</button>
+      <div class="detail-title">Status colors</div>
+    </div>
+    <div class="guide-body">
+      <div class="guide-item">
+        <div class="guide-dot" style="background:var(--ok)"></div>
+        <div class="guide-text"><b>Healthy</b><span>Plenty of headroom — under 70% used.</span></div>
+      </div>
+      <div class="guide-item">
+        <div class="guide-dot" style="background:var(--wait)"></div>
+        <div class="guide-text"><b>Caution</b><span>Getting close — 70 to 89% used.</span></div>
+      </div>
+      <div class="guide-item">
+        <div class="guide-dot" style="background:var(--crit)"></div>
+        <div class="guide-text"><b>Critical</b><span>At or near your limit — 90% and up.</span></div>
+      </div>
+    </div>`;
+}
+
+function bindScreenEvents(){
+  screenRoot.querySelectorAll('[data-open]').forEach(row => {
+    const open = () => navigate('detail', row.dataset.open);
+    row.addEventListener('click', open);
+    row.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+    });
+  });
+  screenRoot.querySelectorAll('[data-swap]').forEach(chip => {
+    chip.addEventListener('click', e => {
+      e.stopPropagation();
+      const t = tools.find(x => x.id === chip.dataset.swap);
+      const secondary = t.metrics.find(m => m.key !== t.primary);
+      t.primary = secondary.key;
+      state.lastSwapped = t.id;
+      render();
+    });
+  });
+  screenRoot.querySelectorAll('[data-nav]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const dest = btn.dataset.nav;
+      if (dest === 'settings') return toast('Settings');
+      if (dest === 'about') return toast('About');
+      navigate(dest);
+    });
+  });
+  const dashBtn = screenRoot.querySelector('[data-toast]');
+  if (dashBtn) dashBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    toast(dashBtn.dataset.toast);
+  });
+}
+
+function toast(msg){
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1400);
+}
+
+aiDot.addEventListener('click', e => {
+  e.stopPropagation();
+  const open = !menu.classList.contains('show');
+  menu.classList.toggle('show', open);
+  aiDot.setAttribute('aria-expanded', open);
+});
+document.addEventListener('click', () => {
+  menu.classList.remove('show');
+  aiDot.setAttribute('aria-expanded', 'false');
+});
+menu.addEventListener('click', e => e.stopPropagation());
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && menu.classList.contains('show')){
+    menu.classList.remove('show');
+    aiDot.setAttribute('aria-expanded', 'false');
+    aiDot.focus();
+  }
+});
+
+function tickClock(){
+  const d = new Date();
+  document.getElementById('clock').textContent =
+    d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+tickClock();
+setInterval(tickClock, 30000);
+
+render();
+</script>
+</body>
+</html>

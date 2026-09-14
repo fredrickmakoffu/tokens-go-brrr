@@ -1,3 +1,3 @@
-"""Cursor spend monitor — GNOME tray applet for Cursor usage."""
+"""AI usage — GNOME Shell indicator + daemon for AI coding limits."""
 
-__version__ = "0.1.0"
+__version__ = "0.4.0"
