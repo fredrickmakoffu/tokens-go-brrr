@@ -49,6 +49,13 @@ gnome-extensions enable ai-usage@fredrickmakoffu.github.io
 
 Log out and back in (Wayland) or restart the shell with Alt+F2 r (X11).
 
+## Reloading without logging out
+
+GNOME only scans for extensions at startup, but you do not have to log out to try a change.
+`./devtest/live-reload.sh` stages the working tree as a fresh revision and prints a line to
+paste into Looking Glass that swaps the running indicator for it. See
+[devtest/live-reload.md](devtest/live-reload.md) for why a copy is needed and how to undo it.
+
 ## Testing without a real login
 
 ```bash
