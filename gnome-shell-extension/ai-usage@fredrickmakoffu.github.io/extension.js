@@ -402,24 +402,24 @@ class AiUsageIndicator extends PanelMenu.Button {
             x_align: Clutter.ActorAlign.CENTER,
             y_align: Clutter.ActorAlign.CENTER,
         });
-        // The dot keeps the mockup's bare look, so the usual full-height panel pill
-        // is suppressed; this circle behind it carries hover, press and focus instead.
-        this._halo = new St.Bin({
-            style_class: 'ai-usage-dot-halo',
-            child: this._dot,
-            y_align: Clutter.ActorAlign.CENTER,
-            accessible_name: 'AI usage',
-        });
         // Sessions appear beside the dot only while something is running, so the
         // panel stays a bare dot when it has nothing to say.
         this._sessions = new St.BoxLayout({
             style_class: 'ai-usage-sessions',
             y_align: Clutter.ActorAlign.CENTER,
         });
-        const panelBox = new St.BoxLayout({y_align: Clutter.ActorAlign.CENTER});
-        panelBox.add_child(this._halo);
-        panelBox.add_child(this._sessions);
-        this.add_child(panelBox);
+        // The dot keeps the mockup's bare look, so the usual full-height panel pill
+        // is suppressed. This pill carries hover, press and focus instead, and it
+        // wraps the session chips too: they are part of the same button, so the
+        // whole indicator has to light up as one target.
+        this._halo = new St.BoxLayout({
+            style_class: 'ai-usage-dot-halo',
+            y_align: Clutter.ActorAlign.CENTER,
+            accessible_name: 'AI usage',
+        });
+        this._halo.add_child(this._dot);
+        this._halo.add_child(this._sessions);
+        this.add_child(this._halo);
 
         this.menu.actor.add_style_class_name('ai-usage-menu');
         this.menu.connect('open-state-changed', (_menu, open) => {
