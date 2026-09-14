@@ -42,12 +42,19 @@ const CONFIG_PATH = GLib.build_filenamev([
 ]);
 const SCREEN_EASE = 160;
 
+const CAUTION_AT = 70;
+const CRITICAL_AT = 90;
+
 function colorFor(pct) {
-    if (pct >= 90)
+    if (pct >= CRITICAL_AT)
         return COLOR.crit;
-    if (pct >= 70)
+    if (pct >= CAUTION_AT)
         return COLOR.wait;
     return COLOR.ok;
+}
+
+function activeSessions(tool) {
+    return tool.instances?.active ?? 0;
 }
 
 function metric(tool, key) {
@@ -252,7 +259,15 @@ const Row = GObject.registerClass({
             x_expand: true,
             y_align: Clutter.ActorAlign.CENTER,
         });
-        info.add_child(label(tool.name, 'ai-usage-name'));
+        const nameRow = new St.BoxLayout({style_class: 'ai-usage-name-row', x_expand: true});
+        nameRow.add_child(label(tool.name, 'ai-usage-name'));
+        const running = ok ? activeSessions(tool) : 0;
+        if (running) {
+            nameRow.add_child(label(`${running} running`, 'ai-usage-running', {
+                y_align: Clutter.ActorAlign.CENTER,
+            }));
+        }
+        info.add_child(nameRow);
 
         const meta = new BadgeFlow();
         const windows = ok ? (tool.metrics ?? []) : [];
@@ -395,7 +410,16 @@ class AiUsageIndicator extends PanelMenu.Button {
             y_align: Clutter.ActorAlign.CENTER,
             accessible_name: 'AI usage',
         });
-        this.add_child(this._halo);
+        // Sessions appear beside the dot only while something is running, so the
+        // panel stays a bare dot when it has nothing to say.
+        this._sessions = new St.BoxLayout({
+            style_class: 'ai-usage-sessions',
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        const panelBox = new St.BoxLayout({y_align: Clutter.ActorAlign.CENTER});
+        panelBox.add_child(this._halo);
+        panelBox.add_child(this._sessions);
+        this.add_child(panelBox);
 
         this.menu.actor.add_style_class_name('ai-usage-menu');
         this.menu.connect('open-state-changed', (_menu, open) => {
@@ -418,6 +442,7 @@ class AiUsageIndicator extends PanelMenu.Button {
             this._toolId = null;
         }
         this._updateDot();
+        this._updateSessions();
         this._render(false);
     }
 
@@ -438,6 +463,40 @@ class AiUsageIndicator extends PanelMenu.Button {
             this._dot.remove_style_class_name(cls);
         if (level !== 'ok')
             this._dot.add_style_class_name(level);
+    }
+
+    // The percentage rides along only once a provider reaches caution. Below that
+    // the number is noise, and three providers' worth of it would crowd the bar.
+    _updateSessions() {
+        this._sessions.destroy_all_children();
+        for (const tool of this.tools) {
+            const running = activeSessions(tool);
+            if (!running)
+                continue;
+
+            const chip = new St.BoxLayout({
+                style_class: 'ai-usage-session',
+                y_align: Clutter.ActorAlign.CENTER,
+            });
+            chip.add_child(new St.Icon({
+                style_class: 'ai-usage-session-icon',
+                gicon: this._icons.badge(tool.icon),
+                icon_size: 14,
+                y_align: Clutter.ActorAlign.CENTER,
+            }));
+
+            const pct = clampPct(primaryOf(tool)?.value ?? 0);
+            if (pct >= CAUTION_AT) {
+                chip.add_child(label(`${Math.round(pct)}%`, 'ai-usage-session-pct', {
+                    style: `color: ${colorFor(pct)};`,
+                    y_align: Clutter.ActorAlign.CENTER,
+                }));
+            }
+            chip.add_child(label(`\u00d7${running}`, 'ai-usage-session-count', {
+                y_align: Clutter.ActorAlign.CENTER,
+            }));
+            this._sessions.add_child(chip);
+        }
     }
 
     _navigate(screen, toolId = null) {
@@ -585,6 +644,20 @@ class AiUsageIndicator extends PanelMenu.Button {
             block.add_child(new Bar(pct, color));
             block.add_child(label(m.resets ?? '', 'ai-usage-detail-reset'));
             body.add_child(block);
+        }
+        const sessions = tool.instances ?? {};
+        if (sessions.active || sessions.suspended) {
+            const lines = [];
+            if (sessions.active) {
+                const where = (sessions.projects ?? []).join(', ');
+                lines.push(`${sessions.active} running${where ? ` in ${where}` : ''}`);
+            }
+            if (sessions.suspended) {
+                // Suspended sessions are deliberately absent from the panel count:
+                // they consume nothing until resumed.
+                lines.push(`${sessions.suspended} suspended`);
+            }
+            body.add_child(wrappedLabel(lines.join('\n'), 'ai-usage-sessions-detail'));
         }
         screen.add_child(body);
 

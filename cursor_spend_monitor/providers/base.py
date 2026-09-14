@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Protocol
 
+from ..instances import InstanceReport, ProcessSpec
+
 
 @dataclass(frozen=True)
 class Meter:
@@ -43,6 +45,7 @@ class ProviderSnapshot:
     status: str = "ok"  # ok | error | auth_needed | soon
     error: str | None = None
     fetched_at: datetime | None = None
+    instances: InstanceReport = field(default_factory=InstanceReport)
 
     @property
     def primary(self) -> Meter:
@@ -81,6 +84,7 @@ class ProviderSnapshot:
             status=self.status,
             error=self.error,
             fetched_at=self.fetched_at,
+            instances=self.instances,
         )
 
     def to_panel_dict(self) -> dict[str, Any]:
@@ -93,6 +97,7 @@ class ProviderSnapshot:
             "status": self.status,
             "error": self.error,
             "dashboardUrl": self.dashboard_url,
+            "instances": self.instances.to_dict(),
             "metrics": [
                 {
                     "key": m.key,
@@ -132,6 +137,8 @@ class ProviderSnapshot:
 class Provider(Protocol):
     id: str
     display_name: str
+    # How to recognise this tool's running sessions. Empty means it reports none.
+    process_specs: list[ProcessSpec]
 
     def available(self) -> bool:
         """True when credentials/local state suggest this provider can be polled."""

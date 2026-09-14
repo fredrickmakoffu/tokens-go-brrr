@@ -7,6 +7,10 @@ Cursor, Claude Code and OpenCode are all live.
 
 **Top bar:** a status dot, green / amber / red by the worst primary meter across providers.
 
+**Top bar, while you are working:** each provider with a live session adds its logo and a
+session count beside the dot. The percentage joins it only once that provider reaches
+caution, so an idle-but-healthy tool costs a logo and two characters.
+
 **Popover** (click the dot) — built from `design/menu-bar-concept.html`:
 
 - **List** — each provider with its primary percentage, a thin bar, and a chip that swaps in the secondary metric
@@ -32,6 +36,33 @@ Log out and back in so GNOME Shell picks up the extension. Needs GNOME Shell 45 
 | Claude Code | 5-hour limit, Weekly (plus Opus and Sonnet weekly when the plan reports them) | `api.anthropic.com/api/oauth/usage` |
 | OpenCode | Rolling limit, Weekly, Monthly | `opencode.ai/zen/go/v1/usage` |
 
+## Running sessions
+
+A session is one process you started: a terminal agent, or the desktop app. The daemon finds
+them by scanning `/proc` every few seconds, which costs about 5ms for 350 processes, and each
+provider declares what to look for rather than the scanner knowing about any tool:
+
+```python
+process_specs = [
+    ProcessSpec(names=frozenset({"claude"}), exclude_args=("--chrome-native-host",)),
+]
+```
+
+Three things the count deliberately gets right:
+
+- **Suspended sessions do not count.** A session left in the background with Ctrl+Z consumes
+  nothing until resumed, so it stays out of the panel and is reported separately in the
+  provider's detail screen.
+- **Helper processes do not count.** Electron spawns one process per window and per service,
+  all carrying `--type=`, and Claude's browser integration runs a process that is not a
+  session. Both are excluded by the specs above.
+- **A session that spawns a copy of itself counts once.** Any process with an ancestor
+  belonging to the same provider is treated as part of that session.
+
+Project names never reach the top bar, only the count; the folder name appears in the detail
+screen. A change has to survive two consecutive scans before it is published, so a session
+that starts and exits between ticks cannot make the panel flicker.
+
 ## Auth
 
 No browser cookies and no scraping. Each provider reuses a login that is already on disk.
@@ -56,6 +87,7 @@ before you hit one.
 ```json
 {
   "poll_interval_seconds": 300,
+  "instance_poll_seconds": 3,
   "alert_cooldown_hours": 6,
   "primary_alerts": [75, 90, 100],
   "enabled_providers": ["cursor"],

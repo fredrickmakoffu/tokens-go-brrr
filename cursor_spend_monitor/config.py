@@ -18,6 +18,7 @@ DEFAULT_PRIMARY_ALERTS = [75, 90, 100]
 @dataclass
 class MonitorConfig:
     poll_interval_seconds: int = 300
+    instance_poll_seconds: int = 3
     alert_cooldown_hours: int = 6
     primary_alerts: list[int] = field(default_factory=lambda: list(DEFAULT_PRIMARY_ALERTS))
     enabled_providers: list[str] = field(default_factory=lambda: list(DEFAULT_PROVIDERS))
@@ -34,6 +35,7 @@ class MonitorConfig:
             alerts = data["alerts"].get("auto_percent") or DEFAULT_PRIMARY_ALERTS
         return cls(
             poll_interval_seconds=int(data.get("poll_interval_seconds", 300)),
+            instance_poll_seconds=int(data.get("instance_poll_seconds", 3)),
             alert_cooldown_hours=int(data.get("alert_cooldown_hours", 6)),
             primary_alerts=[int(x) for x in (alerts or DEFAULT_PRIMARY_ALERTS)],
             enabled_providers=list(data.get("enabled_providers") or DEFAULT_PROVIDERS),
@@ -44,6 +46,7 @@ class MonitorConfig:
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         payload: dict[str, Any] = {
             "poll_interval_seconds": self.poll_interval_seconds,
+            "instance_poll_seconds": self.instance_poll_seconds,
             "alert_cooldown_hours": self.alert_cooldown_hours,
             "primary_alerts": self.primary_alerts,
             "enabled_providers": self.enabled_providers,
