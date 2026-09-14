@@ -384,10 +384,18 @@ class AiUsageIndicator extends PanelMenu.Button {
 
         this._dot = new St.Widget({
             style_class: 'ai-usage-dot',
+            x_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        // The dot keeps the mockup's bare look, so the usual full-height panel pill
+        // is suppressed; this circle behind it carries hover, press and focus instead.
+        this._halo = new St.Bin({
+            style_class: 'ai-usage-dot-halo',
+            child: this._dot,
             y_align: Clutter.ActorAlign.CENTER,
             accessible_name: 'AI usage',
         });
-        this.add_child(this._dot);
+        this.add_child(this._halo);
 
         this.menu.actor.add_style_class_name('ai-usage-menu');
         this.menu.connect('open-state-changed', (_menu, open) => {

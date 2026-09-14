@@ -20,8 +20,24 @@
 #panel .panel-button.ai-usage-panel-button:focus {
   box-shadow: inset 0 0 0 100px transparent;
 }
-#panel .panel-button.ai-usage-panel-button:focus .ai-usage-dot {
-  box-shadow: 0 0 0 3px rgba(91, 142, 242, 0.45);
+/* Alpha values match the shell's own panel-button hover and press states, so the
+   dot reacts with the same weight as every other icon in the top bar. */
+.ai-usage-dot-halo {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background-color: transparent;
+  transition-duration: 150ms;
+}
+#panel .panel-button.ai-usage-panel-button:hover .ai-usage-dot-halo {
+  background-color: rgba(255, 255, 255, 0.17);
+}
+#panel .panel-button.ai-usage-panel-button:active .ai-usage-dot-halo,
+#panel .panel-button.ai-usage-panel-button:checked .ai-usage-dot-halo {
+  background-color: rgba(255, 255, 255, 0.28);
+}
+#panel .panel-button.ai-usage-panel-button:focus .ai-usage-dot-halo {
+  background-color: rgba(91, 142, 242, 0.45);
 }
 
 /* Popover chrome (.menu in the mockup) */
