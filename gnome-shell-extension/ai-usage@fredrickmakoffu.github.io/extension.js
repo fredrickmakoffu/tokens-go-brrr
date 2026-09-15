@@ -57,6 +57,121 @@ function activeSessions(tool) {
     return tool.instances?.active ?? 0;
 }
 
+function sessionRows(tool) {
+    const rows = tool.instances?.sessions;
+    if (Array.isArray(rows) && rows.length)
+        return rows;
+    // Older daemons only shipped aggregated name lists.
+    const out = [];
+    for (const project of tool.instances?.projects ?? [])
+        out.push({project, paused: false});
+    for (const project of tool.instances?.suspendedProjects ?? [])
+        out.push({project, paused: true});
+    return out;
+}
+
+function sessionLabel(session) {
+    if (session?.project)
+        return session.project;
+    if (session?.kind === 'editor')
+        return 'Desktop';
+    return 'Session';
+}
+
+function titleMentionsProject(title, project) {
+    const idx = title.indexOf(project);
+    if (idx < 0)
+        return false;
+    const before = idx === 0 ? '' : title[idx - 1];
+    const afterIdx = idx + project.length;
+    const after = afterIdx >= title.length ? '' : title[afterIdx];
+    const isBoundary = c => !c || c === '/' || c === '\\' || c === ':' || c === '~' ||
+        c === '-' || /\s/.test(c);
+    return isBoundary(before) && isBoundary(after);
+}
+
+// Markers that usually appear in the window/tab title when that provider is the
+// foreground process (agents often rewrite the title to their argv). A bare
+// shell sitting in the same cwd must not light up the project chip.
+const PROVIDER_TITLE_HINTS = {
+    cursor: ['cursor-agent', '/bin/agent', ' bin/agent', 'agent --', 'agent —'],
+    claude: ['claude'],
+    opencode: ['opencode'],
+};
+
+function titleHasProviderProcess(title, toolId) {
+    if (!title)
+        return false;
+    const hints = PROVIDER_TITLE_HINTS[toolId];
+    if (!hints)
+        return false;
+    const lower = title.toLowerCase();
+    return hints.some(hint => lower.includes(hint.toLowerCase()));
+}
+
+// Classic GNOME Terminal plus Ptyxis (Fedora's current GNOME Terminal app).
+// Anything else is ignored — better no project than a wrong one.
+function isGnomeTerminalWindow(win) {
+    if (!win)
+        return false;
+    const wm = (win.get_wm_class?.() || '').toLowerCase();
+    const instance = (win.get_wm_class_instance?.() || '').toLowerCase();
+    const appId = (win.get_gtk_application_id?.() || '').toLowerCase();
+    return appId === 'org.gnome.terminal' ||
+        appId === 'org.gnome.ptyxis' ||
+        wm === 'gnome-terminal' ||
+        wm === 'org.gnome.terminal' ||
+        wm === 'ptyxis' ||
+        wm === 'org.gnome.ptyxis' ||
+        instance === 'gnome-terminal' ||
+        instance === 'org.gnome.terminal' ||
+        instance === 'ptyxis' ||
+        instance === 'org.gnome.ptyxis';
+}
+
+function scoreTitleMatch(title, session) {
+    if (!title || !session)
+        return 0;
+    const directory = session.directory || '';
+    if (directory.length > 1 && title.includes(directory))
+        return 1000 + directory.length;
+    // Expand ~/path relative to home so shell titles match session directories.
+    if (directory.length > 1) {
+        const home = GLib.get_home_dir();
+        if (home && directory.startsWith(home + '/')) {
+            const tilde = `~/${directory.slice(home.length + 1)}`;
+            if (title.includes(tilde))
+                return 900 + tilde.length;
+        }
+    }
+    const project = session.project || '';
+    if (project.length >= 2 && titleMentionsProject(title, project))
+        return project.length;
+    return 0;
+}
+
+function truncateProject(name, max = 18) {
+    if (!name || name.length <= max)
+        return name;
+    return `${name.slice(0, Math.max(1, max - 1))}\u2026`;
+}
+
+function readCtxtSwitches(pid) {
+    if (!pid)
+        return -1;
+    try {
+        const [, bytes] = GLib.file_get_contents(`/proc/${pid}/status`);
+        const text = new TextDecoder().decode(bytes);
+        const vol = text.match(/voluntary_ctxt_switches:\s*(\d+)/);
+        const non = text.match(/nonvoluntary_ctxt_switches:\s*(\d+)/);
+        const a = vol ? parseInt(vol[1], 10) : 0;
+        const b = non ? parseInt(non[1], 10) : 0;
+        return a + b;
+    } catch (e) {
+        return -1;
+    }
+}
+
 function metric(tool, key) {
     return (tool.metrics ?? []).find(m => m.key === key) ?? null;
 }
@@ -394,8 +509,12 @@ class AiUsageIndicator extends PanelMenu.Button {
         this._state = null;      // parsed daemon state, or null when the daemon is away
         this._screen = 'list';
         this._toolId = null;
+        this._sessionsFilter = 'active'; // 'active' | 'paused' on the sessions screen
         this._lastSwapped = null;
         this._firstRender = true;
+        this._probedMatch = null;       // {toolId, project, title} from async pid probe
+        this._probeTimeoutId = 0;
+        this._probeSerial = 0;
 
         this._dot = new St.Widget({
             style_class: 'ai-usage-dot',
@@ -421,6 +540,17 @@ class AiUsageIndicator extends PanelMenu.Button {
         this._halo.add_child(this._sessions);
         this.add_child(this._halo);
 
+        // Focused GNOME Terminal → project name on the chip. Title notify covers
+        // cd / tab renames without waiting for the daemon poll.
+        this._focusWindowId = global.display.connect('notify::focus-window', () => {
+            this._retargetFocusedTerminal();
+            this._updateSessions();
+        });
+        this._focusedWin = null;
+        this._focusTitleId = 0;
+        this._retargetFocusedTerminal();
+        this.connect('destroy', () => this._disconnectFocusWatch());
+
         this.menu.actor.add_style_class_name('ai-usage-menu');
         this.menu.connect('open-state-changed', (_menu, open) => {
             if (open) {
@@ -433,10 +563,171 @@ class AiUsageIndicator extends PanelMenu.Button {
         this._render(false);
     }
 
+    _disconnectFocusWatch() {
+        if (this._focusWindowId) {
+            global.display.disconnect(this._focusWindowId);
+            this._focusWindowId = 0;
+        }
+        if (this._focusedWin && this._focusTitleId) {
+            this._focusedWin.disconnect(this._focusTitleId);
+            this._focusTitleId = 0;
+        }
+        this._focusedWin = null;
+        this._cancelFocusProbe();
+        this._probedMatch = null;
+    }
+
+    _cancelFocusProbe() {
+        if (this._probeTimeoutId) {
+            GLib.source_remove(this._probeTimeoutId);
+            this._probeTimeoutId = 0;
+        }
+        this._probeSerial++;
+    }
+
+    _retargetFocusedTerminal() {
+        this._cancelFocusProbe();
+        if (this._focusedWin && this._focusTitleId) {
+            this._focusedWin.disconnect(this._focusTitleId);
+            this._focusTitleId = 0;
+        }
+        this._focusedWin = null;
+        const win = global.display.focus_window;
+        if (!isGnomeTerminalWindow(win)) {
+            this._probedMatch = null;
+            return;
+        }
+        this._focusedWin = win;
+        this._focusTitleId = win.connect('notify::title', () => this._updateSessions());
+    }
+
+    _focusedTerminalProject(tool) {
+        const match = this._focusedTerminalMatch();
+        return match?.toolId === tool.id ? match.project : null;
+    }
+
+    // Cursor agent titles are often "Chat name — /path/to/agent …" with no project
+    // path, while OpenCode is usually the only session so a sole fallback works.
+    // When the title clearly names a provider but not a folder, probe /proc ctxt
+    // switches: focusing a Ptyxis tab SIGWINCHes that tab's process, which bumps
+    // switches on the matching pid.
+    _focusedTerminalMatch() {
+        const win = global.display.focus_window;
+        if (!isGnomeTerminalWindow(win)) {
+            this._probedMatch = null;
+            return null;
+        }
+        const title = win.get_title?.() || '';
+        if (!title) {
+            this._probedMatch = null;
+            return null;
+        }
+
+        let best = null;
+        const hintedTools = [];
+        for (const tool of this.tools) {
+            if (!activeSessions(tool))
+                continue;
+            if (!titleHasProviderProcess(title, tool.id))
+                continue;
+            hintedTools.push(tool);
+
+            for (const session of sessionRows(tool)) {
+                if (session.paused)
+                    continue;
+                const score = scoreTitleMatch(title, session);
+                if (!score)
+                    continue;
+                if (!best || score > best.score)
+                    best = {toolId: tool.id, project: session.project, score};
+            }
+            if (!best || best.toolId !== tool.id) {
+                const running = sessionRows(tool).filter(s => !s.paused && s.project);
+                if (running.length === 1) {
+                    const score = 1;
+                    if (!best || score > best.score)
+                        best = {toolId: tool.id, project: running[0].project, score};
+                }
+            }
+        }
+
+        if (best?.project) {
+            this._probedMatch = null;
+            this._cancelFocusProbe();
+            return best;
+        }
+
+        if (this._probedMatch && this._probedMatch.title === title &&
+            hintedTools.some(t => t.id === this._probedMatch.toolId))
+            return this._probedMatch;
+
+        if (hintedTools.length)
+            this._scheduleFocusProbe(title, hintedTools);
+        else
+            this._probedMatch = null;
+
+        return null;
+    }
+
+    _scheduleFocusProbe(title, tools) {
+        this._cancelFocusProbe();
+        const serial = this._probeSerial;
+        const candidates = [];
+        for (const tool of tools) {
+            for (const session of sessionRows(tool)) {
+                if (session.paused || !session.project || !session.pid)
+                    continue;
+                const before = readCtxtSwitches(session.pid);
+                if (before < 0)
+                    continue;
+                candidates.push({
+                    toolId: tool.id,
+                    project: session.project,
+                    pid: session.pid,
+                    before,
+                });
+            }
+        }
+        if (!candidates.length)
+            return;
+
+        this._probeTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 140, () => {
+            this._probeTimeoutId = 0;
+            if (serial !== this._probeSerial)
+                return GLib.SOURCE_REMOVE;
+            const win = global.display.focus_window;
+            if (!isGnomeTerminalWindow(win) || (win.get_title?.() || '') !== title)
+                return GLib.SOURCE_REMOVE;
+
+            let winner = null;
+            for (const c of candidates) {
+                const after = readCtxtSwitches(c.pid);
+                if (after < 0)
+                    continue;
+                const delta = after - c.before;
+                if (delta <= 0)
+                    continue;
+                if (!winner || delta > winner.delta)
+                    winner = {...c, delta};
+            }
+            if (winner) {
+                this._probedMatch = {
+                    toolId: winner.toolId,
+                    project: winner.project,
+                    title,
+                    score: winner.delta,
+                };
+                this._updateSessions();
+            }
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
     setState(state) {
         this._state = state;
         const tools = this.tools;
-        if (this._screen === 'detail' &&
+        const onToolScreen = this._screen === 'detail' || this._screen === 'sessions';
+        if (onToolScreen &&
             !tools.find(t => t.id === this._toolId && (!t.status || t.status === 'ok'))) {
             this._screen = 'list';
             this._toolId = null;
@@ -467,6 +758,8 @@ class AiUsageIndicator extends PanelMenu.Button {
 
     // The percentage rides along only once a provider reaches caution. Below that
     // the number is noise, and three providers' worth of it would crowd the bar.
+    // When the focused window is GNOME Terminal (or Ptyxis) and its title maps to
+    // a known session, the project name sits between the icon and ×N.
     _updateSessions() {
         this._sessions.destroy_all_children();
         for (const tool of this.tools) {
@@ -485,6 +778,13 @@ class AiUsageIndicator extends PanelMenu.Button {
                 y_align: Clutter.ActorAlign.CENTER,
             }));
 
+            const project = this._focusedTerminalProject(tool);
+            if (project) {
+                chip.add_child(label(truncateProject(project), 'ai-usage-session-project', {
+                    y_align: Clutter.ActorAlign.CENTER,
+                }));
+            }
+
             const pct = clampPct(primaryOf(tool)?.value ?? 0);
             if (pct >= CAUTION_AT) {
                 chip.add_child(label(`${Math.round(pct)}%`, 'ai-usage-session-pct', {
@@ -501,7 +801,10 @@ class AiUsageIndicator extends PanelMenu.Button {
 
     _navigate(screen, toolId = null) {
         this._screen = screen;
-        this._toolId = toolId;
+        if (toolId !== null && toolId !== undefined)
+            this._toolId = toolId;
+        if (screen === 'sessions')
+            this._sessionsFilter = 'active';
         this._render(true);
     }
 
@@ -514,6 +817,8 @@ class AiUsageIndicator extends PanelMenu.Button {
         });
         if (this._screen === 'detail')
             this._renderDetail(screen);
+        else if (this._screen === 'sessions')
+            this._renderSessions(screen);
         else if (this._screen === 'guide')
             this._renderGuide(screen);
         else if (this._screen === 'about')
@@ -541,7 +846,7 @@ class AiUsageIndicator extends PanelMenu.Button {
         return header;
     }
 
-    _detailHeader(title, icon) {
+    _detailHeader(title, icon, backScreen = 'list') {
         const header = new St.BoxLayout({style_class: 'ai-usage-detail-header', x_expand: true});
         const back = new St.Button({
             style_class: 'ai-usage-back',
@@ -554,7 +859,12 @@ class AiUsageIndicator extends PanelMenu.Button {
                 icon_size: 16,
             }),
         });
-        back.connect('clicked', () => this._navigate('list'));
+        back.connect('clicked', () => {
+            if (backScreen === 'detail')
+                this._navigate('detail', this._toolId);
+            else
+                this._navigate(backScreen);
+        });
         header.add_child(back);
         if (icon) {
             header.add_child(new St.Bin({
@@ -571,6 +881,29 @@ class AiUsageIndicator extends PanelMenu.Button {
         }
         header.add_child(label(title, 'ai-usage-detail-title', {y_align: Clutter.ActorAlign.CENTER}));
         return header;
+    }
+
+    _sessionRow(session) {
+        const row = new St.BoxLayout({
+            style_class: 'ai-usage-session-row',
+            x_expand: true,
+        });
+        row.add_child(new St.Widget({
+            style_class: session.paused
+                ? 'ai-usage-session-mark paused'
+                : 'ai-usage-session-mark',
+            y_align: Clutter.ActorAlign.CENTER,
+        }));
+        row.add_child(label(sessionLabel(session), 'ai-usage-session-name', {
+            x_expand: true,
+            y_align: Clutter.ActorAlign.CENTER,
+        }));
+        row.add_child(label(
+            session.paused ? 'paused' : 'running',
+            session.paused ? 'ai-usage-session-state paused' : 'ai-usage-session-state',
+            {y_align: Clutter.ActorAlign.CENTER},
+        ));
+        return row;
     }
 
     _footer(withSettings) {
@@ -645,19 +978,47 @@ class AiUsageIndicator extends PanelMenu.Button {
             block.add_child(label(m.resets ?? '', 'ai-usage-detail-reset'));
             body.add_child(block);
         }
-        const sessions = tool.instances ?? {};
-        if (sessions.active || sessions.suspended) {
-            const lines = [];
-            if (sessions.active) {
-                const where = (sessions.projects ?? []).join(', ');
-                lines.push(`${sessions.active} running${where ? ` in ${where}` : ''}`);
+        const sessions = sessionRows(tool);
+        if (sessions.length) {
+            const active = sessions.filter(s => !s.paused);
+            const block = new St.BoxLayout({
+                style_class: 'ai-usage-sessions-block',
+                orientation: Clutter.Orientation.VERTICAL,
+                x_expand: true,
+            });
+            block.add_child(label('Sessions', 'ai-usage-sessions-heading'));
+            if (active.length) {
+                for (const session of active)
+                    block.add_child(this._sessionRow(session));
+            } else {
+                block.add_child(label('No active sessions', 'ai-usage-sessions-empty'));
             }
-            if (sessions.suspended) {
-                // Suspended sessions are deliberately absent from the panel count:
-                // they consume nothing until resumed.
-                lines.push(`${sessions.suspended} suspended`);
-            }
-            body.add_child(wrappedLabel(lines.join('\n'), 'ai-usage-sessions-detail'));
+
+            const viewAll = new St.Button({
+                style_class: 'ai-usage-view-all',
+                can_focus: true,
+                x_expand: true,
+                child: (() => {
+                    const row = new St.BoxLayout({
+                        style_class: 'ai-usage-view-all-row',
+                        x_expand: true,
+                    });
+                    row.add_child(label('View all sessions', 'ai-usage-view-all-label', {
+                        x_expand: true,
+                        y_align: Clutter.ActorAlign.CENTER,
+                    }));
+                    row.add_child(new St.Icon({
+                        style_class: 'ai-usage-chevron',
+                        gicon: this._icons.chevronRight,
+                        icon_size: 14,
+                        y_align: Clutter.ActorAlign.CENTER,
+                    }));
+                    return row;
+                })(),
+            });
+            viewAll.connect('clicked', () => this._navigate('sessions', tool.id));
+            block.add_child(viewAll);
+            body.add_child(block);
         }
         screen.add_child(body);
 
@@ -669,6 +1030,68 @@ class AiUsageIndicator extends PanelMenu.Button {
         });
         dash.connect('clicked', () => this._openUri(tool.dashboardUrl || 'https://cursor.com/dashboard'));
         screen.add_child(dash);
+    }
+
+    _renderSessions(screen) {
+        const tool = this.tools.find(t => t.id === this._toolId);
+        if (!tool) {
+            this._screen = 'list';
+            this._renderList(screen);
+            return;
+        }
+        screen.add_child(this._detailHeader('Sessions', tool.icon, 'detail'));
+
+        const sessions = sessionRows(tool);
+        const active = sessions.filter(s => !s.paused);
+        const paused = sessions.filter(s => s.paused);
+        const body = new St.BoxLayout({
+            style_class: 'ai-usage-sessions-screen',
+            orientation: Clutter.Orientation.VERTICAL,
+            x_expand: true,
+        });
+
+        body.add_child(label(
+            `${active.length} active · ${paused.length} paused · ${sessions.length} total`,
+            'ai-usage-sessions-stats',
+        ));
+
+        const filters = new St.BoxLayout({style_class: 'ai-usage-sessions-filters', x_expand: true});
+        for (const [key, text] of [['active', 'Active'], ['paused', 'Paused']]) {
+            const selected = this._sessionsFilter === key;
+            const count = key === 'active' ? active.length : paused.length;
+            const btn = new St.Button({
+                style_class: selected ? 'ai-usage-filter-chip active' : 'ai-usage-filter-chip',
+                label: `${text} ${count}`,
+                can_focus: true,
+                y_align: Clutter.ActorAlign.CENTER,
+            });
+            btn.connect('clicked', () => {
+                if (this._sessionsFilter === key)
+                    return;
+                this._sessionsFilter = key;
+                this._render(false);
+            });
+            filters.add_child(btn);
+        }
+        body.add_child(filters);
+
+        const list = new St.BoxLayout({
+            style_class: 'ai-usage-sessions-list',
+            orientation: Clutter.Orientation.VERTICAL,
+            x_expand: true,
+        });
+        const shown = this._sessionsFilter === 'paused' ? paused : active;
+        if (shown.length) {
+            for (const session of shown)
+                list.add_child(this._sessionRow(session));
+        } else {
+            list.add_child(label(
+                this._sessionsFilter === 'paused' ? 'No paused sessions' : 'No active sessions',
+                'ai-usage-sessions-empty',
+            ));
+        }
+        body.add_child(list);
+        screen.add_child(body);
     }
 
     _guideItem(color, title, desc) {
