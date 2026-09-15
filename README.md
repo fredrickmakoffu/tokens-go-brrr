@@ -48,16 +48,27 @@ process_specs = [
 ]
 ```
 
-Three things the count deliberately gets right:
+Things the count deliberately gets right:
 
 - **Suspended sessions do not count.** A session left in the background with Ctrl+Z consumes
   nothing until resumed, so it stays out of the panel and is reported separately in the
   provider's detail screen.
 - **Helper processes do not count.** Electron spawns one process per window and per service,
   all carrying `--type=`, and Claude's browser integration runs a process that is not a
-  session. Both are excluded by the specs above.
+  session. Cursor's `worker-server` helpers and `--print` (headless / Task) agents are
+  excluded the same way.
 - **A session that spawns a copy of itself counts once.** Any process with an ancestor
-  belonging to the same provider is treated as part of that session.
+  belonging to the same provider is treated as part of that session, including when
+  unmatched Electron helpers sit between the desktop app and an IDE-spawned agent.
+- **One terminal is one session.** Sibling agents that share a controlling TTY (for
+  example several jobs under the same shell) collapse to a single count.
+- **Paused means Ctrl+Z.** Those sessions stay out of the top-bar ×N and show as
+  *paused* in the provider detail list until you resume them (`fg`).
+- **Focused project (GNOME Terminal / Ptyxis only).** When the focused terminal's
+  title shows a provider process (agent / claude / opencode), that provider's chip
+  shows the project. OpenCode often resolves immediately (one session). Cursor
+  agent titles usually omit the folder, so the chip probes which agent pid woke
+  up on the tab focus. A plain shell in the same repo stays icon + ×N.
 
 Project names never reach the top bar, only the count; the folder name appears in the detail
 screen. A change has to survive two consecutive scans before it is published, so a session

@@ -16,9 +16,12 @@ class CursorProvider:
     process_specs = [
         # The terminal agent: launched through a shell wrapper, so argv[0] is the
         # node entry point and the distinguishing part is the install path.
+        # worker-server is an internal helper; --print is non-interactive (Task /
+        # headless) and is not a terminal session the user is working in.
         ProcessSpec(
             names=frozenset({"agent", "cursor-agent", "node"}),
             require_args=("cursor-agent",),
+            exclude_args=("worker-server", "--print"),
             label="agent",
         ),
         # The desktop app. Electron spawns a helper process per window and per

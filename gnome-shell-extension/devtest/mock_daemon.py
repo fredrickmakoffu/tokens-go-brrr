@@ -6,7 +6,17 @@ from cursor_spend_monitor.dbus_service import UsageService
 tools = [
     {"id": "cursor", "name": "Cursor", "icon": "cursor", "primary": "monthly", "status": "ok",
      "dashboardUrl": "https://cursor.com/dashboard",
-     "metrics": [{"key": "monthly", "label": "Monthly limit", "value": 74, "resets": "Resets in 12 days"}]},
+     "metrics": [{"key": "monthly", "label": "Monthly limit", "value": 74, "resets": "Resets in 12 days"}],
+     "instances": {
+         "active": 2, "suspended": 1,
+         "projects": ["mobile-app", "api-server"],
+         "suspendedProjects": ["cursor-folder"],
+         "sessions": [
+             {"project": "mobile-app", "directory": "/home/u/mobile-app", "paused": False, "kind": "agent", "tty": "pts/2"},
+             {"project": "api-server", "directory": "/home/u/api-server", "paused": False, "kind": "agent", "tty": "pts/3"},
+             {"project": "cursor-folder", "directory": "/home/u/cursor-folder", "paused": True, "kind": "agent", "tty": "pts/4"},
+         ],
+     }},
     {"id": "claude", "name": "Claude Code", "icon": "claude", "primary": "5h", "status": "ok",
      "dashboardUrl": "https://claude.ai",
      "metrics": [{"key": "5h", "label": "5-hour limit", "value": 42, "resets": "Resets in 2h 15m"},

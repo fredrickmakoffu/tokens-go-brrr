@@ -52,6 +52,7 @@ class Instance:
     started_at: datetime | None
     suspended: bool
     kind: str = ""
+    tty_nr: int = 0
 
     def signature(self) -> tuple:
         """Identity for change detection. Deliberately excludes start time."""
@@ -68,14 +69,44 @@ class InstanceReport:
         return self.active + self.suspended
 
     def to_dict(self) -> dict:
-        # Panel shows the count; the menu shows folder names. Full paths stay
-        # out of both, since the panel is visible to anyone near the screen.
+        # Panel shows the count and (when known) the focused project name.
+        # The detail screen lists one row per session. Full paths are included
+        # for focus matching in the Shell extension and are not rendered.
+        sessions = [
+            _session_dict(i, paused=False) for i in self.active
+        ] + [
+            _session_dict(i, paused=True) for i in self.suspended
+        ]
         return {
             "active": len(self.active),
             "suspended": len(self.suspended),
             "projects": _unique([i.project for i in self.active]),
             "suspendedProjects": _unique([i.project for i in self.suspended]),
+            "sessions": sessions,
         }
+
+
+def _session_dict(instance: Instance, *, paused: bool) -> dict:
+    return {
+        "project": instance.project,
+        "directory": instance.directory,
+        "paused": paused,
+        "kind": instance.kind,
+        "tty": _tty_name(instance.tty_nr),
+        "pid": instance.pid,
+    }
+
+
+def _tty_name(tty_nr: int) -> str:
+    """Decode /proc stat tty_nr into a short pts/N label, or '' if none."""
+    if not tty_nr:
+        return ""
+    # Linux packs major/minor into tty_nr; pts devices use major 136.
+    major = (tty_nr >> 8) & 0xFFF
+    minor = tty_nr & 0xFF
+    if major == 136:
+        return f"pts/{minor}"
+    return ""
 
 
 def _unique(values: list[str]) -> list[str]:
@@ -86,9 +117,9 @@ def _unique(values: list[str]) -> list[str]:
     return list(seen)
 
 
-def _boot_time() -> float:
+def _boot_time(proc: Path = PROC) -> float:
     try:
-        for line in (PROC / "stat").read_text().splitlines():
+        for line in (proc / "stat").read_text().splitlines():
             if line.startswith("btime "):
                 return float(line.split()[1])
     except OSError:
@@ -96,10 +127,10 @@ def _boot_time() -> float:
     return 0.0
 
 
-def _read_process(pid: str) -> tuple[str, str, list[str]] | None:
+def _read_process(proc: Path, pid: str) -> tuple[str, str, list[str]] | None:
     """Return (executable, whole command line, argv) or None if it vanished."""
     try:
-        raw = (PROC / pid / "cmdline").read_bytes()
+        raw = (proc / pid / "cmdline").read_bytes()
     except (OSError, ValueError):
         return None
     if not raw:
@@ -110,10 +141,10 @@ def _read_process(pid: str) -> tuple[str, str, list[str]] | None:
     return argv[0], " ".join(argv), argv
 
 
-def _stat_fields(pid: str) -> tuple[str, int, float] | None:
-    """Return (state, parent pid, start time in clock ticks)."""
+def _stat_fields(proc: Path, pid: str) -> tuple[str, int, int, float] | None:
+    """Return (state, parent pid, tty_nr, start time in clock ticks)."""
     try:
-        raw = (PROC / pid / "stat").read_text()
+        raw = (proc / pid / "stat").read_text()
     except OSError:
         return None
     # The second field is the command in parentheses and may itself contain
@@ -125,30 +156,63 @@ def _stat_fields(pid: str) -> tuple[str, int, float] | None:
     if len(rest) < 20:
         return None
     try:
-        return rest[0], int(rest[1]), float(rest[19])
+        # state, ppid, pgrp, session, tty_nr, ... starttime at index 19
+        return rest[0], int(rest[1]), int(rest[4]), float(rest[19])
     except (ValueError, IndexError):
         return None
 
 
-def _project_of(pid: str) -> tuple[str, str]:
+def _project_of(proc: Path, pid: str) -> tuple[str, str]:
     try:
-        directory = os.readlink(PROC / pid / "cwd")
+        directory = os.readlink(proc / pid / "cwd")
     except OSError:
         return "", ""
     return os.path.basename(directory.rstrip("/")) or directory, directory
 
 
-def scan(specs: dict[str, list[ProcessSpec]], *, ignore_pids: set[int] | None = None) -> dict[str, InstanceReport]:
+def _collapse_by_tty(instances: list[Instance]) -> list[Instance]:
+    """One controlling terminal is one session.
+
+    Sibling agents under the same shell (backgrounded jobs, Task-spawned
+    peers that inherit the pts) would otherwise each inflate the panel count.
+    Processes with no controlling terminal (tty_nr == 0) stay one-per-pid —
+    that covers the desktop app and headless helpers that survived exclusion.
+    """
+    groups: dict[int, list[Instance]] = {}
+    alone: list[Instance] = []
+    for instance in instances:
+        if instance.tty_nr:
+            groups.setdefault(instance.tty_nr, []).append(instance)
+        else:
+            alone.append(instance)
+
+    collapsed = list(alone)
+    for group in groups.values():
+        running = [i for i in group if not i.suspended]
+        collapsed.append(min(running or group, key=lambda i: i.pid))
+    return collapsed
+
+
+def scan(
+    specs: dict[str, list[ProcessSpec]],
+    *,
+    ignore_pids: set[int] | None = None,
+    proc: Path | None = None,
+) -> dict[str, InstanceReport]:
     """Find sessions for every provider in one pass over /proc."""
     ignore = ignore_pids or set()
-    boot = _boot_time()
+    proc_root = proc or PROC
+    boot = _boot_time(proc_root)
     reports = {provider_id: InstanceReport() for provider_id in specs}
 
     matched: dict[int, tuple[str, ProcessSpec]] = {}
+    # Parent links for every live process we see — not only matches — so the
+    # ancestor walk can cross Electron helpers (--type=) that are deliberately
+    # unmatched and still reach a matched provider root.
     parents: dict[int, int] = {}
-    details: dict[int, tuple[str, float]] = {}
+    details: dict[int, tuple[str, float, int]] = {}
 
-    for entry in PROC.iterdir():
+    for entry in proc_root.iterdir():
         pid_text = entry.name
         if not pid_text.isdigit():
             continue
@@ -156,10 +220,19 @@ def scan(specs: dict[str, list[ProcessSpec]], *, ignore_pids: set[int] | None = 
         if pid in ignore:
             continue
 
-        process = _read_process(pid_text)
+        process = _read_process(proc_root, pid_text)
         if process is None:
             continue
         executable, command_line, _argv = process
+
+        stat = _stat_fields(proc_root, pid_text)
+        if stat is None:
+            continue
+        state, parent, tty_nr, start_ticks = stat
+        if state in DEAD_STATES:
+            continue
+
+        parents[pid] = parent
 
         hit = None
         for provider_id, provider_specs in specs.items():
@@ -172,38 +245,37 @@ def scan(specs: dict[str, list[ProcessSpec]], *, ignore_pids: set[int] | None = 
         if hit is None:
             continue
 
-        stat = _stat_fields(pid_text)
-        if stat is None:
-            continue
-        state, parent, start_ticks = stat
-        if state in DEAD_STATES:
-            continue
-
         matched[pid] = hit
-        parents[pid] = parent
-        details[pid] = (state, start_ticks)
+        details[pid] = (state, start_ticks, tty_nr)
 
+    raw_by_provider: dict[str, list[Instance]] = {provider_id: [] for provider_id in specs}
     for pid, (provider_id, spec) in matched.items():
         if _has_matching_ancestor(pid, provider_id, parents, matched):
             continue  # a helper the session spawned, not a session of its own
-        state, start_ticks = details[pid]
-        project, directory = _project_of(str(pid))
+        state, start_ticks, tty_nr = details[pid]
+        project, directory = _project_of(proc_root, str(pid))
         started_at = None
         if boot and _CLOCK_TICKS:
             started_at = datetime.fromtimestamp(boot, timezone.utc) + timedelta(
                 seconds=start_ticks / _CLOCK_TICKS
             )
-        instance = Instance(
-            provider_id=provider_id,
-            pid=pid,
-            project=project,
-            directory=directory,
-            started_at=started_at,
-            suspended=state in SUSPENDED_STATES,
-            kind=spec.label,
+        raw_by_provider[provider_id].append(
+            Instance(
+                provider_id=provider_id,
+                pid=pid,
+                project=project,
+                directory=directory,
+                started_at=started_at,
+                suspended=state in SUSPENDED_STATES,
+                kind=spec.label,
+                tty_nr=tty_nr,
+            )
         )
+
+    for provider_id, instances in raw_by_provider.items():
         report = reports[provider_id]
-        (report.suspended if instance.suspended else report.active).append(instance)
+        for instance in _collapse_by_tty(instances):
+            (report.suspended if instance.suspended else report.active).append(instance)
 
     return reports
 
@@ -214,7 +286,9 @@ def _has_matching_ancestor(
     """True when an ancestor belongs to the same provider.
 
     An agent that re-executes itself, or spawns a worker copy, would otherwise be
-    counted once per process instead of once per session.
+    counted once per process instead of once per session. Walking the full
+    parent map (including unmatched intermediates) is required so an IDE-spawned
+    agent under an Electron helper still collapses into the desktop session.
     """
     seen = {pid}
     current = parents.get(pid, 0)
