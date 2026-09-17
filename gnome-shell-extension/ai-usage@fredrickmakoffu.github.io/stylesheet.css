@@ -70,7 +70,13 @@
   background-color: #1c1c1e;
   border: 1px solid #333336;
   border-radius: 11px;
-  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.5);
+  /* The mockup's 0 20px 48px is a browser value and does not survive the port:
+     CSS blurs to nothing over the radius, while St paints a blurred silhouette
+     of the background box with a much heavier profile and no clipping. At 20px
+     down and 48px of blur that lands as a dark slab under the panel, obvious
+     the moment the menu drops or grows into a taller screen. Same intent — the
+     panel reads as lifted — at values St renders as a shadow. */
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
   color: #f2f2f3;
   font-family: Inter, sans-serif;
   font-size: 13px;
