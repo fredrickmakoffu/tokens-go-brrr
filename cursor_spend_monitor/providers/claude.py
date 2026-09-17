@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from ..instances import ProcessSpec
 from .base import Meter, ProviderSnapshot
 
 USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
@@ -50,6 +51,14 @@ class ClaudeProvider:
 
     id = "claude"
     display_name = "Claude Code"
+    process_specs = [
+        # --chrome-native-host is the browser integration, not a coding session.
+        ProcessSpec(
+            names=frozenset({"claude", "claude.exe"}),
+            exclude_args=("--chrome-native-host",),
+            label="session",
+        ),
+    ]
 
     def _read_oauth(self) -> dict[str, Any]:
         path = Path(os.environ.get("CLAUDE_CREDENTIALS_FILE", CREDENTIALS_FILE))

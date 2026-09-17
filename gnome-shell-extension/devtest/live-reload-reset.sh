@@ -7,12 +7,12 @@ UUID="ai-usage@fredrickmakoffu.github.io"
 EXT_HOME="$HOME/.local/share/gnome-shell/extensions"
 
 python3 - "$UUID" <<'PY'
-import ast, subprocess, sys
+import ast, re, subprocess, sys
 uuid = sys.argv[1]
 enabled = ast.literal_eval(subprocess.run(
     ['gsettings', 'get', 'org.gnome.shell', 'enabled-extensions'],
     capture_output=True, text=True, check=True).stdout.strip())
-kept = [u for u in enabled if not u.startswith('ai-usage')]
+kept = [u for u in enabled if not re.match(r'ai-usage(-r\d+)?@', u)]
 kept.append(uuid)
 subprocess.run(['gsettings', 'set', 'org.gnome.shell', 'enabled-extensions', repr(kept)], check=True)
 print('enabled-extensions ->', kept)
@@ -26,6 +26,9 @@ for dir in "$EXT_HOME"/ai-usage-r*@*; do
   removed=$((removed + 1))
 done
 [ "$removed" -eq 0 ] && echo "no staged revisions to remove"
+
+# The marker is deliberately kept: revision numbers must never be reused while
+# this login lasts, because the shell still has their modules cached.
 
 echo
 echo "The running shell still has the last revision loaded; the canonical one takes"
