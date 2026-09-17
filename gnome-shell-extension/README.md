@@ -145,7 +145,16 @@ nothing eases; the menu is simply drawn. Verified in a nested shell with the
 setting off — every row at full opacity and every bar at full width on the first
 sample.
 
-**The actors are born hidden.** The entry runs one turn of the main loop after
+**Hiding and revealing are governed by one condition.** They were not at first,
+and the bug is worth keeping written down: rows were hidden as the list was
+built, and revealed only on the path that plays the entry. Four of the five
+render call sites do not animate — `setState` among them — so every daemon poll
+rebuilt the list invisible with nothing to bring it back, and the menu emptied
+itself a few minutes after opening. Only the code that will play the entry is
+allowed to hide anything for it, and if it hides and then cannot play, it puts
+the actors back.
+
+**The actors are hidden just before the entry is scheduled.** The entry runs one turn of the main loop after
 the screen is built, because an ease started on an actor that has not been
 allocated yet settles on its first frame — which is how the whole animation
 silently did nothing until it was measured rather than watched. Anything visible
