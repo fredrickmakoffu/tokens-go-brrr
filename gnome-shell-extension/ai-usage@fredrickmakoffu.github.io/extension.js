@@ -1032,12 +1032,34 @@ const Indicator = GObject.registerClass(
             }
         }
 
-        _header(title) {
+        _header(title, withSettings = false) {
             const header = new St.BoxLayout({
                 style_class: "ai-usage-header",
                 x_expand: true,
             });
-            header.add_child(label(title, "ai-usage-header-title"));
+            header.add_child(
+                label(title, "ai-usage-header-title", {
+                    x_expand: true,
+                    y_align: Clutter.ActorAlign.CENTER,
+                }),
+            );
+            // Settings, Guide and About used to own the foot of the menu, which
+            // is the most reachable row there is and was being spent on three
+            // things you press once. They move up here into space the title was
+            // not using, and the window picker takes the row instead.
+            const add = (text, cb) => {
+                const b = new St.Button({
+                    style_class: "ai-usage-header-btn",
+                    label: text,
+                    can_focus: true,
+                    y_align: Clutter.ActorAlign.CENTER,
+                });
+                b.connect("clicked", cb);
+                header.add_child(b);
+            };
+            if (withSettings) add("Settings", () => this._openSettings());
+            add("Guide", () => this._navigate("guide"));
+            add("About", () => this._navigate("about"));
             return header;
         }
 
@@ -1126,36 +1148,14 @@ const Indicator = GObject.registerClass(
             return row;
         }
 
-        _footer(withSettings) {
-            const footer = new St.BoxLayout({
-                style_class: "ai-usage-footer",
-                x_expand: true,
-            });
-            const add = (text, cb) => {
-                const b = new St.Button({
-                    style_class: "ai-usage-footer-btn",
-                    label: text,
-                    can_focus: true,
-                    x_expand: true,
-                });
-                b.connect("clicked", cb);
-                footer.add_child(b);
-            };
-            if (withSettings) add("Settings", () => this._openSettings());
-            add("Guide", () => this._navigate("guide"));
-            add("About", () => this._navigate("about"));
-            return footer;
-        }
-
         _renderList(screen) {
-            screen.add_child(this._header("AI usage"));
+            screen.add_child(this._header("AI usage", true));
             const tools = this.tools;
             if (!tools.length) {
                 const text = this._state
                     ? "No providers yet.\nSign in to Cursor and refresh."
                     : "Daemon not running.\nStart it with:\nsystemctl --user start cursor-spend-monitor";
                 screen.add_child(wrappedLabel(text, "ai-usage-empty"));
-                screen.add_child(this._footer(false));
                 return;
             }
             const section = new St.BoxLayout({
@@ -1181,7 +1181,6 @@ const Indicator = GObject.registerClass(
             screen.add_child(section);
             const picker = this._windowPicker(tools, selectedKind);
             if (picker) screen.add_child(picker);
-            screen.add_child(this._footer(true));
         }
 
         _windowPicker(tools, selectedKind) {

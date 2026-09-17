@@ -95,6 +95,12 @@ meter carries a declared `kind` (`rolling`, `weekly`, `monthly`, `other`), set
 by the provider that knows, in the same spirit as `ProcessSpec`: the panel is
 told, it does not guess.
 
+The picker takes the row at the foot of the list, which Settings, Guide and
+About used to hold. That is the most reachable row in the menu and it was going
+to three things you press once to read something; the window is the choice you
+actually change. Those three move up into the header, in space the title was not
+using.
+
 Picking a window is a bulk chip swap — it calls the existing `SetPrimary` for
 every provider offering that kind. Nothing new persists: the choice lives in the
 daemon's `primary_overrides` as before, and the top bar, the alerts and the
