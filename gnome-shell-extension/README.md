@@ -127,6 +127,28 @@ St has no equivalent or the browser value does not survive the port: the CSS
 keyboard-focus class so the accent bar never shows on a mouse click, the drop
 shadow is retuned, and the type scale is relative.
 
+## Surface and font
+
+The popover is slate — `#1e242f` with `#384152` edges — rather than the mockup's
+near-black. A blue-grey surface has a temperature where `#1c1c1e` has only a
+level, and it reads as a panel sitting on the desktop rather than a hole cut in
+it. Every colour on it was re-checked: text `#eef1f6` at 13.75:1, secondary
+`#9aa6b8` at 6.32:1, and the green / amber / red at 8.8, 7.9 and 5.1 — all past
+WCAG AA. `#748094` is reserved for rules and icon glyphs, where the 3:1 bar for
+UI components applies instead.
+
+The top bar keeps neutral colours. It sits on GNOME's panel, which is not our
+surface, so tinting its text to match a menu that is not open would be wrong.
+
+The popover sets no `font-family`. The mockup asked for Inter, which is not
+installed on a default Fedora or Ubuntu, so for the life of the project the menu
+quietly rendered in Noto Sans while the shell, the top bar and every other
+extension used Adwaita Sans. Inheriting is both more honest and more consistent.
+
+Numbers carry `font-feature-settings: "tnum"`. Proportional digits change width
+as they change value, so a meter ticking 9% to 10% nudged the text beside it, and
+in the top bar shifted every chip along the row.
+
 ## Type scale
 
 The popover sets no base `font-size`. The mockup pinned 13px and every child
