@@ -133,18 +133,32 @@ Green `#3ddc84`, amber `#ffb224`, red `#ff5c5c`, against gunmetal at 8.29, 8.20
 and 4.89 to one. The mockup's softer trio was chosen against near-black and read
 washed once the surface lightened.
 
-**They are not yet distinguishable without hue.** Green and amber sit at
-relative luminance 0.538 and 0.532 — a ratio of 1.01 between them — so to a
-reader with red/green colour blindness, or in greyscale, they are the same
-swatch. Red is clearly darker at 0.297 and separates fine.
+**They are distinguishable without hue**, which took two changes. The first
+amber tried was `#ffb224`, which sits at relative luminance 0.532 against the
+green's 0.538 — a ratio of 1.01, meaning one swatch to a reader with red/green
+colour blindness or in greyscale. The mockup's original palette was barely
+better at 1.12:1, so this had been inherited rather than introduced. `#e8930f`
+keeps the orange cast and takes the pair to 1.37:1.
 
-Everywhere a meter appears this is covered, because the percentage is written
-next to it. The exception is the top-bar dot, which is colour and nothing else:
-healthy and caution are the same dot to those readers. The mockup's palette had
-the same flaw (1.12:1) so this is not a regression, but it is a real defect and
-it should be fixed rather than inherited. Darkening the amber to `#e8930f` takes
-the separation to 1.37:1 while keeping the orange cast and 6.07:1 of contrast;
-giving the dot a second cue — a ring, a shape — would fix it properly.
+Lightness alone is thin, though, and the top-bar dot is the one place a state is
+carried by colour and nothing else — everywhere a meter is drawn the percentage
+is written beside it. So caution is also drawn *hollow*: a 3px core inside a 3px
+border, which keeps the 9px outer size so the panel does not reflow as the state
+changes. Green and red are far enough apart in lightness (1.69:1) to need no
+form of their own.
+
+That makes every pair separable twice over, or once where it is plainly enough:
+
+| | lightness | form |
+|---|---|---|
+| ok vs caution | 1.37:1 | solid vs ring |
+| caution vs critical | 1.19:1 | ring vs solid |
+| ok vs critical | 1.69:1 | both solid |
+
+A halo was the first attempt at the form cue, and St renders `box-shadow` spread
+without clipping it to the border radius, so the round dot got a square glow —
+the same quirk that made the popover shadow read as a slab. A border follows the
+radius.
 
 ## Motion
 

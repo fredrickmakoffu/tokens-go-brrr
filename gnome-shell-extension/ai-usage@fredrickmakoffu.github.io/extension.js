@@ -33,7 +33,7 @@ const UsageProxy = Gio.DBusProxy.makeProxyWrapper(IFACE_XML);
 
 const COLOR = {
     ok: "#3ddc84",
-    wait: "#ffb224",
+    wait: "#e8930f",
     crit: "#ff5c5c",
     error: "#6c6d70",
 };
