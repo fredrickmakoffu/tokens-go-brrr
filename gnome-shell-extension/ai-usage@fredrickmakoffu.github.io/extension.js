@@ -1196,18 +1196,17 @@ const Indicator = GObject.registerClass(
             });
             for (const { kind, label: text } of offered) {
                 const active = kind === selectedKind;
-                const chip = new St.Button({
+                const button = new St.Button({
                     style_class: active
-                        ? "ai-usage-filter-chip active"
-                        : "ai-usage-filter-chip",
+                        ? "ai-usage-window-btn selected"
+                        : "ai-usage-window-btn",
                     label: text,
                     can_focus: true,
                     x_expand: true,
-                    y_align: Clutter.ActorAlign.CENTER,
                 });
                 if (!active)
-                    chip.connect("clicked", () => this._selectWindow(kind));
-                bar.add_child(chip);
+                    button.connect("clicked", () => this._selectWindow(kind));
+                bar.add_child(button);
             }
             return bar;
         }

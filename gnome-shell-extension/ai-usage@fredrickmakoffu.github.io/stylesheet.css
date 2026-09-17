@@ -172,17 +172,40 @@
 .ai-usage-meta { padding-top: 2px; }
 .ai-usage-limit { font-size: 0.85em; color: #9a9ba0; }
 
-/* The window picker at the foot of the list. One control for every row, so it
-   reads as a segmented choice rather than four separate buttons: the chips
-   share the width and sit on a divider that separates them from the providers
-   they act on. Reuses the filter chip from the sessions screen, which is the
-   same gesture — narrowing what the screen shows. */
+/* The window picker at the foot of the list, in the shape the footer had: three
+   flat buttons dividing the row edge to edge and rounding into the menu's
+   bottom corners. The pill chips read as a control floating on a shelf, which
+   is one object too many at the very bottom of the menu.
+
+   Selection has to survive hover, so the fill does not carry it alone: the
+   chosen window keeps a brighter, heavier label and an accent rule along its
+   top edge, the way a selected tab does. Hover and press fill without either. */
 .ai-usage-windowbar {
-  padding: 9px 14px 11px 14px;
-  spacing: 6px;
   border-top: 1px solid #2a2a2c;
   border-radius: 0 0 11px 11px;
 }
+.ai-usage-window-btn {
+  height: 36px;
+  padding: 0;
+  border-radius: 0;
+  background-color: transparent;
+  color: #9a9ba0;
+  font-size: 0.82em;
+  font-weight: 400;
+  transition-duration: 120ms;
+}
+.ai-usage-window-btn:first-child { border-radius: 0 0 0 11px; }
+.ai-usage-window-btn:last-child { border-radius: 0 0 11px 0; }
+.ai-usage-window-btn:hover, .ai-usage-window-btn:active {
+  background-color: #242426;
+  color: #f2f2f3;
+}
+.ai-usage-window-btn.selected {
+  color: #f2f2f3;
+  font-weight: 600;
+  box-shadow: inset 0 2px 0 #5b8ef2;
+}
+.ai-usage-window-btn:focus { box-shadow: inset 0 0 0 2px #5b8ef2; }
 
 .ai-usage-bar {
   margin-top: 9px;
