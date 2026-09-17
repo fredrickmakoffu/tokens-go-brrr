@@ -69,7 +69,7 @@
   padding: 0;
   background-color: #1e242f;
   border: 1px solid #384152;
-  border-radius: 11px;
+  border-radius: 13px;
   /* The mockup's 0 20px 48px is a browser value and does not survive the port:
      CSS blurs to nothing over the radius, while St paints a blurred silhouette
      of the background box with a much heavier profile and no clipping. At 20px
@@ -116,7 +116,7 @@
   background-color: #262e3b;
   color: #eef1f6;
 }
-.ai-usage-header-btn:focus { box-shadow: 0 0 0 2px #5b8ef2; }
+.ai-usage-header-btn:focus { box-shadow: 0 0 0 2px #6f9cff; }
 
 /* List */
 .ai-usage-section { padding: 6px 0; }
@@ -141,7 +141,7 @@
 }
 .ai-usage-menu .ai-usage-row.ai-usage-keyboard-focus {
   background-color: #262e3b;
-  box-shadow: inset 2px 0 0 #5b8ef2;
+  box-shadow: inset 2px 0 0 #6f9cff;
 }
 .ai-usage-menu .ai-usage-row.ai-usage-row-disabled,
 .ai-usage-menu .ai-usage-row.ai-usage-row-disabled:hover {
@@ -152,7 +152,7 @@
   width: 26px;
   height: 26px;
   border: 1px solid #384152;
-  border-radius: 8px;
+  border-radius: 9px;
   color: #9aa6b8;
 }
 .ai-usage-badge-icon { icon-size: 15px; -st-icon-style: regular; }
@@ -187,7 +187,7 @@
    top edge, the way a selected tab does. Hover and press fill without either. */
 .ai-usage-windowbar {
   border-top: 1px solid #2c3542;
-  border-radius: 0 0 11px 11px;
+  border-radius: 0 0 13px 13px;
 }
 .ai-usage-window-btn {
   height: 36px;
@@ -199,8 +199,8 @@
   font-weight: 400;
   transition-duration: 120ms;
 }
-.ai-usage-window-btn:first-child { border-radius: 0 0 0 11px; }
-.ai-usage-window-btn:last-child { border-radius: 0 0 11px 0; }
+.ai-usage-window-btn:first-child { border-radius: 0 0 0 13px; }
+.ai-usage-window-btn:last-child { border-radius: 0 0 13px 0; }
 .ai-usage-window-btn:hover, .ai-usage-window-btn:active {
   background-color: #262e3b;
   color: #eef1f6;
@@ -208,9 +208,9 @@
 .ai-usage-window-btn.selected {
   color: #eef1f6;
   font-weight: 600;
-  box-shadow: inset 0 2px 0 #5b8ef2;
+  box-shadow: inset 0 2px 0 #6f9cff;
 }
-.ai-usage-window-btn:focus { box-shadow: inset 0 0 0 2px #5b8ef2; }
+.ai-usage-window-btn:focus { box-shadow: inset 0 0 0 2px #6f9cff; }
 
 .ai-usage-bar {
   margin-top: 9px;
@@ -237,7 +237,7 @@
   transition-duration: 120ms;
 }
 .ai-usage-back:hover, .ai-usage-back:active { background-color: #262e3b; color: #eef1f6; }
-.ai-usage-back:focus { box-shadow: 0 0 0 2px #5b8ef2; }
+.ai-usage-back:focus { box-shadow: 0 0 0 2px #6f9cff; }
 .ai-usage-back-icon { icon-size: 16px; -st-icon-style: symbolic; }
 .ai-usage-detail-title { font-size: 1em; font-weight: 700; }
 
@@ -288,7 +288,7 @@
   transition-duration: 120ms;
 }
 .ai-usage-view-all:hover, .ai-usage-view-all:active { background-color: transparent; }
-.ai-usage-view-all:focus { box-shadow: inset 2px 0 0 #5b8ef2; }
+.ai-usage-view-all:focus { box-shadow: inset 2px 0 0 #6f9cff; }
 .ai-usage-view-all-row { spacing: 8px; }
 .ai-usage-view-all-label { font-size: 0.92em; font-weight: 500; color: #eef1f6; }
 
@@ -306,7 +306,7 @@
   transition-duration: 120ms;
 }
 .ai-usage-filter-chip:hover { background-color: #333d4c; color: #eef1f6; }
-.ai-usage-filter-chip:focus { box-shadow: 0 0 0 2px #5b8ef2; }
+.ai-usage-filter-chip:focus { box-shadow: 0 0 0 2px #6f9cff; }
 .ai-usage-filter-chip.active {
   border-color: transparent;
   background-color: #384152;
@@ -326,7 +326,7 @@
   transition-duration: 120ms;
 }
 .ai-usage-dash-btn:hover, .ai-usage-dash-btn:active { background-color: #303a49; }
-.ai-usage-dash-btn:focus { box-shadow: 0 0 0 2px #5b8ef2; }
+.ai-usage-dash-btn:focus { box-shadow: 0 0 0 2px #6f9cff; }
 .ai-usage-dash-btn.ai-usage-refresh-btn { margin-top: 0; }
 
 .ai-usage-guide-body { padding: 14px 16px 16px 16px; spacing: 14px; }

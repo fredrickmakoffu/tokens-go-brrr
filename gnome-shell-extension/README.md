@@ -127,6 +127,34 @@ St has no equivalent or the browser value does not survive the port: the CSS
 keyboard-focus class so the accent bar never shows on a mouse click, the drop
 shadow is retuned, and the type scale is relative.
 
+## Motion
+
+Opening the list plays an entry: each row fades and rises a beat after the one
+above it, and its meter grows from the left once it has landed, so the eye goes
+down the list and then watches the bars fill.
+
+Three things this had to get right.
+
+**It never overstates a meter.** The fill is allocated at its true width and
+scaled in, and the easing is a plain ease-out. A bar that springs past its mark
+and settles back shows more usage than the provider reported, and a quota display
+has no business exaggerating even for a sixth of a second.
+
+**It respects `enable-animations`.** With animations off nothing is hidden and
+nothing eases; the menu is simply drawn. Verified in a nested shell with the
+setting off — every row at full opacity and every bar at full width on the first
+sample.
+
+**The actors are born hidden.** The entry runs one turn of the main loop after
+the screen is built, because an ease started on an actor that has not been
+allocated yet settles on its first frame — which is how the whole animation
+silently did nothing until it was measured rather than watched. Anything visible
+during that gap would flash at full value first, so rows and fills start at zero
+and the entry only reveals them.
+
+Opening the menu replays the entry even when the screen has not changed, which is
+the usual case: the list is already up from last time.
+
 ## Surface and font
 
 The popover is slate — `#1e242f` with `#384152` edges — rather than the mockup's
