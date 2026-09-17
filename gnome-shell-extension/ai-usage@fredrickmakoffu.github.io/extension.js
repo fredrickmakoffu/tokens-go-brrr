@@ -50,6 +50,11 @@ const CONFIG_PATH = GLib.build_filenamev([
     "config.json",
 ]);
 const SCREEN_EASE = 160;
+// A row arrives just after the one above it, so the list reads as settling into
+// place rather than being stamped down all at once.
+const ROW_STAGGER = 34;
+const ROW_EASE = 210;
+const BAR_GROW = 420;
 
 const CAUTION_AT = 70;
 const CRITICAL_AT = 90;
@@ -326,12 +331,34 @@ const Bar = GObject.registerClass(
             this._fill = new St.Widget({ style_class: "ai-usage-bar-fill" });
             this.add_child(this._fill);
             this.setValue(pct, color);
+            // Collapsed from birth rather than at the start of the animation.
+            // The entry runs one turn of the loop after the screen is built, and
+            // anything visible in that gap flashes at full value first.
+            if (St.Settings.get().enable_animations) {
+                this._fill.set_pivot_point(0, 0.5);
+                this._fill.scale_x = 0;
+            }
         }
 
         setValue(pct, color) {
             this._pct = clampPct(pct);
             this._fill.style = `background-color: ${color};`;
             this.queue_relayout();
+        }
+
+        grow() {
+            // The fill is allocated at its true width and scaled in from the
+            // left, so the animation never draws a value the meter does not
+            // have. Deliberately an ease-out with no overshoot: a bar that
+            // springs past its mark shows more usage than the provider
+            // reported, and a quota display has no business exaggerating even
+            // for a sixth of a second.
+            if (!St.Settings.get().enable_animations) return;
+            this._fill.ease({
+                scale_x: 1,
+                duration: BAR_GROW,
+                mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+            });
         }
 
         vfunc_allocate(box) {
@@ -550,7 +577,8 @@ const Row = GObject.registerClass(
             info.add_child(meta);
 
             if (metered) {
-                info.add_child(new Bar(pct, color));
+                this._bar = new Bar(pct, color);
+                info.add_child(this._bar);
             }
             this.add_child(info);
 
@@ -628,6 +656,29 @@ const Row = GObject.registerClass(
             // Clicks on a badge belong to the badge (mockup: e.stopPropagation()).
             this.emit("navigate");
         }
+
+        prepareEntry() {
+            if (!St.Settings.get().enable_animations) return;
+            this.opacity = 0;
+            this.translation_y = 6;
+        }
+
+        enter(index) {
+            // Each row arrives a beat after the one above it. The bar grows
+            // once its row has landed, so the eye follows the list down and
+            // then watches the meters fill, rather than everything moving at
+            // once.
+            this._bar?.grow?.();
+            if (!St.Settings.get().enable_animations) return;
+            const delay = index * ROW_STAGGER;
+            this.ease({
+                opacity: 255,
+                translation_y: 0,
+                delay,
+                duration: ROW_EASE,
+                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            });
+        }
     },
 );
 
@@ -691,9 +742,16 @@ const Indicator = GObject.registerClass(
                 if (open) {
                     this._ext.refresh();
                     if (this._screen !== "list") this._navigate("list");
+                    else this._queueEntry();
+                } else if (this._entryId) {
+                    GLib.source_remove(this._entryId);
+                    this._entryId = 0;
                 }
             });
 
+            this._entryId = 0;
+            this._entryRows = [];
+            this._entryBars = [];
             this._render(false);
         }
 
@@ -1007,6 +1065,8 @@ const Indicator = GObject.registerClass(
 
         _render(animate) {
             this.menu.box.destroy_all_children();
+            this._entryRows = [];
+            this._entryBars = [];
             const screen = new St.BoxLayout({
                 style_class: "ai-usage-screen",
                 orientation: Clutter.Orientation.VERTICAL,
@@ -1029,7 +1089,27 @@ const Indicator = GObject.registerClass(
                     duration: SCREEN_EASE,
                     mode: Clutter.AnimationMode.EASE_OUT_QUAD,
                 });
+                this._queueEntry();
             }
+        }
+
+        _queueEntry() {
+            // One turn of the loop later, so the rows have been allocated. An
+            // ease started on an actor that has not been laid out yet settles
+            // on its first frame, which is how this animation silently did
+            // nothing at all until it was measured.
+            if (this._entryId) return;
+            this._entryId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+                this._entryId = 0;
+                this._playEntry();
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+
+        _playEntry() {
+            if (!this.menu.isOpen) return;
+            (this._entryRows ?? []).forEach((row, index) => row.enter(index));
+            for (const bar of this._entryBars ?? []) bar.grow();
         }
 
         _header(title, withSettings = false) {
@@ -1164,6 +1244,7 @@ const Indicator = GObject.registerClass(
                 x_expand: true,
             });
             const selectedKind = selectedWindow(tools);
+            const rows = [];
             for (const tool of tools) {
                 const row = new Row(
                     this._icons,
@@ -1175,8 +1256,11 @@ const Indicator = GObject.registerClass(
                     this._navigate("detail", tool.id),
                 );
                 row.connect("select", (_row, key) => this._select(tool, key));
+                row.prepareEntry();
                 section.add_child(row);
+                rows.push(row);
             }
+            this._entryRows = rows;
             this._lastSwapped = null;
             screen.add_child(section);
             const picker = this._windowPicker(tools, selectedKind);
@@ -1251,6 +1335,7 @@ const Indicator = GObject.registerClass(
                     : `${via.name}${via.model ? ` · ${via.model}` : ""} — ${tool.error || "no limits available"}`;
                 body.add_child(wrappedLabel(note, "ai-usage-via-note"));
             }
+            const bars = [];
             for (const m of tool.metrics ?? []) {
                 const pct = clampPct(m.value);
                 const color = colorFor(pct);
@@ -1269,10 +1354,14 @@ const Indicator = GObject.registerClass(
                     }),
                 );
                 block.add_child(top);
-                block.add_child(new Bar(pct, color));
+                const bar = new Bar(pct, color);
+                bars.push(bar);
+                block.add_child(bar);
                 block.add_child(label(m.resets ?? "", "ai-usage-detail-reset"));
                 body.add_child(block);
             }
+            this._entryBars = bars;
+
             const sessions = sessionRows(tool);
             if (sessions.length) {
                 const active = sessions.filter((s) => !s.paused);
