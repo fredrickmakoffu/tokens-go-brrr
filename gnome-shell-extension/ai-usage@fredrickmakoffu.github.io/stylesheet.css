@@ -49,6 +49,16 @@
 .ai-usage-session-project { font-size: 11px; color: #f2f2f3; font-weight: 500; }
 .ai-usage-session-pct { font-size: 11px; font-weight: 700; }
 .ai-usage-session-count { font-size: 11px; color: #98999d; }
+/* A harness carries the account it spends on as a corner badge. The dark ring
+   keeps the small mark legible where it overlaps the host logo. */
+.ai-usage-session-stack { width: 18px; height: 16px; }
+.ai-usage-session-via {
+  icon-size: 9px;
+  -st-icon-style: regular;
+  background-color: rgba(20, 20, 22, 0.9);
+  border-radius: 9px;
+  padding: 1px;
+}
 
 /* Popover chrome (.menu in the mockup) */
 .ai-usage-menu {
@@ -116,6 +126,20 @@
 .ai-usage-name-row { spacing: 7px; }
 .ai-usage-name { font-size: 13.5px; font-weight: 600; }
 .ai-usage-running { font-size: 11.5px; color: #6c6d70; }
+/* "via <account>" — this row's numbers belong to another provider. */
+.ai-usage-via {
+  font-size: 10.5px;
+  color: #98999d;
+  padding: 1px 5px;
+  border-radius: 6px;
+  background-color: rgba(255, 255, 255, 0.07);
+}
+.ai-usage-badge-via { border: 1px solid rgba(255, 255, 255, 0.12); }
+.ai-usage-via-note {
+  font-size: 11.5px;
+  color: #98999d;
+  padding-bottom: 4px;
+}
 .ai-usage-meta { padding-top: 2px; }
 .ai-usage-limit { font-size: 11.5px; color: #6c6d70; }
 
@@ -222,6 +246,11 @@
   color: #98999d;
 }
 .ai-usage-session-state.paused { color: #6c6d70; }
+.ai-usage-session-model {
+  font-size: 10.5px;
+  color: #6c6d70;
+  padding-right: 8px;
+}
 
 .ai-usage-view-all {
   margin-top: 4px;

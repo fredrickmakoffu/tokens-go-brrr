@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from cursor_spend_monitor.instances import ProcessSpec, scan
+from cursor_spend_monitor.instances import ProcessSpec, scan, signature
 from cursor_spend_monitor.providers.cursor import CursorProvider
 
 # tty_nr encoding used by the kernel: (major << 8) | minor for pts.
@@ -217,6 +217,67 @@ class InstanceScanTests(unittest.TestCase):
         report = scan(specs, proc=self.root)["cursor"]
         self.assertEqual(len(report.active), 1)
         self.assertEqual(report.active[0].pid, 40)
+
+
+class BackendResolverHookTests(unittest.TestCase):
+    """A harness attaches the account each session spends against."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+
+    def _specs(self, resolver):
+        return {"pi": [ProcessSpec(names=frozenset({"pi"}), resolve_backend=resolver)]}
+
+    def test_resolver_receives_the_cwd_and_result_reaches_the_panel(self) -> None:
+        _write_proc(self.root, 10, argv=["/home/u/bin/pi"], tty_nr=PTS[3], cwd="/w/app")
+        seen = []
+
+        class FakeBackend:
+            account = "opencode-go"
+            model = "glm-5.3"
+
+            def to_dict(self):
+                return {"account": self.account, "model": self.model}
+
+        def resolver(directory):
+            seen.append(directory)
+            return FakeBackend()
+
+        reports = scan(self._specs(resolver), proc=self.root)
+        self.assertEqual(seen, ["/w/app"])
+        session = reports["pi"].to_dict()["sessions"][0]
+        self.assertEqual(session["backend"], {"account": "opencode-go", "model": "glm-5.3"})
+
+    def test_a_failing_resolver_does_not_take_the_scan_down(self) -> None:
+        _write_proc(self.root, 11, argv=["/home/u/bin/pi"], tty_nr=PTS[4], cwd="/w/app")
+
+        def resolver(_directory):
+            raise RuntimeError("unreadable session log")
+
+        reports = scan(self._specs(resolver), proc=self.root)
+        self.assertEqual(len(reports["pi"].active), 1)
+        self.assertNotIn("backend", reports["pi"].to_dict()["sessions"][0])
+
+    def test_switching_backend_changes_the_signature(self) -> None:
+        """A model switch has to reach the panel, so it must count as a change."""
+        _write_proc(self.root, 12, argv=["/home/u/bin/pi"], tty_nr=PTS[5], cwd="/w/app")
+
+        def resolver_for(model):
+            class B:
+                account = "opencode-go"
+
+                def __init__(self):
+                    self.model = model
+
+                def to_dict(self):
+                    return {"account": self.account, "model": self.model}
+            return lambda _d: B()
+
+        first = signature(scan(self._specs(resolver_for("glm-5.3")), proc=self.root))
+        second = signature(scan(self._specs(resolver_for("grok-4.6")), proc=self.root))
+        self.assertNotEqual(first, second)
 
 
 if __name__ == "__main__":

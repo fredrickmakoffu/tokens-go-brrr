@@ -25,6 +25,25 @@ tools = [
      "dashboardUrl": "https://opencode.ai",
      "metrics": [{"key": "5h", "label": "5-hour limit", "value": 15, "resets": "Resets in 4h 50m"},
                  {"key": "weekly", "label": "Weekly", "value": 33, "resets": "Resets in 6 days"}]},
+    # Pi borrowing OpenCode Go's meters: same numbers as the row above, marked
+    # so the status dot ignores them.
+    {"id": "pi", "name": "Pi", "icon": "pi", "primary": "5h", "status": "ok",
+     "dashboardUrl": "https://pi.dev", "plan": "deepseek-v4-flash",
+     "via": {"account": "opencode-go", "name": "OpenCode Go", "model": "deepseek-v4-flash",
+             "providerId": "opencode", "metered": True, "borrowed": True, "from": "opencode"},
+     "metrics": [{"key": "5h", "label": "5-hour limit", "value": 15, "resets": "Resets in 4h 50m"},
+                 {"key": "weekly", "label": "Weekly", "value": 33, "resets": "Resets in 6 days"}],
+     "instances": {
+         "active": 2, "suspended": 0,
+         "projects": ["api-server", "web-app"],
+         "suspendedProjects": [],
+         "sessions": [
+             {"project": "api-server", "directory": "/home/u/api-server", "paused": False, "kind": "session", "tty": "pts/5",
+              "backend": {"account": "opencode-go", "name": "OpenCode Go", "model": "deepseek-v4-flash", "providerId": "opencode", "metered": True}},
+             {"project": "web-app", "directory": "/home/u/web-app", "paused": False, "kind": "session", "tty": "pts/6",
+              "backend": {"account": "xai", "name": "xAI", "model": "grok-4.6", "providerId": "", "metered": False}},
+         ],
+     }},
 ]
 loop = GLib.MainLoop()
 def state():

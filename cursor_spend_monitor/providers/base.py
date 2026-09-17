@@ -46,6 +46,13 @@ class ProviderSnapshot:
     error: str | None = None
     fetched_at: datetime | None = None
     instances: InstanceReport = field(default_factory=InstanceReport)
+    # Set on a harness that spends against another account: the backend its live
+    # sessions are on, and — when one of our providers meters that account — the
+    # id whose meters were copied onto this snapshot. `borrowed_from` being set
+    # is what marks these metrics as somebody else's, so the status dot does not
+    # count the same subscription twice.
+    backend: Any = None          # providers.pi_backend.Backend
+    borrowed_from: str | None = None
 
     @property
     def primary(self) -> Meter:
@@ -62,6 +69,8 @@ class ProviderSnapshot:
         return None
 
     def header(self) -> str:
+        if self.backend is not None:
+            return f"{self.display_name} · via {self.backend.name}"
         if self.plan:
             return f"{self.display_name} · {self.plan}"
         return self.display_name
@@ -85,6 +94,8 @@ class ProviderSnapshot:
             error=self.error,
             fetched_at=self.fetched_at,
             instances=self.instances,
+            backend=self.backend,
+            borrowed_from=self.borrowed_from,
         )
 
     def to_panel_dict(self) -> dict[str, Any]:
@@ -98,6 +109,7 @@ class ProviderSnapshot:
             "error": self.error,
             "dashboardUrl": self.dashboard_url,
             "instances": self.instances.to_dict(),
+            "via": self._via_dict(),
             "metrics": [
                 {
                     "key": m.key,
@@ -108,6 +120,15 @@ class ProviderSnapshot:
                 for m in self.metrics
             ],
         }
+
+    def _via_dict(self) -> dict[str, Any] | None:
+        """What the panel needs to say "running on somebody else's account"."""
+        if self.backend is None:
+            return None
+        via = self.backend.to_dict()
+        via["borrowed"] = self.borrowed_from is not None
+        via["from"] = self.borrowed_from or ""
+        return via
 
     @classmethod
     def error_snapshot(
