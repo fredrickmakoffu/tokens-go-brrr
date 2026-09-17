@@ -80,14 +80,75 @@ symbolic and follow the text colour. OpenCode has no local asset yet and falls b
 bracket glyph. These marks are the trademarks of their respective owners and are used here
 only to identify the service each row reports on.
 
+## The window picker
+
+Providers measure different windows, and the list used to ask about them once
+per row: every provider carried its own chips, so four rows meant four copies of
+the same question. The windows are now chosen once, at the foot of the list, and
+every row shows the chosen one.
+
+They cannot be matched on the metric key. Claude calls its short window
+`five_hour` and OpenCode calls it `rolling`; Claude's `seven_day` is OpenCode's
+`weekly`; and Codex names both of its meters generically — `monthly` and
+`window` — so only its own `limit_window_seconds` says what either covers. So a
+meter carries a declared `kind` (`rolling`, `weekly`, `monthly`, `other`), set
+by the provider that knows, in the same spirit as `ProcessSpec`: the panel is
+told, it does not guess.
+
+The picker takes the row at the foot of the list, which Settings, Guide and
+About used to hold, and keeps their shape: three flat buttons dividing the row
+edge to edge. Selection cannot be carried by a fill alone, since hover fills
+too, so the chosen window keeps a brighter, heavier label and an accent rule
+along its top edge. That is the most reachable row in the menu and it was going
+to three things you press once to read something; the window is the choice you
+actually change. Those three move up into the header, in space the title was not
+using.
+
+Picking a window is a bulk chip swap — it calls the existing `SetPrimary` for
+every provider offering that kind. Nothing new persists: the choice lives in the
+daemon's `primary_overrides` as before, and the top bar, the alerts and the
+status dot follow it because they already read the primary. The active window is
+read back from what the rows are showing rather than stored, so the picker
+cannot come to disagree with the panel beneath it.
+
+**No provider offers every window.** Cursor publishes no weekly, Claude no
+monthly, so some row is always the exception. A row that cannot honour the
+choice keeps its own meter and names it, in the dim label the chips used to sit
+in; a row that can say nothing at all. An exception that stayed silent would
+read as though the picker had applied to it.
+
 ## Design parity
 
-`stylesheet.css` carries the mockup's values verbatim: 360px wide with an 11px radius,
-`#1c1c1e` on `#333336`, rows 9px/14px/9px/16px with 12px spacing, 3px bars, 19px bold
-percentages, and the 70 / 90 thresholds for amber and red. Three things are translated
-rather than copied, since St has no equivalent: the CSS `backdrop-filter` becomes an
-opaque panel, `:focus-visible` becomes an explicit keyboard-focus class so the accent
-bar never shows on a mouse click, and the drop shadow is retuned.
+`stylesheet.css` carries the mockup's geometry: 360px wide with an 11px radius,
+`#1c1c1e` on `#333336`, rows 9px/14px/9px/16px with 12px spacing, and the 70 / 90
+thresholds for amber and red. Four things are translated rather than copied, since
+St has no equivalent or the browser value does not survive the port: the CSS
+`backdrop-filter` becomes an opaque panel, `:focus-visible` becomes an explicit
+keyboard-focus class so the accent bar never shows on a mouse click, the drop
+shadow is retuned, and the type scale is relative.
+
+## Type scale
+
+The popover sets no base `font-size`. The mockup pinned 13px and every child
+below it in half-point steps, which is the whole story in a browser and the wrong
+one here: it overrides the font the user picked and freezes the menu against
+`text-scaling-factor`, so the popover stays put while every other menu on the
+desktop grows. Sizes are `em` against the inherited shell font, which is what the
+shell's own menus do.
+
+Top-bar rules keep fixed px. The panel has a hard width budget — several
+providers with session chips already run to the edge — so it is tuned on its own
+and does not follow the popover.
+
+Two consequences worth keeping. Secondary text is `#9a9ba0`, not the mockup's
+`#6c6d70`: at 3.29:1 on `#1c1c1e` that failed WCAG AA for text this size, and it
+was carrying the reset copy — the line most worth reading. And the meter bar is
+an 8px slab rather than a 3px hairline, because the fill answers the question the
+menu exists to answer and should not be something you look for. The slab geometry
+is borrowed from `ai-usagebar`; the colour is not. That extension fills with
+`-st-accent-color`, which would say the same thing at 20% as at 95%, and the
+green / amber / red distinction is what the status dot, the Guide screen and the
+alert thresholds are all built on.
 
 The shadow is worth spelling out, because verbatim was tried first and looked wrong.
 `box-shadow` does not mean the same thing in the two engines: CSS fades a shadow to

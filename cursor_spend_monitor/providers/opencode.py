@@ -17,10 +17,10 @@ AUTH_KEY = "opencode-go"
 
 # Window key → label, in the order they are shown. The API names the short
 # window "rolling" without stating its length, so the label does not claim one.
-WINDOWS: list[tuple[str, str]] = [
-    ("rolling", "Rolling limit"),
-    ("weekly", "Weekly"),
-    ("monthly", "Monthly"),
+WINDOWS: list[tuple[str, str, str]] = [
+    ("rolling", "Rolling limit", "rolling"),
+    ("weekly", "Weekly", "weekly"),
+    ("monthly", "Monthly", "monthly"),
 ]
 
 
@@ -103,7 +103,7 @@ class OpenCodeProvider:
             )
 
         metrics: list[Meter] = []
-        for key_name, label in WINDOWS:
+        for key_name, label, kind in WINDOWS:
             window = usage.get(key_name)
             if not isinstance(window, dict):
                 continue
@@ -111,7 +111,10 @@ class OpenCodeProvider:
             if percent is None:
                 continue
             metrics.append(
-                Meter(key_name, label, float(percent), resets_at=_parse_iso(window.get("resetsAt")))
+                Meter(
+                    key_name, label, float(percent),
+                    resets_at=_parse_iso(window.get("resetsAt")), kind=kind,
+                )
             )
 
         if not metrics:

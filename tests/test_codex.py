@@ -246,6 +246,17 @@ class ProviderTest(unittest.TestCase):
         self.assertEqual(snapshot.plan, "Grok_Ultra")
 
 
+class WindowKindPayloadTest(ProviderTest):
+    """The kind survives the trip to the panel, which is what groups providers."""
+
+    def test_the_kind_reaches_the_panel_payload(self):
+        self._stub_usage(usage_payload())
+        snapshot = CodexProvider().fetch()
+        kinds = {m["key"]: m["kind"] for m in snapshot.to_panel_dict()["metrics"]}
+        # monthly window -> monthly, the 5-hour secondary -> rolling
+        self.assertEqual(kinds, {"monthly": "monthly", "window": "rolling"})
+
+
 class WindowLabelTest(unittest.TestCase):
     def test_known_windows(self) -> None:
         self.assertEqual(codex._window_label(18000), "5-hour limit")
@@ -261,3 +272,34 @@ class WindowLabelTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WindowKindTest(unittest.TestCase):
+    """Codex names both meters generically, so the duration decides the kind.
+
+    Its keys are "monthly" and "window" whatever the windows actually are, so
+    limit_window_seconds is the only trustworthy signal — and the one the panel's
+    shared window picker groups providers by.
+    """
+
+    def test_five_hour_window_is_rolling(self):
+        self.assertEqual(codex._window_kind(18000), "rolling")
+
+    def test_a_day_is_still_the_short_window(self):
+        self.assertEqual(codex._window_kind(86400), "rolling")
+
+    def test_seven_days_is_weekly(self):
+        self.assertEqual(codex._window_kind(604800), "weekly")
+
+    def test_a_week_rounded_oddly_is_still_weekly(self):
+        # Providers do not agree on what a week is; someone choosing between
+        # windows does not care about the rounding.
+        self.assertEqual(codex._window_kind(648000), "weekly")
+
+    def test_a_month_is_monthly(self):
+        self.assertEqual(codex._window_kind(2592000), "monthly")
+
+    def test_a_missing_or_absurd_duration_is_not_a_window(self):
+        for value in (None, "soon", 0, -1, True):
+            self.assertEqual(codex._window_kind(value), "other")
+

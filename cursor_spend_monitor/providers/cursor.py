@@ -59,8 +59,15 @@ class CursorProvider:
             icon="cursor",
             plan=plan,
             metrics=[
-                Meter("monthly", "Monthly limit", usage.auto_percent, resets_at=resets),
-                Meter("other", "Other models", usage.api_percent, resets_at=resets),
+                Meter(
+                    "monthly", "Monthly limit", usage.auto_percent,
+                    resets_at=resets, kind="monthly",
+                ),
+                # Spend on models outside the plan, not a window that resets.
+                Meter(
+                    "other", "Other models", usage.api_percent,
+                    resets_at=resets, kind="other",
+                ),
             ],
             primary_key="monthly",
             dashboard_url=DASHBOARD_URL,
