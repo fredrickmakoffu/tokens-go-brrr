@@ -82,12 +82,36 @@ only to identify the service each row reports on.
 
 ## Design parity
 
-`stylesheet.css` carries the mockup's values verbatim: 360px wide with an 11px radius,
-`#1c1c1e` on `#333336`, rows 9px/14px/9px/16px with 12px spacing, 3px bars, 19px bold
-percentages, and the 70 / 90 thresholds for amber and red. Three things are translated
-rather than copied, since St has no equivalent: the CSS `backdrop-filter` becomes an
-opaque panel, `:focus-visible` becomes an explicit keyboard-focus class so the accent
-bar never shows on a mouse click, and the drop shadow is retuned.
+`stylesheet.css` carries the mockup's geometry: 360px wide with an 11px radius,
+`#1c1c1e` on `#333336`, rows 9px/14px/9px/16px with 12px spacing, and the 70 / 90
+thresholds for amber and red. Four things are translated rather than copied, since
+St has no equivalent or the browser value does not survive the port: the CSS
+`backdrop-filter` becomes an opaque panel, `:focus-visible` becomes an explicit
+keyboard-focus class so the accent bar never shows on a mouse click, the drop
+shadow is retuned, and the type scale is relative.
+
+## Type scale
+
+The popover sets no base `font-size`. The mockup pinned 13px and every child
+below it in half-point steps, which is the whole story in a browser and the wrong
+one here: it overrides the font the user picked and freezes the menu against
+`text-scaling-factor`, so the popover stays put while every other menu on the
+desktop grows. Sizes are `em` against the inherited shell font, which is what the
+shell's own menus do.
+
+Top-bar rules keep fixed px. The panel has a hard width budget — several
+providers with session chips already run to the edge — so it is tuned on its own
+and does not follow the popover.
+
+Two consequences worth keeping. Secondary text is `#9a9ba0`, not the mockup's
+`#6c6d70`: at 3.29:1 on `#1c1c1e` that failed WCAG AA for text this size, and it
+was carrying the reset copy — the line most worth reading. And the meter bar is
+an 8px slab rather than a 3px hairline, because the fill answers the question the
+menu exists to answer and should not be something you look for. The slab geometry
+is borrowed from `ai-usagebar`; the colour is not. That extension fills with
+`-st-accent-color`, which would say the same thing at 20% as at 95%, and the
+green / amber / red distinction is what the status dot, the Guide screen and the
+alert thresholds are all built on.
 
 The shadow is worth spelling out, because verbatim was tried first and looked wrong.
 `box-shadow` does not mean the same thing in the two engines: CSS fades a shadow to
