@@ -331,19 +331,25 @@ const Bar = GObject.registerClass(
             this._fill = new St.Widget({ style_class: "ai-usage-bar-fill" });
             this.add_child(this._fill);
             this.setValue(pct, color);
-            // Collapsed from birth rather than at the start of the animation.
-            // The entry runs one turn of the loop after the screen is built, and
-            // anything visible in that gap flashes at full value first.
-            if (St.Settings.get().enable_animations) {
-                this._fill.set_pivot_point(0, 0.5);
-                this._fill.scale_x = 0;
-            }
         }
 
         setValue(pct, color) {
             this._pct = clampPct(pct);
             this._fill.style = `background-color: ${color};`;
             this.queue_relayout();
+        }
+
+        prepareGrow() {
+            // Collapsed just before the entry is scheduled, never on
+            // construction: a screen is built on every daemon poll, and only
+            // the path that also plays the entry is allowed to hide anything.
+            this._fill.set_pivot_point(0, 0.5);
+            this._fill.scale_x = 0;
+        }
+
+        settle() {
+            this._fill.remove_all_transitions();
+            this._fill.scale_x = 1;
         }
 
         grow() {
@@ -658,9 +664,17 @@ const Row = GObject.registerClass(
         }
 
         prepareEntry() {
-            if (!St.Settings.get().enable_animations) return;
             this.opacity = 0;
             this.translation_y = 6;
+        }
+
+        settle() {
+            // Final state without animating, for any path that hid these
+            // actors and then found it could not play the entry.
+            this.remove_all_transitions();
+            this.opacity = 255;
+            this.translation_y = 0;
+            this._bar?.settle?.();
         }
 
         enter(index) {
@@ -742,7 +756,7 @@ const Indicator = GObject.registerClass(
                 if (open) {
                     this._ext.refresh();
                     if (this._screen !== "list") this._navigate("list");
-                    else this._queueEntry();
+                    else this._beginEntry();
                 } else if (this._entryId) {
                     GLib.source_remove(this._entryId);
                     this._entryId = 0;
@@ -1089,8 +1103,20 @@ const Indicator = GObject.registerClass(
                     duration: SCREEN_EASE,
                     mode: Clutter.AnimationMode.EASE_OUT_QUAD,
                 });
-                this._queueEntry();
+                this._beginEntry();
             }
+        }
+
+        _beginEntry() {
+            // Hiding and revealing must be governed by one condition. They were
+            // not: rows were hidden on every render and revealed only on the
+            // animated path, so each daemon poll rebuilt the list invisible and
+            // left it that way until the menu was reopened.
+            if (!this.menu.isOpen) return;
+            if (!St.Settings.get().enable_animations) return;
+            for (const row of this._entryRows ?? []) row.prepareEntry();
+            for (const bar of this._entryBars ?? []) bar.prepareGrow();
+            this._queueEntry();
         }
 
         _queueEntry() {
@@ -1107,9 +1133,17 @@ const Indicator = GObject.registerClass(
         }
 
         _playEntry() {
-            if (!this.menu.isOpen) return;
-            (this._entryRows ?? []).forEach((row, index) => row.enter(index));
-            for (const bar of this._entryBars ?? []) bar.grow();
+            const rows = this._entryRows ?? [];
+            const bars = this._entryBars ?? [];
+            if (!this.menu.isOpen) {
+                // Closed before the entry could run. These actors were hidden
+                // for it, so put them back rather than leaving them invisible.
+                for (const row of rows) row.settle();
+                for (const bar of bars) bar.settle();
+                return;
+            }
+            rows.forEach((row, index) => row.enter(index));
+            for (const bar of bars) bar.grow();
         }
 
         _header(title, withSettings = false) {
@@ -1256,7 +1290,6 @@ const Indicator = GObject.registerClass(
                     this._navigate("detail", tool.id),
                 );
                 row.connect("select", (_row, key) => this._select(tool, key));
-                row.prepareEntry();
                 section.add_child(row);
                 rows.push(row);
             }
