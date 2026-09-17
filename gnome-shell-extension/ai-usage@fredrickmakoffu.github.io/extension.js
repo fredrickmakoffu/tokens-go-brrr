@@ -218,15 +218,45 @@ const WINDOW_KINDS = [
     { kind: "monthly", label: "Monthly" },
 ];
 
+// A daemon that predates the kind field publishes none, and the daemon is a
+// separate install from the extension — pip and a directory copy, updated at
+// different times. Losing the whole picker in that window would look like the
+// feature is broken rather than the daemon being behind, so the key and then
+// the label stand in until it catches up. The daemon's own value always wins.
+const KIND_BY_KEY = {
+    five_hour: "rolling",
+    rolling: "rolling",
+    session: "rolling",
+    daily: "rolling",
+    seven_day: "weekly",
+    seven_day_opus: "weekly",
+    seven_day_sonnet: "weekly",
+    weekly: "weekly",
+    monthly: "monthly",
+};
+
+function kindOfMetric(m) {
+    if (!m) return "other";
+    if (m.kind) return m.kind;
+    const byKey = KIND_BY_KEY[m.key];
+    if (byKey) return byKey;
+    const text = (m.label || "").toLowerCase();
+    if (text.includes("week")) return "weekly";
+    if (text.includes("month")) return "monthly";
+    if (text.includes("hour") || text.includes("rolling") || text.includes("daily"))
+        return "rolling";
+    return "other";
+}
+
 function kindOf(tool) {
-    return primaryOf(tool)?.kind ?? "other";
+    return kindOfMetric(primaryOf(tool));
 }
 
 function windowsOffered(tools) {
     // Only offer a window some provider can actually show.
     const seen = new Set();
     for (const tool of tools)
-        for (const m of tool.metrics ?? []) if (m.kind) seen.add(m.kind);
+        for (const m of tool.metrics ?? []) seen.add(kindOfMetric(m));
     return WINDOW_KINDS.filter((w) => seen.has(w.kind));
 }
 
@@ -1192,7 +1222,9 @@ const Indicator = GObject.registerClass(
             // not offer.
             for (const tool of this.tools) {
                 if (!hasMeters(tool) || !ownsMeters(tool)) continue;
-                const match = (tool.metrics ?? []).find((m) => m.kind === kind);
+                const match = (tool.metrics ?? []).find(
+                    (m) => kindOfMetric(m) === kind,
+                );
                 if (!match || match.key === tool.primary) continue;
                 this._ext.setPrimary(tool.id, match.key);
             }
