@@ -5,10 +5,10 @@
   width: 9px;
   height: 9px;
   border-radius: 999px;
-  background-color: #7fd68f;
+  background-color: #3ddc84;
 }
-.ai-usage-dot.caution { background-color: #e0b158; }
-.ai-usage-dot.critical { background-color: #e2726b; }
+.ai-usage-dot.caution { background-color: #ffb224; }
+.ai-usage-dot.critical { background-color: #ff5c5c; }
 .ai-usage-dot.error { background-color: #6c6d70; }
 
 #panel .panel-button.ai-usage-panel-button,
@@ -258,7 +258,7 @@
   width: 7px;
   height: 7px;
   border-radius: 999px;
-  background-color: #7fd68f;
+  background-color: #3ddc84;
 }
 .ai-usage-session-mark.paused {
   background-color: transparent;

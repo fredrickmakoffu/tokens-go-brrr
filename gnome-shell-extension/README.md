@@ -127,6 +127,25 @@ St has no equivalent or the browser value does not survive the port: the CSS
 keyboard-focus class so the accent bar never shows on a mouse click, the drop
 shadow is retuned, and the type scale is relative.
 
+## Status colours
+
+Green `#3ddc84`, amber `#ffb224`, red `#ff5c5c`, against gunmetal at 8.29, 8.20
+and 4.89 to one. The mockup's softer trio was chosen against near-black and read
+washed once the surface lightened.
+
+**They are not yet distinguishable without hue.** Green and amber sit at
+relative luminance 0.538 and 0.532 — a ratio of 1.01 between them — so to a
+reader with red/green colour blindness, or in greyscale, they are the same
+swatch. Red is clearly darker at 0.297 and separates fine.
+
+Everywhere a meter appears this is covered, because the percentage is written
+next to it. The exception is the top-bar dot, which is colour and nothing else:
+healthy and caution are the same dot to those readers. The mockup's palette had
+the same flaw (1.12:1) so this is not a regression, but it is a real defect and
+it should be fixed rather than inherited. Darkening the amber to `#e8930f` takes
+the separation to 1.37:1 while keeping the orange cast and 6.07:1 of contrast;
+giving the dot a second cue — a ring, a shape — would fix it properly.
+
 ## Motion
 
 Opening the list plays an entry: each row fades and rises a beat after the one
