@@ -39,6 +39,26 @@ WINDOW_LABELS = {
 }
 
 
+def _window_kind(seconds: Any) -> str:
+    """Which shared window a Codex meter belongs to, from its own duration.
+
+    Codex names both of its meters generically — the keys are "monthly" and
+    "window" — so the response's limit_window_seconds is the only thing that
+    says what either one actually covers. Boundaries are generous because a
+    provider reporting "7 days" as 604800 and another as 648000 mean the same
+    window to someone choosing between them.
+    """
+    if not isinstance(seconds, (int, float)) or isinstance(seconds, bool):
+        return "other"
+    if seconds <= 0:
+        return "other"
+    if seconds <= 86400:          # up to a day: the short window
+        return "rolling"
+    if seconds <= 10 * 86400:     # a week, however the provider rounds it
+        return "weekly"
+    return "monthly"
+
+
 def _window_label(seconds: Any) -> str:
     if isinstance(seconds, (int, float)) and not isinstance(seconds, bool):
         if seconds in WINDOW_LABELS:
@@ -180,12 +200,14 @@ class CodexProvider:
                 pct_float = float(pct)
             except (TypeError, ValueError):
                 continue
+            seconds = window.get("limit_window_seconds")
             metrics.append(
                 Meter(
                     key,
-                    _window_label(window.get("limit_window_seconds")),
+                    _window_label(seconds),
                     pct_float,
                     resets_at=_parse_epoch(window.get("reset_at")),
+                    kind=_window_kind(seconds),
                 )
             )
 

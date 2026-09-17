@@ -6,7 +6,8 @@ from cursor_spend_monitor.dbus_service import UsageService
 tools = [
     {"id": "cursor", "name": "Cursor", "icon": "cursor", "primary": "monthly", "status": "ok",
      "dashboardUrl": "https://cursor.com/dashboard",
-     "metrics": [{"key": "monthly", "label": "Monthly limit", "value": 74, "resets": "Resets in 12 days"}],
+     "metrics": [{"key": "monthly", "label": "Monthly limit", "value": 74, "resets": "Resets in 12 days", "kind": "monthly"},
+                 {"key": "other", "label": "Other models", "value": 31, "resets": "Resets in 12 days", "kind": "other"}],
      "instances": {
          "active": 2, "suspended": 1,
          "projects": ["maarifa-project", "optimus"],
@@ -19,20 +20,22 @@ tools = [
      }},
     {"id": "claude", "name": "Claude Code", "icon": "claude", "primary": "5h", "status": "ok",
      "dashboardUrl": "https://claude.ai",
-     "metrics": [{"key": "5h", "label": "5-hour limit", "value": 42, "resets": "Resets in 2h 15m"},
-                 {"key": "weekly", "label": "Weekly", "value": 81, "resets": "Resets in 4 days"}]},
+     "metrics": [{"key": "5h", "label": "5-hour limit", "value": 42, "resets": "Resets in 2h 15m", "kind": "rolling"},
+                 {"key": "weekly", "label": "Weekly", "value": 81, "resets": "Resets in 4 days", "kind": "weekly"}]},
     {"id": "opencode", "name": "OpenCode", "icon": "opencode", "primary": "5h", "status": "ok",
      "dashboardUrl": "https://opencode.ai",
-     "metrics": [{"key": "5h", "label": "5-hour limit", "value": 15, "resets": "Resets in 4h 50m"},
-                 {"key": "weekly", "label": "Weekly", "value": 33, "resets": "Resets in 6 days"}]},
+     "metrics": [{"key": "5h", "label": "Rolling limit", "value": 15, "resets": "Resets in 4h 50m", "kind": "rolling"},
+                 {"key": "weekly", "label": "Weekly", "value": 33, "resets": "Resets in 6 days", "kind": "weekly"},
+                 {"key": "monthly", "label": "Monthly", "value": 23, "resets": "Resets in 20 days", "kind": "monthly"}]},
     # Pi borrowing OpenCode Go's meters: same numbers as the row above, marked
     # so the status dot ignores them.
     {"id": "pi", "name": "Pi", "icon": "pi", "primary": "5h", "status": "ok",
      "dashboardUrl": "https://pi.dev", "plan": "deepseek-v4-flash",
      "via": {"account": "opencode-go", "name": "OpenCode Go", "model": "deepseek-v4-flash",
              "providerId": "opencode", "metered": True, "borrowed": True, "from": "opencode"},
-     "metrics": [{"key": "5h", "label": "5-hour limit", "value": 15, "resets": "Resets in 4h 50m"},
-                 {"key": "weekly", "label": "Weekly", "value": 33, "resets": "Resets in 6 days"}],
+     "metrics": [{"key": "5h", "label": "Rolling limit", "value": 15, "resets": "Resets in 4h 50m", "kind": "rolling"},
+                 {"key": "weekly", "label": "Weekly", "value": 33, "resets": "Resets in 6 days", "kind": "weekly"},
+                 {"key": "monthly", "label": "Monthly", "value": 23, "resets": "Resets in 20 days", "kind": "monthly"}],
      "instances": {
          "active": 2, "suspended": 0,
          "projects": ["optimus", "sundeskv2"],

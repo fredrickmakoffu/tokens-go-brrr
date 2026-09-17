@@ -19,11 +19,11 @@ CREDENTIALS_FILE = Path.home() / ".claude" / ".credentials.json"
 
 # Window key → label. Claude Code calls five_hour the "session limit"; the mockup
 # calls it the 5-hour limit, so we keep the mockup's wording.
-WINDOWS: list[tuple[str, str]] = [
-    ("five_hour", "5-hour limit"),
-    ("seven_day", "Weekly"),
-    ("seven_day_opus", "Opus weekly"),
-    ("seven_day_sonnet", "Sonnet weekly"),
+WINDOWS: list[tuple[str, str, str]] = [
+    ("five_hour", "5-hour limit", "rolling"),
+    ("seven_day", "Weekly", "weekly"),
+    ("seven_day_opus", "Opus weekly", "weekly"),
+    ("seven_day_sonnet", "Sonnet weekly", "weekly"),
 ]
 
 
@@ -96,7 +96,7 @@ class ClaudeProvider:
             return self._auth_snapshot(str(exc))
 
         metrics: list[Meter] = []
-        for key, label in WINDOWS:
+        for key, label, kind in WINDOWS:
             window = usage.get(key)
             if not isinstance(window, dict):
                 continue
@@ -104,7 +104,10 @@ class ClaudeProvider:
             if utilization is None:
                 continue
             metrics.append(
-                Meter(key, label, float(utilization), resets_at=_parse_iso(window.get("resets_at")))
+                Meter(
+                    key, label, float(utilization),
+                    resets_at=_parse_iso(window.get("resets_at")), kind=kind,
+                )
             )
 
         if not metrics:

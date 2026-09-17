@@ -80,6 +80,34 @@ symbolic and follow the text colour. OpenCode has no local asset yet and falls b
 bracket glyph. These marks are the trademarks of their respective owners and are used here
 only to identify the service each row reports on.
 
+## The window picker
+
+Providers measure different windows, and the list used to ask about them once
+per row: every provider carried its own chips, so four rows meant four copies of
+the same question. The windows are now chosen once, at the foot of the list, and
+every row shows the chosen one.
+
+They cannot be matched on the metric key. Claude calls its short window
+`five_hour` and OpenCode calls it `rolling`; Claude's `seven_day` is OpenCode's
+`weekly`; and Codex names both of its meters generically — `monthly` and
+`window` — so only its own `limit_window_seconds` says what either covers. So a
+meter carries a declared `kind` (`rolling`, `weekly`, `monthly`, `other`), set
+by the provider that knows, in the same spirit as `ProcessSpec`: the panel is
+told, it does not guess.
+
+Picking a window is a bulk chip swap — it calls the existing `SetPrimary` for
+every provider offering that kind. Nothing new persists: the choice lives in the
+daemon's `primary_overrides` as before, and the top bar, the alerts and the
+status dot follow it because they already read the primary. The active window is
+read back from what the rows are showing rather than stored, so the picker
+cannot come to disagree with the panel beneath it.
+
+**No provider offers every window.** Cursor publishes no weekly, Claude no
+monthly, so some row is always the exception. A row that cannot honour the
+choice keeps its own meter and names it, in the dim label the chips used to sit
+in; a row that can say nothing at all. An exception that stayed silent would
+read as though the picker had applied to it.
+
 ## Design parity
 
 `stylesheet.css` carries the mockup's geometry: 360px wide with an 11px radius,
