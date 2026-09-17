@@ -17,6 +17,7 @@ from .notify import AlertManager
 from .providers import build_providers
 from .providers import pi_backend
 from .providers.base import Provider, ProviderSnapshot
+from .state import build_payload
 
 
 class UsageDaemon:
@@ -248,12 +249,12 @@ class UsageDaemon:
     # -- state ---------------------------------------------------------------
 
     def state_payload(self) -> dict[str, Any]:
-        return {
-            "version": __version__,
-            "updated_at": self.last_fetch.isoformat() if self.last_fetch else None,
-            "error": self.last_error,
-            "tools": [s.to_panel_dict() for s in self.snapshots],
-        }
+        return build_payload(
+            self.snapshots,
+            version=__version__,
+            updated_at=self.last_fetch,
+            error=self.last_error,
+        )
 
     def _publish(self) -> None:
         payload = self.state_payload()
