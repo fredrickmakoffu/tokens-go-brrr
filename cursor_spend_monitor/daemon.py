@@ -9,7 +9,9 @@ from typing import Any
 
 from gi.repository import GLib
 
-from . import __version__
+from dataclasses import replace
+
+from . import __version__, burn, history
 from .config import MonitorConfig, write_state
 from .dbus_service import UsageService
 from .instances import InstanceReport, scan, signature
@@ -27,6 +29,7 @@ class UsageDaemon:
         self.config = config
         self.providers: list[Provider] = build_providers(config.enabled_providers)
         self.alerts = AlertManager(config)
+        self.history = history.Recorder(keep_days=config.history_days)
         self.snapshots: list[ProviderSnapshot] = []
         self.last_error: str | None = None
         self.last_fetch: datetime | None = None
@@ -68,6 +71,7 @@ class UsageDaemon:
     def run(self) -> int:
         self.loop.run()
         self.service.close()
+        self.history.close()
         return 0
 
     def quit(self, *_args) -> bool:
@@ -219,12 +223,41 @@ class UsageDaemon:
                 self.alerts.check(snap)
         self.snapshots = applied
         self.last_fetch = datetime.now(timezone.utc)
+        self.history.record(applied, at=self.last_fetch)
+        self._attach_forecasts()
         self.last_error = (
             "; ".join(errors) if errors and not any(s.status == "ok" for s in applied) else None
         )
         self._attach_instances()
         self._publish()
         return False
+
+    def _attach_forecasts(self) -> None:
+        """Give each meter a time-to-exhaustion from its recorded samples.
+
+        Only rows that own their meters are forecast; a harness gets its ETA
+        along with the meters it borrows, from the provider that recorded them.
+        """
+        for snap in self.snapshots:
+            if snap.status != "ok" or snap.borrowed_from is not None:
+                continue
+            snap.metrics = [
+                replace(meter, eta_seconds=self._forecast(snap.provider_id, meter))
+                for meter in snap.metrics
+            ]
+
+    def _forecast(self, provider_id: str, meter) -> float | None:
+        samples = self.history.window_samples(provider_id, meter.key, meter.resets_at)
+        eta = burn.eta_seconds(samples)
+        if eta is None or meter.resets_at is None:
+            return eta
+        until_reset = (meter.resets_at - datetime.now(timezone.utc)).total_seconds()
+        if until_reset > 0 and eta > until_reset:
+            # The window rolls over before the limit is reached, so there is no
+            # exhaustion to warn about — saying "in 9h" under a 3h window reads
+            # as a threat that cannot happen.
+            return None
+        return eta
 
     def _apply_override(self, snap: ProviderSnapshot) -> ProviderSnapshot:
         key = self.config.primary_overrides.get(snap.provider_id)

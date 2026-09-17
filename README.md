@@ -138,6 +138,7 @@ before you hit one.
   "poll_interval_seconds": 300,
   "instance_poll_seconds": 3,
   "alert_cooldown_hours": 6,
+  "history_days": 90,
   "primary_alerts": [75, 90, 100],
   "enabled_providers": ["cursor"],
   "primary_overrides": {}
@@ -166,6 +167,8 @@ daemon and sends back two commands: `Refresh` and `SetPrimary`.
 | `setup` | Verify Cursor login |
 | `run` | Foreground daemon |
 | `status` | Print meters, as text, JSON or a template |
+| `check` | Exit non-zero when quota is running low |
+| `best` | Print the provider with the most quota left |
 | `config` | Show config path |
 
 ## Status bars and scripts
@@ -199,6 +202,64 @@ sessions, because nothing scanned `/proc` for it.
 
 Exit codes: `0` every provider shown is fine, `1` at least one needs attention,
 `2` the `--provider` filter matched nothing.
+
+## Before a long run
+
+`check` turns the same state into an exit code, for shell aliases, agent hooks
+and Makefiles — so a two-hour run does not start at 97%.
+
+```bash
+cursor-spend-monitor check --min 20 --provider claude || echo "wait for the reset"
+cursor-spend-monitor check --min 10 --any --quiet
+```
+
+| Exit | Meaning |
+| ------ | --------- |
+| `0` | There is headroom |
+| `1` | A provider is below the threshold |
+| `2` | Nothing could be measured — no daemon, signed out, no meters |
+
+"Could not tell" is deliberately not a pass and not a failure. A stale login
+should not green-light a long run, and it should not fail a build that had
+nothing to do with quota. Providers reporting no usable limit are skipped rather
+than failed, unless `--fail-on-unknown`. By default every selected provider must
+have headroom; `--any` passes when one does.
+
+`best` answers the question that comes with paying for four subscriptions:
+
+```
+$ cursor-spend-monitor best --explain
+Use Cursor — 63% left (Claude Code 35% left, OpenCode 20% left).
+```
+
+Rows borrowing another account's meters never vote in either command, so one
+subscription cannot decide an answer twice.
+
+## Burn rate
+
+Every poll is recorded to `~/.local/share/cursor-spend-monitor/history.db`, one
+row per meter, kept for `history_days` (90 by default; `0` turns recording off).
+From that series each meter gets a time-to-exhaustion:
+
+```
+Claude Code · Pro
+  ★ 5-hour limit      62%  Resets in 3h 28m  ·  spent in 41m
+```
+
+The fit is deliberately reluctant. A confident wrong estimate is worse than
+none — someone reads "4h left", starts the run and is cut off in twenty minutes
+— so it reports nothing at all unless there are at least 3 samples spanning 5
+minutes, the slope is positive, and the line explains the spread (R² ≥ 0.5). An
+ETA that lands after the window resets is withheld too: warning about a limit
+the rollover reaches first describes something that cannot happen.
+
+Samples are tagged with the reset they were counting towards, because a meter
+falls back to zero at a rollover and a series spanning that describes no trend.
+Only providers that own their meters are recorded; a harness gets its ETA along
+with the meters it borrows.
+
+History is a nice-to-have, so a locked or unwritable database disables recording
+for the session and says so once, rather than stopping the daemon.
 
 ## Development
 

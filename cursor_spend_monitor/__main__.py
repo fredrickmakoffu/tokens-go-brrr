@@ -10,7 +10,7 @@ from . import __version__
 from .config import CONFIG_FILE, MonitorConfig
 from .providers import build_providers
 from .session import run_setup
-from .state import build_payload, header_of, primary_metric, read_state
+from .state import build_payload, header_of, owns_meters, primary_metric, read_state
 
 # Placeholders accepted by `status --format`. Keep this table and the help text
 # together: it is the only documentation a status-bar author gets.
@@ -23,6 +23,7 @@ FORMAT_FIELDS = {
     "pct": "primary meter percent, or — when not ok",
     "label": "primary meter label, e.g. 5-hour limit",
     "resets": "when the primary meter resets",
+    "eta": "time until the primary meter is spent, or empty",
     "sessions": "running sessions",
     "paused": "suspended sessions",
     "via": "backend account a harness is spending on, or empty",
@@ -90,6 +91,7 @@ def _format_fields(tool: dict[str, Any]) -> dict[str, str]:
         "pct": str(metric.get("value", 0)) if ok else "—",
         "label": str(metric.get("label", "")),
         "resets": str(metric.get("resets", "")),
+        "eta": str(metric.get("eta") or "") if ok else "",
         "sessions": str(instances.get("active", 0)),
         "paused": str(instances.get("suspended", 0)),
         "via": str(via.get("name") or ""),
@@ -129,7 +131,10 @@ def _render_text(payload: dict[str, Any], tools: list[dict[str, Any]]) -> str:
             mark = "★" if metric.get("key") == tool.get("primary") else " "
             label = str(metric.get("label", ""))
             value = metric.get("value", 0)
-            lines.append(f"  {mark} {label:<16} {value:>3}%  {metric.get('resets', '')}")
+            line = f"  {mark} {label:<16} {value:>3}%  {metric.get('resets', '')}"
+            if metric.get("eta"):
+                line += f"  ·  spent in {metric['eta']}"
+            lines.append(line)
         instances = tool.get("instances") or {}
         if instances.get("active"):
             projects = ", ".join(instances.get("projects") or [])
@@ -172,6 +177,120 @@ def cmd_status(args: argparse.Namespace) -> int:
         print(_render_text(payload, tools))
 
     return 0 if all(t.get("status") == "ok" for t in tools) else 1
+
+
+def _measurable(tool: dict[str, Any]) -> bool:
+    """True when this row reports a limit of its own that we could read.
+
+    Excludes a harness showing borrowed meters: it is a second view of a
+    subscription already in the payload, so counting it would let one account
+    decide an answer twice.
+    """
+    return bool(
+        tool.get("status") == "ok" and tool.get("metrics") and owns_meters(tool)
+    )
+
+
+def _why_unmeasured(tool: dict[str, Any]) -> str:
+    """Why a row was left out, in the row's own terms.
+
+    A harness is skipped because its meters belong to another row, which is not
+    the same as having none — saying "no meters" about a provider that is
+    plainly showing a percentage reads as a bug.
+    """
+    via = tool.get("via") or {}
+    if via.get("borrowed"):
+        return f"on {via.get('name', 'another account')}, counted under {via.get('from')}"
+    if tool.get("error"):
+        return str(tool["error"])
+    if not tool.get("metrics"):
+        return "no limits reported"
+    return str(tool.get("status", "unknown"))
+
+
+def _select(config: MonitorConfig, payload: dict[str, Any], wanted) -> list[dict]:
+    tools = payload.get("tools") or []
+    if not wanted:
+        return tools
+    return [t for t in tools if t.get("id") in set(wanted)]
+
+
+def cmd_check(args: argparse.Namespace) -> int:
+    """Exit non-zero when there is not enough quota left to be worth starting.
+
+    Written for hooks and shell aliases, so the exit code carries the answer and
+    "we could not tell" is deliberately its own code rather than a pass or a
+    fail: a stale login should not silently green-light a long run, nor fail a
+    build that had nothing to do with quota.
+    """
+    config = MonitorConfig.load()
+    payload = _load_payload(config, live=args.live)
+    tools = _select(config, payload, args.provider)
+
+    if args.provider and not tools:
+        print(f"No provider matched {', '.join(sorted(set(args.provider)))}.", file=sys.stderr)
+        return 2
+
+    known = [t for t in tools if _measurable(t)]
+    unknown = [t for t in tools if t not in known]
+
+    if not known:
+        if not args.quiet:
+            names = ", ".join(t.get("name", "?") for t in unknown) or "nothing enabled"
+            print(f"No usable meters ({names}).", file=sys.stderr)
+        return 2
+
+    results = [(t, 100 - int(primary_metric(t).get("value", 0))) for t in known]
+    passing = [(t, h) for t, h in results if h >= args.min]
+
+    if args.any:
+        ok = bool(passing)
+    else:
+        ok = len(passing) == len(results)
+
+    if not args.quiet:
+        for tool, headroom in sorted(results, key=lambda r: r[1]):
+            mark = "ok  " if headroom >= args.min else "low "
+            eta = primary_metric(tool).get("eta")
+            tail = f"  (spent in {eta})" if eta else ""
+            print(f"{mark} {tool.get('name', '?')}: {headroom}% left{tail}")
+        for tool in unknown:
+            print(f"?    {tool.get('name', '?')}: {_why_unmeasured(tool)}")
+
+    if unknown and args.fail_on_unknown:
+        return 2
+    return 0 if ok else 1
+
+
+def cmd_best(args: argparse.Namespace) -> int:
+    """Name the provider with the most headroom right now.
+
+    The reason to run four subscriptions is that one of them always has room;
+    this is the line that says which.
+    """
+    config = MonitorConfig.load()
+    payload = _load_payload(config, live=args.live)
+    candidates = [t for t in (payload.get("tools") or []) if _measurable(t)]
+
+    if not candidates:
+        print("No provider is reporting a usable limit.", file=sys.stderr)
+        return 2
+
+    ranked = sorted(candidates, key=lambda t: int(primary_metric(t).get("value", 0)))
+    winner = ranked[0]
+
+    if not args.explain:
+        print(winner.get("id", ""))
+        return 0
+
+    headroom = 100 - int(primary_metric(winner).get("value", 0))
+    others = ", ".join(
+        f"{t.get('name')} {100 - int(primary_metric(t).get('value', 0))}% left"
+        for t in ranked[1:]
+    )
+    line = f"Use {winner.get('name')} — {headroom}% left"
+    print(f"{line} ({others})." if others else f"{line}.")
+    return 0
 
 
 def cmd_show_config(_args: argparse.Namespace) -> int:
@@ -231,6 +350,60 @@ def _add_status_parser(sub: argparse._SubParsersAction) -> None:
     )
 
 
+def _add_check_parser(sub: argparse._SubParsersAction) -> None:
+    parser = sub.add_parser(
+        "check",
+        help="Exit non-zero when quota is running low",
+        description=(
+            "Check that enough quota is left before starting something long.\n\n"
+            "Exit codes: 0 there is headroom, 1 a provider is below the threshold, "
+            "2 nothing could be measured (no daemon, signed out, no meters).\n\n"
+            "Providers that report no usable limit are skipped rather than failed, "
+            "unless --fail-on-unknown."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  cursor-spend-monitor check --min 20 --provider claude\n"
+            "  cursor-spend-monitor check --min 10 --any --quiet\n"
+        ),
+    )
+    parser.add_argument(
+        "--min", type=int, default=10, metavar="PCT",
+        help="Percent of the limit that must remain (default: 10)",
+    )
+    parser.add_argument(
+        "--provider", action="append", metavar="ID",
+        help="Check this provider; repeatable (default: all enabled)",
+    )
+    parser.add_argument(
+        "--any", action="store_true",
+        help="Pass when any provider has headroom, not every one",
+    )
+    parser.add_argument(
+        "--fail-on-unknown", action="store_true",
+        help="Treat a provider with no readable limit as a failure",
+    )
+    parser.add_argument("--quiet", action="store_true", help="Say nothing; exit code only")
+    parser.add_argument("--live", action="store_true", help="Fetch instead of reading state")
+
+
+def _add_best_parser(sub: argparse._SubParsersAction) -> None:
+    parser = sub.add_parser(
+        "best",
+        help="Print the provider with the most quota left",
+        description=(
+            "Print the id of the provider with the most headroom, for picking a "
+            "tool to start work in. Rows borrowing another account's meters are "
+            "skipped, so one subscription cannot be recommended twice."
+        ),
+    )
+    parser.add_argument(
+        "--explain", action="store_true", help="Print a sentence instead of an id"
+    )
+    parser.add_argument("--live", action="store_true", help="Fetch instead of reading state")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="cursor-spend-monitor",
@@ -242,6 +415,8 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("setup", help="Verify provider logins (Cursor IDE)")
     sub.add_parser("run", help="Start the usage daemon (foreground)")
     _add_status_parser(sub)
+    _add_check_parser(sub)
+    _add_best_parser(sub)
     sub.add_parser("config", help="Print config file path and contents")
 
     args = parser.parse_args(argv)
@@ -249,6 +424,10 @@ def main(argv: list[str] | None = None) -> int:
         return run_setup()
     if args.command == "status":
         return cmd_status(args)
+    if args.command == "check":
+        return cmd_check(args)
+    if args.command == "best":
+        return cmd_best(args)
     if args.command == "config":
         return cmd_show_config(args)
     if args.command == "run" or args.command is None:

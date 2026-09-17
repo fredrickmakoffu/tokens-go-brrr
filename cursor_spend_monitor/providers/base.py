@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Protocol
 
+from .. import burn
 from ..instances import InstanceReport, ProcessSpec
 
 
@@ -13,6 +14,10 @@ class Meter:
     label: str
     percent: float
     resets_at: datetime | None = None
+    # Seconds until this meter is spent at the rate it has been going, or None
+    # when the history says nothing trustworthy. Filled in by the daemon, which
+    # is the only part that holds the sample series.
+    eta_seconds: float | None = None
 
     def resets_label(self) -> str:
         if self.resets_at is None:
@@ -116,6 +121,8 @@ class ProviderSnapshot:
                     "label": m.label,
                     "value": int(round(m.percent)),
                     "resets": m.resets_label(),
+                    "eta": burn.eta_label(m.eta_seconds),
+                    "etaSeconds": m.eta_seconds,
                 }
                 for m in self.metrics
             ],
