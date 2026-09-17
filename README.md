@@ -131,6 +131,14 @@ before you hit one.
 
 ## Config
 
+The panel asks for a refresh every time it opens, and the daemon drops that
+request if it polled within the last 60 seconds. Opening the popover is the
+cheapest way to make requests to five vendors at once, and the endpoints that
+answer fastest are the ones that start refusing — Anthropic returns 429 on its
+usage route long before any quota is spent. Inside the cooldown the panel is
+served state that is at most a minute old, which is the same number a fresh poll
+would have returned. The scheduled poll is not affected.
+
 `~/.config/cursor-spend-monitor/config.json`:
 
 ```json
