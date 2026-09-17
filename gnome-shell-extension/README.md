@@ -166,13 +166,24 @@ the usual case: the list is already up from last time.
 
 ## Surface and font
 
-The popover is slate — `#1e242f` with `#384152` edges — rather than the mockup's
-near-black. A blue-grey surface has a temperature where `#1c1c1e` has only a
-level, and it reads as a panel sitting on the desktop rather than a hole cut in
-it. Every colour on it was re-checked: text `#eef1f6` at 13.75:1, secondary
-`#9aa6b8` at 6.32:1, and the green / amber / red at 8.8, 7.9 and 5.1 — all past
-WCAG AA. `#748094` is reserved for rules and icon glyphs, where the 3:1 bar for
-UI components applies instead.
+The popover is gunmetal — `#24282f` with `#474a50` edges — rather than the
+mockup's near-black. Two things about it, and the second is why it is not slate.
+
+A surface wants a temperature. `#1c1c1e` has only a level, and reads as a hole
+cut in the desktop; a grey with a cast reads as a panel sitting on it.
+
+But the cast has to stay under the name. An earlier pass ran at `#1e242f`, which
+is blue enough that beside a neutral grey it reads navy rather than grey.
+`#24282f` keeps the trace and drops the announcement, and being lighter it has
+more presence as a material.
+
+The whole ramp is derived from that one colour by mixing toward white at fixed
+ratios, so the borders, dividers and hover states cannot drift out of family when
+the surface is retuned — the four candidates for this change were generated and
+contrast-checked that way before any of them was rendered. Text `#f0f0f0` at
+12.98:1, secondary `#a3a5a8` at 5.99:1, and the green / amber / red at 8.4, 7.5
+and 4.8, all past WCAG AA. `#73757a` is reserved for rules and icon glyphs, where
+the 3:1 bar for UI components applies instead.
 
 The top bar keeps neutral colours. It sits on GNOME's panel, which is not our
 surface, so tinting its text to match a menu that is not open would be wrong.

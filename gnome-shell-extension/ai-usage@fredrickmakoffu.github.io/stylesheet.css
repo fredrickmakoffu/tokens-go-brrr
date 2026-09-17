@@ -67,8 +67,8 @@
 .ai-usage-menu .popup-menu-content {
   width: 358px;               /* + 1px border each side = 360px */
   padding: 0;
-  background-color: #1e242f;
-  border: 1px solid #384152;
+  background-color: #24282f;
+  border: 1px solid #474a50;
   border-radius: 13px;
   /* The mockup's 0 20px 48px is a browser value and does not survive the port:
      CSS blurs to nothing over the radius, while St paints a blurred silhouette
@@ -77,7 +77,7 @@
      the moment the menu drops or grows into a taller screen. Same intent — the
      panel reads as lifted — at values St renders as a shadow. */
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
-  color: #eef1f6;
+  color: #f0f0f0;
   font-weight: 400;
 }
 /* No font-family either, and for the same reason as the size below: the mockup
@@ -97,7 +97,7 @@
 .ai-usage-header {
   padding: 10px 10px 10px 16px;
   spacing: 2px;
-  border-bottom: 1px solid #2c3542;
+  border-bottom: 1px solid #363940;
 }
 .ai-usage-header-title { font-size: 0.95em; font-weight: 700; }
 /* Settings / Guide / About, in space the title never used. They are quieter
@@ -107,14 +107,14 @@
   padding: 4px 8px;
   border-radius: 6px;
   background-color: transparent;
-  color: #9aa6b8;
+  color: #a3a5a8;
   font-size: 0.8em;
   font-weight: 400;
   transition-duration: 120ms;
 }
 .ai-usage-header-btn:hover, .ai-usage-header-btn:active {
-  background-color: #262e3b;
-  color: #eef1f6;
+  background-color: #2f3339;
+  color: #f0f0f0;
 }
 .ai-usage-header-btn:focus { box-shadow: 0 0 0 2px #6f9cff; }
 
@@ -127,20 +127,20 @@
   min-height: 40px;           /* 58px outer, like the mockup's min-height with box-sizing */
   border-radius: 0;
   background-color: transparent;
-  color: #eef1f6;
+  color: #f0f0f0;
   transition-duration: 120ms;
 }
 .ai-usage-menu .ai-usage-row:hover,
 .ai-usage-menu .ai-usage-row:selected,
 .ai-usage-menu .ai-usage-row:active {
-  background-color: #262e3b;
-  color: #eef1f6;
+  background-color: #2f3339;
+  color: #f0f0f0;
 }
 .ai-usage-menu .ai-usage-row:focus {
-  background-color: #262e3b;
+  background-color: #2f3339;
 }
 .ai-usage-menu .ai-usage-row.ai-usage-keyboard-focus {
-  background-color: #262e3b;
+  background-color: #2f3339;
   box-shadow: inset 2px 0 0 #6f9cff;
 }
 .ai-usage-menu .ai-usage-row.ai-usage-row-disabled,
@@ -151,19 +151,19 @@
 .ai-usage-badge {
   width: 26px;
   height: 26px;
-  border: 1px solid #384152;
+  border: 1px solid #474a50;
   border-radius: 9px;
-  color: #9aa6b8;
+  color: #a3a5a8;
 }
 .ai-usage-badge-icon { icon-size: 15px; -st-icon-style: regular; }
 
 .ai-usage-name-row { spacing: 7px; }
 .ai-usage-name { font-size: 1em; font-weight: 600; }
-.ai-usage-running { font-size: 0.82em; color: #9aa6b8; }
+.ai-usage-running { font-size: 0.82em; color: #a3a5a8; }
 /* "via <account>" — this row's numbers belong to another provider. */
 .ai-usage-via {
   font-size: 0.78em;
-  color: #9aa6b8;
+  color: #a3a5a8;
   padding: 1px 5px;
   border-radius: 6px;
   background-color: rgba(255, 255, 255, 0.07);
@@ -171,11 +171,11 @@
 .ai-usage-badge-via { border: 1px solid rgba(255, 255, 255, 0.12); }
 .ai-usage-via-note {
   font-size: 0.85em;
-  color: #9aa6b8;
+  color: #a3a5a8;
   padding-bottom: 4px;
 }
 .ai-usage-meta { padding-top: 2px; }
-.ai-usage-limit { font-size: 0.85em; color: #9aa6b8; font-feature-settings: "tnum"; }
+.ai-usage-limit { font-size: 0.85em; color: #a3a5a8; font-feature-settings: "tnum"; }
 
 /* The window picker at the foot of the list, in the shape the footer had: three
    flat buttons dividing the row edge to edge and rounding into the menu's
@@ -186,7 +186,7 @@
    chosen window keeps a brighter, heavier label and an accent rule along its
    top edge, the way a selected tab does. Hover and press fill without either. */
 .ai-usage-windowbar {
-  border-top: 1px solid #2c3542;
+  border-top: 1px solid #363940;
   border-radius: 0 0 13px 13px;
 }
 .ai-usage-window-btn {
@@ -194,7 +194,7 @@
   padding: 0;
   border-radius: 0;
   background-color: transparent;
-  color: #9aa6b8;
+  color: #a3a5a8;
   font-size: 0.82em;
   font-weight: 400;
   transition-duration: 120ms;
@@ -202,11 +202,11 @@
 .ai-usage-window-btn:first-child { border-radius: 0 0 0 13px; }
 .ai-usage-window-btn:last-child { border-radius: 0 0 13px 0; }
 .ai-usage-window-btn:hover, .ai-usage-window-btn:active {
-  background-color: #262e3b;
-  color: #eef1f6;
+  background-color: #2f3339;
+  color: #f0f0f0;
 }
 .ai-usage-window-btn.selected {
-  color: #eef1f6;
+  color: #f0f0f0;
   font-weight: 600;
   box-shadow: inset 0 2px 0 #6f9cff;
 }
@@ -221,22 +221,22 @@
 .ai-usage-bar-fill { border-radius: 4px; }
 
 .ai-usage-value { font-size: 1.45em; font-weight: 700; font-feature-settings: "tnum"; }
-.ai-usage-chevron { icon-size: 14px; color: #748094; -st-icon-style: symbolic; }
+.ai-usage-chevron { icon-size: 14px; color: #73757a; -st-icon-style: symbolic; }
 
 /* Detail / guide / about */
 .ai-usage-detail-header {
   padding: 12px 16px;
   spacing: 10px;
-  border-bottom: 1px solid #2c3542;
+  border-bottom: 1px solid #363940;
 }
 .ai-usage-back {
   padding: 3px;
   border-radius: 6px;
   background-color: transparent;
-  color: #9aa6b8;
+  color: #a3a5a8;
   transition-duration: 120ms;
 }
-.ai-usage-back:hover, .ai-usage-back:active { background-color: #262e3b; color: #eef1f6; }
+.ai-usage-back:hover, .ai-usage-back:active { background-color: #2f3339; color: #f0f0f0; }
 .ai-usage-back:focus { box-shadow: 0 0 0 2px #6f9cff; }
 .ai-usage-back-icon { icon-size: 16px; -st-icon-style: symbolic; }
 .ai-usage-detail-title { font-size: 1em; font-weight: 700; }
@@ -246,13 +246,13 @@
    headline here and gets the list row's weight: the label reads as a title
    rather than a caption, and the number matches .ai-usage-value. It used to be
    smaller here than on the summary screen, which had it backwards. */
-.ai-usage-metric-top { font-size: 1em; font-weight: 600; color: #eef1f6; }
+.ai-usage-metric-top { font-size: 1em; font-weight: 600; color: #f0f0f0; }
 .ai-usage-detail-value { font-size: 1.45em; font-weight: 700; font-feature-settings: "tnum"; }
-.ai-usage-detail-reset { padding-top: 6px; font-size: 0.85em; color: #9aa6b8; font-feature-settings: "tnum"; }
+.ai-usage-detail-reset { padding-top: 6px; font-size: 0.85em; color: #a3a5a8; font-feature-settings: "tnum"; }
 
 .ai-usage-sessions-block { spacing: 8px; padding-top: 4px; }
-.ai-usage-sessions-heading { font-size: 0.8em; font-weight: 600; color: #9aa6b8; }
-.ai-usage-sessions-empty { font-size: 0.85em; color: #9aa6b8; }
+.ai-usage-sessions-heading { font-size: 0.8em; font-weight: 600; color: #a3a5a8; }
+.ai-usage-sessions-empty { font-size: 0.85em; color: #a3a5a8; }
 .ai-usage-session-row { spacing: 10px; }
 .ai-usage-session-mark {
   width: 7px;
@@ -262,21 +262,21 @@
 }
 .ai-usage-session-mark.paused {
   background-color: transparent;
-  border: 1px solid #748094;
+  border: 1px solid #73757a;
 }
 .ai-usage-session-name {
   font-size: 0.92em;
   font-weight: 500;
-  color: #eef1f6;
+  color: #f0f0f0;
 }
 .ai-usage-session-state {
   font-size: 0.82em;
-  color: #9aa6b8;
+  color: #a3a5a8;
 }
-.ai-usage-session-state.paused { color: #9aa6b8; }
+.ai-usage-session-state.paused { color: #a3a5a8; }
 .ai-usage-session-model {
   font-size: 0.78em;
-  color: #9aa6b8;
+  color: #a3a5a8;
   padding-right: 8px;
 }
 
@@ -290,42 +290,42 @@
 .ai-usage-view-all:hover, .ai-usage-view-all:active { background-color: transparent; }
 .ai-usage-view-all:focus { box-shadow: inset 2px 0 0 #6f9cff; }
 .ai-usage-view-all-row { spacing: 8px; }
-.ai-usage-view-all-label { font-size: 0.92em; font-weight: 500; color: #eef1f6; }
+.ai-usage-view-all-label { font-size: 0.92em; font-weight: 500; color: #f0f0f0; }
 
 .ai-usage-sessions-screen { padding: 14px 16px 16px 16px; spacing: 14px; }
-.ai-usage-sessions-stats { font-size: 0.85em; color: #9aa6b8; font-feature-settings: "tnum"; }
+.ai-usage-sessions-stats { font-size: 0.85em; color: #a3a5a8; font-feature-settings: "tnum"; }
 .ai-usage-sessions-filters { spacing: 8px; }
 .ai-usage-filter-chip {
   padding: 3px 10px;
-  border: 1px solid #384152;
+  border: 1px solid #474a50;
   border-radius: 999px;
   background-color: transparent;
-  color: #9aa6b8;
+  color: #a3a5a8;
   font-size: 0.8em;
   font-weight: 400;
   transition-duration: 120ms;
 }
-.ai-usage-filter-chip:hover { background-color: #333d4c; color: #eef1f6; }
+.ai-usage-filter-chip:hover { background-color: #3c4046; color: #f0f0f0; }
 .ai-usage-filter-chip:focus { box-shadow: 0 0 0 2px #6f9cff; }
 .ai-usage-filter-chip.active {
   border-color: transparent;
-  background-color: #384152;
-  color: #eef1f6;
+  background-color: #474a50;
+  color: #f0f0f0;
 }
 .ai-usage-sessions-list { spacing: 10px; }
 
 .ai-usage-dash-btn {
   margin: 6px 16px 14px 16px;
   padding: 9px;
-  border: 1px solid #384152;
+  border: 1px solid #474a50;
   border-radius: 7px;
-  background-color: #262e3b;
-  color: #eef1f6;
+  background-color: #2f3339;
+  color: #f0f0f0;
   font-size: 0.88em;
   font-weight: 600;
   transition-duration: 120ms;
 }
-.ai-usage-dash-btn:hover, .ai-usage-dash-btn:active { background-color: #303a49; }
+.ai-usage-dash-btn:hover, .ai-usage-dash-btn:active { background-color: #3a3e44; }
 .ai-usage-dash-btn:focus { box-shadow: 0 0 0 2px #6f9cff; }
 .ai-usage-dash-btn.ai-usage-refresh-btn { margin-top: 0; }
 
@@ -334,11 +334,11 @@
 .ai-usage-guide-dot { margin-top: 4px; width: 9px; height: 9px; border-radius: 999px; }
 .ai-usage-guide-text { spacing: 2px; }
 .ai-usage-guide-title { font-size: 0.95em; font-weight: 700; }
-.ai-usage-guide-desc { font-size: 0.85em; color: #9aa6b8; }
+.ai-usage-guide-desc { font-size: 0.85em; color: #a3a5a8; }
 
 .ai-usage-empty {
   padding: 24px 16px;
-  color: #9aa6b8;
+  color: #a3a5a8;
   font-size: 0.92em;
   text-align: center;
 }
