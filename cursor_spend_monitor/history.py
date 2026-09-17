@@ -46,12 +46,26 @@ def connect(path: Path | None = None) -> sqlite3.Connection:
     return con
 
 
-def _window_key(resets_at: datetime | None) -> str:
-    """What makes two samples part of the same limit window.
+# A meter only climbs within a window, so a percent that has fallen by more
+# than this between two samples means the window rolled over in between.
+# Loose enough to absorb a provider rounding its own figure.
+ROLLOVER_DROP = 0.5
 
-    A meter falls back to zero when its window rolls over, so a series that
-    spans a reset describes no trend at all. Tagging each sample with the reset
-    it was counting towards keeps the two sides apart.
+# Two samples further apart than this did not come from one continuous watch —
+# the daemon was stopped, or the machine slept — and the line between them
+# describes nothing.
+MAX_GAP_SECONDS = 3600
+
+
+def _window_key(resets_at: datetime | None) -> str:
+    """The reset a sample was counting towards, stored for reference.
+
+    Deliberately not used to group samples. It looked like the obvious key and
+    is not one: Claude returns the same reset with microsecond jitter
+    (15:00:00.653206, then 15:00:00.933186), and OpenCode's rolling window
+    slides forward every poll by design. Either one turns a continuous series
+    into a pile of one-sample groups. Rollovers are detected from the meter
+    itself instead, in `window_samples`.
     """
     return resets_at.isoformat() if resets_at else ""
 
@@ -92,18 +106,36 @@ def window_samples(
     con: sqlite3.Connection,
     provider: str,
     metric: str,
-    resets_at: datetime | None,
     *,
     limit: int = 200,
 ) -> list[tuple[float, float]]:
-    """(timestamp, percent) for the window currently open, oldest first."""
+    """(timestamp, percent) for the window currently open, oldest first.
+
+    Walks back from the newest sample and stops at the first thing that breaks
+    the series: a meter that was higher earlier than it is now — which only
+    happens across a reset — or a gap too long to have been one continuous
+    watch. What survives is the run of samples describing the window in
+    progress, whether the provider's window is fixed, rolling, or reported with
+    a jittering reset time.
+    """
     cur = con.execute(
         "SELECT ts, percent FROM samples"
-        " WHERE provider = ? AND metric = ? AND resets_at = ?"
+        " WHERE provider = ? AND metric = ?"
         " ORDER BY ts DESC LIMIT ?",
-        (provider, metric, _window_key(resets_at), limit),
+        (provider, metric, limit),
     )
-    return [(float(ts), float(pct)) for ts, pct in reversed(cur.fetchall())]
+    newest_first = [(float(ts), float(pct)) for ts, pct in cur.fetchall()]
+
+    kept: list[tuple[float, float]] = []
+    for sample in newest_first:
+        if kept:
+            newer_ts, newer_pct = kept[-1]
+            if newer_ts - sample[0] > MAX_GAP_SECONDS:
+                break
+            if sample[1] > newer_pct + ROLLOVER_DROP:
+                break
+        kept.append(sample)
+    return list(reversed(kept))
 
 
 def prune(con: sqlite3.Connection, *, keep_days: int = 90) -> int:
@@ -153,13 +185,11 @@ class Recorder:
             self._disable(f"Could not record usage history: {exc}")
             return 0
 
-    def window_samples(
-        self, provider: str, metric: str, resets_at: datetime | None
-    ) -> list[tuple[float, float]]:
+    def window_samples(self, provider: str, metric: str) -> list[tuple[float, float]]:
         if not self.active:
             return []
         try:
-            return window_samples(self._con, provider, metric, resets_at)
+            return window_samples(self._con, provider, metric)
         except sqlite3.Error as exc:
             self._disable(f"Could not read usage history: {exc}")
             return []

@@ -247,7 +247,7 @@ class UsageDaemon:
             ]
 
     def _forecast(self, provider_id: str, meter) -> float | None:
-        samples = self.history.window_samples(provider_id, meter.key, meter.resets_at)
+        samples = self.history.window_samples(provider_id, meter.key)
         eta = burn.eta_seconds(samples)
         if eta is None or meter.resets_at is None:
             return eta
