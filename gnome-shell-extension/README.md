@@ -84,10 +84,18 @@ only to identify the service each row reports on.
 
 `stylesheet.css` carries the mockup's values verbatim: 360px wide with an 11px radius,
 `#1c1c1e` on `#333336`, rows 9px/14px/9px/16px with 12px spacing, 3px bars, 19px bold
-percentages, and the 70 / 90 thresholds for amber and red. Two things are translated
+percentages, and the 70 / 90 thresholds for amber and red. Three things are translated
 rather than copied, since St has no equivalent: the CSS `backdrop-filter` becomes an
-opaque panel, and `:focus-visible` becomes an explicit keyboard-focus class so the accent
-bar never shows on a mouse click.
+opaque panel, `:focus-visible` becomes an explicit keyboard-focus class so the accent
+bar never shows on a mouse click, and the drop shadow is retuned.
+
+The shadow is worth spelling out, because verbatim was tried first and looked wrong.
+`box-shadow` does not mean the same thing in the two engines: CSS fades a shadow to
+nothing across the blur radius, while St paints a blurred silhouette of the background
+box with a much heavier profile and no clipping. The mockup's `0 20px 48px rgba(0,0,0,.5)`
+reads as a soft lift in a browser and as a dark slab under the panel in the shell — most
+obvious as the menu drops out of the top bar, or grows into a taller screen. `0 6px 16px
+rgba(0,0,0,.45)` keeps the intent at values St renders as a shadow.
 
 One deliberate departure: the mockup draws the selected window as plain text followed by a
 single chip for the other one, and swapping trades their places. That leaves the large
