@@ -22,6 +22,12 @@ from .providers.base import Provider, ProviderSnapshot
 from .state import build_payload
 
 
+# Shortest gap between two rounds of provider requests. Matches the floor the
+# daemon already clamps its own timer to, so a refresh on open can never make
+# more requests than the scheduled polling would.
+REFRESH_COOLDOWN_SECONDS = 60
+
+
 class UsageDaemon:
     """Polls providers, raises alerts, and publishes state over D-Bus for the shell extension."""
 
@@ -89,13 +95,39 @@ class UsageDaemon:
     # -- polling -------------------------------------------------------------
 
     def _tick(self) -> bool:
-        self.poll()
+        self.poll(force=True)
         return True
 
-    def poll(self, *_args) -> bool:
-        if not self._polling:
-            self._polling = True
-            threading.Thread(target=self._poll_worker, name="ai-usage-poll", daemon=True).start()
+    def poll(self, *_args, force: bool = False) -> bool:
+        """Fetch every provider, unless we just did.
+
+        The panel asks for a refresh each time it opens, which is the right
+        instinct — you open it to see the current number — but the only guard
+        used to be against two polls overlapping, not against many in a row.
+        Opening the popover twenty times made twenty rounds of requests to
+        every vendor, and the endpoints that answer fastest are the ones that
+        start refusing: Anthropic returns 429 on its usage route long before a
+        quota is spent.
+
+        Quota does not move fast enough for that to cost anything. Inside the
+        cooldown the panel is served the state already published, which is at
+        most a minute old, so nothing on screen is wrong — it is the same
+        number a successful poll would have returned.
+
+        The About screen's manual button shares this path and is throttled the
+        same way. That is deliberate: it is the control most likely to be
+        pressed repeatedly when a provider looks wrong, which is exactly when
+        the provider is least able to answer. force is for the scheduled tick,
+        which is already spaced by the poll interval.
+        """
+        if self._polling:
+            return False
+        if not force and self.last_fetch is not None:
+            age = (datetime.now(timezone.utc) - self.last_fetch).total_seconds()
+            if age < REFRESH_COOLDOWN_SECONDS:
+                return False
+        self._polling = True
+        threading.Thread(target=self._poll_worker, name="ai-usage-poll", daemon=True).start()
         return False
 
     def _poll_worker(self) -> None:
