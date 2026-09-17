@@ -11,6 +11,7 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any, Callable
 
 PROC = Path("/proc")
 _CLOCK_TICKS = os.sysconf("SC_CLK_TCK")
@@ -28,12 +29,16 @@ class ProcessSpec:
     names:         accepted basenames of the executable
     require_args:  every entry must appear somewhere in the command line
     exclude_args:  any entry appearing disqualifies the process
+    resolve_backend: optional hook, given the session's cwd, returning the LLM
+                   account it spends against. Harnesses that point at another
+                   tool's subscription supply this; the scanner only calls it.
     """
 
     names: frozenset[str]
     require_args: tuple[str, ...] = ()
     exclude_args: tuple[str, ...] = ()
     label: str = ""
+    resolve_backend: Callable[[str], Any] | None = None
 
     def matches(self, executable: str, command_line: str) -> bool:
         if os.path.basename(executable) not in self.names:
@@ -53,10 +58,16 @@ class Instance:
     suspended: bool
     kind: str = ""
     tty_nr: int = 0
+    backend: Any = None  # providers.pi_backend.Backend, when the tool has one
 
     def signature(self) -> tuple:
-        """Identity for change detection. Deliberately excludes start time."""
-        return (self.provider_id, self.pid, self.project, self.suspended)
+        """Identity for change detection. Deliberately excludes start time.
+
+        The backend is part of it: switching a session's model changes what the
+        panel shows, so it has to count as a change worth republishing.
+        """
+        backend = (self.backend.account, self.backend.model) if self.backend else ()
+        return (self.provider_id, self.pid, self.project, self.suspended, backend)
 
 
 @dataclass
@@ -87,7 +98,7 @@ class InstanceReport:
 
 
 def _session_dict(instance: Instance, *, paused: bool) -> dict:
-    return {
+    row = {
         "project": instance.project,
         "directory": instance.directory,
         "paused": paused,
@@ -95,6 +106,9 @@ def _session_dict(instance: Instance, *, paused: bool) -> dict:
         "tty": _tty_name(instance.tty_nr),
         "pid": instance.pid,
     }
+    if instance.backend is not None:
+        row["backend"] = instance.backend.to_dict()
+    return row
 
 
 def _tty_name(tty_nr: int) -> str:
@@ -269,6 +283,7 @@ def scan(
                 suspended=state in SUSPENDED_STATES,
                 kind=spec.label,
                 tty_nr=tty_nr,
+                backend=_backend_of(spec, directory),
             )
         )
 
@@ -278,6 +293,20 @@ def scan(
             (report.suspended if instance.suspended else report.active).append(instance)
 
     return reports
+
+
+def _backend_of(spec: ProcessSpec, directory: str):
+    """Ask the provider which account this session spends against.
+
+    A resolver reads local state and must never take the scan down with it, so
+    any failure just means the session has no known backend.
+    """
+    if spec.resolve_backend is None:
+        return None
+    try:
+        return spec.resolve_backend(directory)
+    except Exception:  # noqa: BLE001 - a bad resolver must not stop the scan
+        return None
 
 
 def _has_matching_ancestor(
