@@ -209,6 +209,75 @@ function readCtxtSwitches(pid) {
     }
 }
 
+// The windows a provider can be asked to show. "other" is deliberately absent:
+// Cursor's spend on non-included models is not a window, so it is never
+// something to switch every row to.
+const WINDOW_KINDS = [
+    { kind: "rolling", label: "Rolling" },
+    { kind: "weekly", label: "Weekly" },
+    { kind: "monthly", label: "Monthly" },
+];
+
+// A daemon that predates the kind field publishes none, and the daemon is a
+// separate install from the extension — pip and a directory copy, updated at
+// different times. Losing the whole picker in that window would look like the
+// feature is broken rather than the daemon being behind, so the key and then
+// the label stand in until it catches up. The daemon's own value always wins.
+const KIND_BY_KEY = {
+    five_hour: "rolling",
+    rolling: "rolling",
+    session: "rolling",
+    daily: "rolling",
+    seven_day: "weekly",
+    seven_day_opus: "weekly",
+    seven_day_sonnet: "weekly",
+    weekly: "weekly",
+    monthly: "monthly",
+};
+
+function kindOfMetric(m) {
+    if (!m) return "other";
+    if (m.kind) return m.kind;
+    const byKey = KIND_BY_KEY[m.key];
+    if (byKey) return byKey;
+    const text = (m.label || "").toLowerCase();
+    if (text.includes("week")) return "weekly";
+    if (text.includes("month")) return "monthly";
+    if (text.includes("hour") || text.includes("rolling") || text.includes("daily"))
+        return "rolling";
+    return "other";
+}
+
+function kindOf(tool) {
+    return kindOfMetric(primaryOf(tool));
+}
+
+function windowsOffered(tools) {
+    // Only offer a window some provider can actually show.
+    const seen = new Set();
+    for (const tool of tools)
+        for (const m of tool.metrics ?? []) seen.add(kindOfMetric(m));
+    return WINDOW_KINDS.filter((w) => seen.has(w.kind));
+}
+
+function selectedWindow(tools) {
+    // Derived from what the rows are showing rather than stored separately, so
+    // the picker cannot disagree with the panel it sits under — including after
+    // a daemon restart, where the primaries come back from its config and any
+    // remembered UI state would be a second, stale opinion.
+    const tally = new Map();
+    for (const tool of tools) {
+        if (!hasMeters(tool) || !ownsMeters(tool)) continue;
+        const kind = kindOf(tool);
+        if (kind === "other") continue;
+        tally.set(kind, (tally.get(kind) ?? 0) + 1);
+    }
+    let best = null;
+    for (const [kind, count] of tally)
+        if (!best || count > best[1]) best = [kind, count];
+    return best ? best[0] : null;
+}
+
 function metric(tool, key) {
     return (tool.metrics ?? []).find((m) => m.key === key) ?? null;
 }
@@ -392,7 +461,7 @@ const Row = GObject.registerClass(
         },
     },
     class AiUsageRow extends PopupMenu.PopupBaseMenuItem {
-        _init(icons, tool, bump) {
+        _init(icons, tool, bump, selectedKind = null) {
             const ok = !tool.status || tool.status === "ok";
             super._init({
                 style_class: "ai-usage-row",
@@ -401,7 +470,6 @@ const Row = GObject.registerClass(
                 hover: ok,
                 can_focus: ok,
             });
-            this._chips = [];
             if (!ok) this.add_style_class_name("ai-usage-row-disabled");
 
             const primary = primaryOf(tool);
@@ -456,43 +524,21 @@ const Row = GObject.registerClass(
             info.add_child(nameRow);
 
             const meta = new BadgeFlow();
-            const windows = metered ? tool.metrics : [];
-            if (windows.length > 1) {
-                // Every window keeps its own place. Picking one moves the fill to it
-                // rather than reordering, so the badges never trade positions.
-                for (const window of windows) {
-                    if (window.key === tool.primary) {
-                        // No percentage: the large number to the right is this one's.
-                        meta.add_child(
-                            label(
-                                shortLabel(window.label),
-                                "ai-usage-limit-active",
-                                {
-                                    y_align: Clutter.ActorAlign.CENTER,
-                                },
-                            ),
-                        );
-                        continue;
-                    }
-                    const chip = new St.Button({
-                        style_class: "ai-usage-chip",
-                        label: `${shortLabel(window.label)} ${clampPct(window.value)}%`,
-                        can_focus: true,
-                        y_align: Clutter.ActorAlign.CENTER,
-                    });
-                    chip.connect("clicked", () =>
-                        this.emit("select", window.key),
+            if (metered) {
+                // The picker at the foot of the menu names the window every row
+                // is showing, so a row that matches it says nothing — that is
+                // the space this layout buys. A row only speaks up when it
+                // cannot honour the choice: Cursor publishes no weekly and
+                // Claude no monthly, so somebody is always the exception, and
+                // an exception that stayed silent would read as though the
+                // picker applied to it.
+                const honoured = !selectedKind || kindOf(tool) === selectedKind;
+                if (!honoured)
+                    meta.add_child(
+                        label(shortLabel(primary?.label), "ai-usage-limit", {
+                            y_align: Clutter.ActorAlign.CENTER,
+                        }),
                     );
-                    this._chips.push(chip);
-                    meta.add_child(chip);
-                }
-            } else if (metered) {
-                // Nothing to choose between, so the label is not a selection.
-                meta.add_child(
-                    label(shortLabel(primary?.label), "ai-usage-limit", {
-                        y_align: Clutter.ActorAlign.CENTER,
-                    }),
-                );
             } else {
                 meta.add_child(
                     label(
@@ -580,17 +626,6 @@ const Row = GObject.registerClass(
 
         activate(event) {
             // Clicks on a badge belong to the badge (mockup: e.stopPropagation()).
-            let source = null;
-            try {
-                source = event ? global.stage.get_event_actor(event) : null;
-            } catch {
-                source = null;
-            }
-            if (
-                source &&
-                this._chips.some((c) => c === source || c.contains(source))
-            )
-                return;
             this.emit("navigate");
         }
     },
@@ -997,12 +1032,34 @@ const Indicator = GObject.registerClass(
             }
         }
 
-        _header(title) {
+        _header(title, withSettings = false) {
             const header = new St.BoxLayout({
                 style_class: "ai-usage-header",
                 x_expand: true,
             });
-            header.add_child(label(title, "ai-usage-header-title"));
+            header.add_child(
+                label(title, "ai-usage-header-title", {
+                    x_expand: true,
+                    y_align: Clutter.ActorAlign.CENTER,
+                }),
+            );
+            // Settings, Guide and About used to own the foot of the menu, which
+            // is the most reachable row there is and was being spent on three
+            // things you press once. They move up here into space the title was
+            // not using, and the window picker takes the row instead.
+            const add = (text, cb) => {
+                const b = new St.Button({
+                    style_class: "ai-usage-header-btn",
+                    label: text,
+                    can_focus: true,
+                    y_align: Clutter.ActorAlign.CENTER,
+                });
+                b.connect("clicked", cb);
+                header.add_child(b);
+            };
+            if (withSettings) add("Settings", () => this._openSettings());
+            add("Guide", () => this._navigate("guide"));
+            add("About", () => this._navigate("about"));
             return header;
         }
 
@@ -1091,36 +1148,14 @@ const Indicator = GObject.registerClass(
             return row;
         }
 
-        _footer(withSettings) {
-            const footer = new St.BoxLayout({
-                style_class: "ai-usage-footer",
-                x_expand: true,
-            });
-            const add = (text, cb) => {
-                const b = new St.Button({
-                    style_class: "ai-usage-footer-btn",
-                    label: text,
-                    can_focus: true,
-                    x_expand: true,
-                });
-                b.connect("clicked", cb);
-                footer.add_child(b);
-            };
-            if (withSettings) add("Settings", () => this._openSettings());
-            add("Guide", () => this._navigate("guide"));
-            add("About", () => this._navigate("about"));
-            return footer;
-        }
-
         _renderList(screen) {
-            screen.add_child(this._header("AI usage"));
+            screen.add_child(this._header("AI usage", true));
             const tools = this.tools;
             if (!tools.length) {
                 const text = this._state
                     ? "No providers yet.\nSign in to Cursor and refresh."
                     : "Daemon not running.\nStart it with:\nsystemctl --user start cursor-spend-monitor";
                 screen.add_child(wrappedLabel(text, "ai-usage-empty"));
-                screen.add_child(this._footer(false));
                 return;
             }
             const section = new St.BoxLayout({
@@ -1128,11 +1163,13 @@ const Indicator = GObject.registerClass(
                 orientation: Clutter.Orientation.VERTICAL,
                 x_expand: true,
             });
+            const selectedKind = selectedWindow(tools);
             for (const tool of tools) {
                 const row = new Row(
                     this._icons,
                     tool,
                     this._lastSwapped === tool.id,
+                    selectedKind,
                 );
                 row.connect("navigate", () =>
                     this._navigate("detail", tool.id),
@@ -1142,7 +1179,53 @@ const Indicator = GObject.registerClass(
             }
             this._lastSwapped = null;
             screen.add_child(section);
-            screen.add_child(this._footer(true));
+            const picker = this._windowPicker(tools, selectedKind);
+            if (picker) screen.add_child(picker);
+        }
+
+        _windowPicker(tools, selectedKind) {
+            // One control for every row, because the windows are the same
+            // question asked of each provider. Nothing to pick between when
+            // only one window is on offer across all of them.
+            const offered = windowsOffered(tools);
+            if (offered.length < 2) return null;
+
+            const bar = new St.BoxLayout({
+                style_class: "ai-usage-windowbar",
+                x_expand: true,
+            });
+            for (const { kind, label: text } of offered) {
+                const active = kind === selectedKind;
+                const button = new St.Button({
+                    style_class: active
+                        ? "ai-usage-window-btn selected"
+                        : "ai-usage-window-btn",
+                    label: text,
+                    can_focus: true,
+                    x_expand: true,
+                });
+                if (!active)
+                    button.connect("clicked", () => this._selectWindow(kind));
+                bar.add_child(button);
+            }
+            return bar;
+        }
+
+        _selectWindow(kind) {
+            // A bulk chip swap. Routing it through the same SetPrimary the row
+            // chips used means the choice persists in the daemon's config, and
+            // the top bar, the alerts and the status dot follow it for free —
+            // they all read the primary already. A provider with no meter of
+            // this kind is left alone rather than switched to something it did
+            // not offer.
+            for (const tool of this.tools) {
+                if (!hasMeters(tool) || !ownsMeters(tool)) continue;
+                const match = (tool.metrics ?? []).find(
+                    (m) => kindOfMetric(m) === kind,
+                );
+                if (!match || match.key === tool.primary) continue;
+                this._ext.setPrimary(tool.id, match.key);
+            }
         }
 
         _renderDetail(screen) {
