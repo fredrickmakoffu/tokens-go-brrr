@@ -20,6 +20,8 @@ class MonitorConfig:
     poll_interval_seconds: int = 300
     instance_poll_seconds: int = 3
     alert_cooldown_hours: int = 6
+    # Days of samples kept for burn-rate forecasting. 0 disables recording.
+    history_days: int = 90
     primary_alerts: list[int] = field(default_factory=lambda: list(DEFAULT_PRIMARY_ALERTS))
     enabled_providers: list[str] = field(default_factory=lambda: list(DEFAULT_PROVIDERS))
     # provider_id → preferred primary metric key (chip swap)
@@ -37,6 +39,7 @@ class MonitorConfig:
             poll_interval_seconds=int(data.get("poll_interval_seconds", 300)),
             instance_poll_seconds=int(data.get("instance_poll_seconds", 3)),
             alert_cooldown_hours=int(data.get("alert_cooldown_hours", 6)),
+            history_days=int(data.get("history_days", 90)),
             primary_alerts=[int(x) for x in (alerts or DEFAULT_PRIMARY_ALERTS)],
             enabled_providers=list(data.get("enabled_providers") or DEFAULT_PROVIDERS),
             primary_overrides=dict(data.get("primary_overrides") or {}),
@@ -48,6 +51,7 @@ class MonitorConfig:
             "poll_interval_seconds": self.poll_interval_seconds,
             "instance_poll_seconds": self.instance_poll_seconds,
             "alert_cooldown_hours": self.alert_cooldown_hours,
+            "history_days": self.history_days,
             "primary_alerts": self.primary_alerts,
             "enabled_providers": self.enabled_providers,
             "primary_overrides": self.primary_overrides,
