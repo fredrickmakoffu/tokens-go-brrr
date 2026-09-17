@@ -72,23 +72,55 @@ class SampleStoreTest(unittest.TestCase):
         history.record(self.con, [snap], at=NOW)
         self.assertEqual(self.rows(), [])
 
+    def add(self, percent: float, minutes: int, resets_at: datetime | None = RESET) -> None:
+        history.record(
+            self.con,
+            [snapshot(percent=percent, resets_at=resets_at)],
+            at=NOW + timedelta(minutes=minutes),
+        )
+
+    def samples(self) -> list[float]:
+        return [p for _, p in history.window_samples(self.con, "claude", "five_hour")]
+
     def test_samples_come_back_oldest_first(self):
         for offset, pct in enumerate([10.0, 20.0, 30.0]):
-            history.record(
-                self.con, [snapshot(percent=pct)], at=NOW + timedelta(minutes=offset * 5)
-            )
-        samples = history.window_samples(self.con, "claude", "five_hour", RESET)
-        self.assertEqual([p for _, p in samples], [10.0, 20.0, 30.0])
+            self.add(pct, offset * 5)
+        self.assertEqual(self.samples(), [10.0, 20.0, 30.0])
 
-    def test_a_new_window_does_not_see_the_old_ones_samples(self):
-        # The meter drops to zero at a rollover; a series spanning that describes
-        # no trend, so the reset time is part of a sample's identity.
-        history.record(self.con, [snapshot(percent=90.0)], at=NOW)
-        later = RESET + timedelta(hours=5)
-        history.record(
-            self.con, [snapshot(percent=5.0, resets_at=later)], at=RESET + timedelta(minutes=1)
-        )
-        self.assertEqual(len(history.window_samples(self.con, "claude", "five_hour", later)), 1)
+    def test_a_rollover_cuts_the_series(self):
+        # The meter only climbs within a window, so a lower reading after a
+        # higher one is the window having reset in between.
+        for pct, minutes in [(70.0, 0), (85.0, 5), (5.0, 10), (12.0, 15)]:
+            self.add(pct, minutes)
+        self.assertEqual(self.samples(), [5.0, 12.0])
+
+    def test_a_jittering_reset_time_is_still_one_window(self):
+        # Claude reports the same reset with microsecond jitter. Keying on it
+        # turned a continuous series into a pile of one-sample groups.
+        for offset, pct in enumerate([10.0, 20.0, 30.0]):
+            jittered = RESET + timedelta(microseconds=offset * 271_828)
+            self.add(pct, offset * 5, resets_at=jittered)
+        self.assertEqual(self.samples(), [10.0, 20.0, 30.0])
+
+    def test_a_rolling_window_is_still_one_window(self):
+        # OpenCode's rolling reset slides forward on every poll by design.
+        for offset, pct in enumerate([10.0, 20.0, 30.0]):
+            sliding = RESET + timedelta(minutes=offset * 5)
+            self.add(pct, offset * 5, resets_at=sliding)
+        self.assertEqual(self.samples(), [10.0, 20.0, 30.0])
+
+    def test_a_long_gap_cuts_the_series(self):
+        # The daemon was off, or the machine slept; the line across that says
+        # nothing about the rate.
+        self.add(10.0, 0)
+        self.add(20.0, 5)
+        self.add(30.0, 5 + 120)
+        self.assertEqual(self.samples(), [30.0])
+
+    def test_small_noise_does_not_look_like_a_rollover(self):
+        for pct, minutes in [(30.0, 0), (29.8, 5), (31.0, 10)]:
+            self.add(pct, minutes)
+        self.assertEqual(len(self.samples()), 3)
 
     def test_prune_drops_only_what_is_past_retention(self):
         history.record(self.con, [snapshot()], at=datetime.now(timezone.utc))
@@ -124,7 +156,7 @@ class RecorderTest(unittest.TestCase):
             recorder = history.Recorder(self.path)
         self.assertFalse(recorder.active)
         self.assertEqual(recorder.record([snapshot()], at=NOW), 0)
-        self.assertEqual(recorder.window_samples("claude", "five_hour", RESET), [])
+        self.assertEqual(recorder.window_samples("claude", "five_hour"), [])
 
     def test_a_write_failure_disables_rather_than_raises(self):
         recorder = history.Recorder(self.path)

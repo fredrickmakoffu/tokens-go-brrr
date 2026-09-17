@@ -253,8 +253,16 @@ minutes, the slope is positive, and the line explains the spread (R² ≥ 0.5). 
 ETA that lands after the window resets is withheld too: warning about a limit
 the rollover reaches first describes something that cannot happen.
 
-Samples are tagged with the reset they were counting towards, because a meter
-falls back to zero at a rollover and a series spanning that describes no trend.
+A rollover is found in the meter rather than the clock. Tagging each sample with
+the reset it was counting towards is the obvious approach and does not survive
+contact with the providers: Claude returns the same reset with microsecond
+jitter (`15:00:00.653206`, then `15:00:00.933186`), and OpenCode's rolling window
+slides forward on every poll by design. Either one turns a continuous series
+into a pile of one-sample groups that can never be fitted. Since a meter only
+climbs within its window, the series is instead walked back from the newest
+sample and cut where the meter was higher earlier than it is now, or where the
+gap is too long to have been one continuous watch.
+
 Only providers that own their meters are recorded; a harness gets its ETA along
 with the meters it borrows.
 
