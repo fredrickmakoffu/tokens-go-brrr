@@ -165,8 +165,40 @@ daemon and sends back two commands: `Refresh` and `SetPrimary`.
 | --------- | ------------- |
 | `setup` | Verify Cursor login |
 | `run` | Foreground daemon |
-| `status` | Print meters |
+| `status` | Print meters, as text, JSON or a template |
 | `config` | Show config path |
+
+## Status bars and scripts
+
+`status` reads the state the daemon already published to
+`/run/user/$UID/cursor-spend-monitor/state.json`. That means **no credentials, no
+network call and no rate limit**, so it is safe to run as often as a status bar
+redraws — about 0.1s per call, against 3.6s and one request per provider if it
+has to fetch. When no daemon is running, or its state has gone stale (two missed
+polls), it falls back to fetching directly and says so; `--live` forces that.
+
+```bash
+cursor-spend-monitor status --json                       # full payload
+cursor-spend-monitor status --json --compact             # one line, for jq
+cursor-spend-monitor status --format "{icon} {pct}%"     # cursor 37%  claude 62%
+cursor-spend-monitor status --format "{name} {pct}%" --provider claude
+```
+
+Template fields: `{id}` `{name}` `{icon}` `{plan}` `{status}` `{pct}` `{label}`
+`{resets}` `{sessions}` `{paused}` `{via}` `{error}`. Providers are joined by
+`--separator` (two spaces by default).
+
+`{pct}` renders `—`, never `0`, whenever there is no real meter to report — a
+provider that needs signing in, or a harness on a backend that publishes no
+limits. Zero would read as plenty left.
+
+The JSON carries `"schema": 1`; it is bumped only when a field changes meaning,
+so a bar config can tell it is still reading what it was written against. It also
+carries `"source": "daemon"` or `"live"` — a live payload counts no running
+sessions, because nothing scanned `/proc` for it.
+
+Exit codes: `0` every provider shown is fine, `1` at least one needs attention,
+`2` the `--provider` filter matched nothing.
 
 ## Development
 
