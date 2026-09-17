@@ -8,12 +8,27 @@ from .. import burn
 from ..instances import InstanceReport, ProcessSpec
 
 
+# The window a meter measures, in terms every provider can agree on. Providers
+# name their meters differently for the same thing — Claude's five_hour and
+# OpenCode's rolling are one kind; seven_day and weekly are another — and the
+# panel needs one vocabulary to offer a single choice across all of them.
+#
+# "other" is for a meter that is not a time window at all, such as Cursor's
+# spend on non-included models. It never appears in the window picker.
+WINDOW_KINDS = ("rolling", "weekly", "monthly", "other")
+
+
 @dataclass(frozen=True)
 class Meter:
     key: str
     label: str
     percent: float
     resets_at: datetime | None = None
+    # Declared by the provider rather than guessed from the key: Codex names
+    # both of its meters generically and only its own response says which window
+    # each one covers, so a guess here would be wrong for the provider that
+    # needs it most.
+    kind: str = "other"
     # Seconds until this meter is spent at the rate it has been going, or None
     # when the history says nothing trustworthy. Filled in by the daemon, which
     # is the only part that holds the sample series.
@@ -121,6 +136,7 @@ class ProviderSnapshot:
                     "label": m.label,
                     "value": int(round(m.percent)),
                     "resets": m.resets_label(),
+                    "kind": m.kind,
                     "eta": burn.eta_label(m.eta_seconds),
                     "etaSeconds": m.eta_seconds,
                 }
