@@ -32,9 +32,9 @@ const IFACE_XML = `
 const UsageProxy = Gio.DBusProxy.makeProxyWrapper(IFACE_XML);
 
 const COLOR = {
-    ok: "#7fd68f",
-    wait: "#e0b158",
-    crit: "#e2726b",
+    ok: "#3ddc84",
+    wait: "#ffb224",
+    crit: "#ff5c5c",
     error: "#6c6d70",
 };
 const BADGE_FILES = {
