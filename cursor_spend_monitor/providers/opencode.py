@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from ..instances import ProcessSpec
 from .base import Meter, ProviderSnapshot
 
 USAGE_URL = "https://opencode.ai/zen/go/v1/usage"
@@ -53,6 +54,9 @@ class OpenCodeProvider:
 
     id = "opencode"
     display_name = "OpenCode"
+    process_specs = [
+        ProcessSpec(names=frozenset({"opencode"}), label="session"),
+    ]
 
     def _read_key(self) -> str:
         env_key = os.environ.get("OPENCODE_API_KEY", "").strip()

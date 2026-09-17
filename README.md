@@ -1,11 +1,15 @@
 # AI usage
 
 GNOME Shell indicator for AI coding limits, plus a small daemon that fetches them.
-Cursor, Claude Code and OpenCode are all live.
+Cursor, Claude Code, OpenCode and Pi are all live.
 
 ## What you see
 
 **Top bar:** a status dot, green / amber / red by the worst primary meter across providers.
+
+**Top bar, while you are working:** each provider with a live session adds its logo and a
+session count beside the dot. The percentage joins it only once that provider reaches
+caution, so an idle-but-healthy tool costs a logo and two characters.
 
 **Popover** (click the dot) — built from `design/menu-bar-concept.html`:
 
@@ -27,10 +31,86 @@ Log out and back in so GNOME Shell picks up the extension. Needs GNOME Shell 45 
 ## Providers
 
 | Provider | Meters | Source |
-|----------|--------|--------|
+| ---------- | -------- | -------- |
 | Cursor | Monthly limit, Other models | `api2.cursor.sh` dashboard endpoints |
 | Claude Code | 5-hour limit, Weekly (plus Opus and Sonnet weekly when the plan reports them) | `api.anthropic.com/api/oauth/usage` |
 | OpenCode | Rolling limit, Weekly, Monthly | `opencode.ai/zen/go/v1/usage` |
+| Codex | Monthly limit | `chatgpt.com/backend-api/codex/usage` |
+| Pi | Borrowed from the account its sessions are on | `~/.pi/agent`, no network call |
+
+## Harnesses
+
+Most tools here own the subscription they report on. Pi does not: it is a harness
+that spends against whichever LLM account the session selected — OpenCode Go, Codex,
+xAI, or a custom endpoint such as Cline. So Pi ships no meters of its own.
+
+What it does instead: every live Pi session names the account it bills to, read
+from `~/.pi/agent/sessions/<cwd>/…jsonl` (the last `model_change` line, falling
+back to `settings.json`'s default). When that account is one another provider here
+already polls, Pi's row **borrows** that provider's meters rather than fetching
+them again:
+
+```
+OpenCode   74%  ▓▓▓▓▓▓▓░░░
+Pi  via OpenCode Go   74%  ▓▓▓▓▓▓▓░░░   deepseek-v4-flash
+```
+
+Borrowed meters are marked as such, so:
+
+- **The status dot counts a subscription once.** Only a row that owns its meters
+  votes on green / amber / red; a borrowed copy would give one account two votes.
+- **Alerts fire once.** The account's own provider notifies; the harness does not.
+- **The top bar composes the logos.** Pi's chip carries the backend's mark in its
+  corner, so the bar says both what you are running and whose quota it is spending.
+
+**When the backend cannot be metered** — xAI publishes no usage endpoint, and
+Cline reports a credit balance rather than a window — the row still appears with
+its sessions and names the account, and shows no bar and no percentage. A session
+you are running is worth showing whether or not its limit is knowable, and an
+empty bar at 0% would read as "plenty left" rather than "unknown".
+
+Sessions are resolved individually, so two Pi sessions on different accounts each
+show their own model in the detail screen; the row's headline follows whichever
+account most of them are on. Session logs reach several MB and the scan runs every
+few seconds, so only the tail is read, and only when the log's mtime has moved.
+
+## Running sessions
+
+A session is one process you started: a terminal agent, or the desktop app. The daemon finds
+them by scanning `/proc` every few seconds, which costs about 5ms for 350 processes, and each
+provider declares what to look for rather than the scanner knowing about any tool:
+
+```python
+process_specs = [
+    ProcessSpec(names=frozenset({"claude"}), exclude_args=("--chrome-native-host",)),
+]
+```
+
+Things the count deliberately gets right:
+
+- **Suspended sessions do not count.** A session left in the background with Ctrl+Z consumes
+  nothing until resumed, so it stays out of the panel and is reported separately in the
+  provider's detail screen.
+- **Helper processes do not count.** Electron spawns one process per window and per service,
+  all carrying `--type=`, and Claude's browser integration runs a process that is not a
+  session. Cursor's `worker-server` helpers and `--print` (headless / Task) agents are
+  excluded the same way.
+- **A session that spawns a copy of itself counts once.** Any process with an ancestor
+  belonging to the same provider is treated as part of that session, including when
+  unmatched Electron helpers sit between the desktop app and an IDE-spawned agent.
+- **One terminal is one session.** Sibling agents that share a controlling TTY (for
+  example several jobs under the same shell) collapse to a single count.
+- **Paused means Ctrl+Z.** Those sessions stay out of the top-bar ×N and show as
+  *paused* in the provider detail list until you resume them (`fg`).
+- **Focused project (GNOME Terminal / Ptyxis only).** When the focused terminal's
+  title shows a provider process (agent / claude / opencode), that provider's chip
+  shows the project. OpenCode often resolves immediately (one session). Cursor
+  agent titles usually omit the folder, so the chip probes which agent pid woke
+  up on the tab focus. A plain shell in the same repo stays icon + ×N.
+
+Project names never reach the top bar, only the count; the folder name appears in the detail
+screen. A change has to survive two consecutive scans before it is published, so a session
+that starts and exits between ticks cannot make the panel flicker.
 
 ## Auth
 
@@ -56,6 +136,7 @@ before you hit one.
 ```json
 {
   "poll_interval_seconds": 300,
+  "instance_poll_seconds": 3,
   "alert_cooldown_hours": 6,
   "primary_alerts": [75, 90, 100],
   "enabled_providers": ["cursor"],
@@ -81,7 +162,7 @@ daemon and sends back two commands: `Refresh` and `SetPrimary`.
 ## Commands
 
 | Command | Description |
-|---------|-------------|
+| --------- | ------------- |
 | `setup` | Verify Cursor login |
 | `run` | Foreground daemon |
 | `status` | Print meters |

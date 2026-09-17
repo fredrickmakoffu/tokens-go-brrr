@@ -54,8 +54,10 @@ command that swaps them.
 Looking Glass evaluates its input as the body of an async function with `Main`, `Gio` and
 `GLib` in scope, so `await` works and several statements can share one line. In order it:
 
-1. unloads the extension that is running, which destroys the indicator and disconnects the
-   daemon proxy through the extension's own `disable()`;
+1. unloads whatever copy of this extension the shell has loaded, which may be none, which
+   destroys the indicator and disconnects the daemon proxy through the extension's own
+   `disable()`. It matches `ai-usage@` and `ai-usage-rN@` exactly rather than by prefix, so a
+   test harness sharing the prefix is left alone;
 2. rewrites `enabled-extensions`, swapping the old uuid for the new one, because an
    extension that is not in that list gets disabled again immediately;
 3. builds an extension object pointing at the new directory and loads it, which imports the
@@ -64,8 +66,17 @@ Looking Glass evaluates its input as the body of an async function with `Main`, 
 
 ## Things worth knowing
 
-- **Every reload needs a new revision.** Once `r2` is loaded, its path is cached too, so the
-  next reload has to be `r3`. The script tracks this by looking at what is already staged.
+- **Every reload needs a new revision, and numbers are never reused.** Once `r2` is loaded its
+  path is cached, so the next reload has to be `r3`. Deleting `r2` does not release the number,
+  because the module stays cached for the life of the login: staging `r2` again would appear to
+  work and silently run the old code. `live-reload.sh` therefore records the highest number it
+  has handed out in `.ai-usage-revision` beside the extensions, and the reset script leaves that
+  marker alone.
+
+- **The reset script disables the running copy immediately.** It rewrites
+  `enabled-extensions`, which the shell acts on at once, so the indicator disappears rather than
+  reverting to the canonical extension: that one is only picked up at the next login. Running
+  `live-reload.sh` again brings it straight back.
 - **The running shell keeps the last revision** until you log out. The reset script cannot
   undo that from outside, and it does not pretend to.
 - **The canonical install is always current.** `live-reload.sh` refreshes it on every run, so

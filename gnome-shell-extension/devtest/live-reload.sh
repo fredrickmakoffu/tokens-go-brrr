@@ -13,49 +13,58 @@ REPO="$(cd "$HERE/../.." && pwd)"
 UUID="ai-usage@fredrickmakoffu.github.io"
 EXT_HOME="$HOME/.local/share/gnome-shell/extensions"
 
-# Keep the canonical install current too, so an ordinary logout lands on this code
+# Keep the canonical install current too, so an ordinary logout is still correct
 # and every staged revision can be thrown away.
 mkdir -p "$EXT_HOME"
 rm -rf "${EXT_HOME:?}/$UUID"
 cp -r "$REPO/gnome-shell-extension/$UUID" "$EXT_HOME/"
 
-read -r CURRENT NEXT <<<"$(python3 - "$EXT_HOME" "$UUID" <<'PY'
-import ast, os, re, subprocess, sys
+NEXT="$(python3 - "$EXT_HOME" <<'PYEOF'
+import os, re, sys
 
-ext_home, uuid = sys.argv[1], sys.argv[2]
-enabled = ast.literal_eval(subprocess.run(
-    ['gsettings', 'get', 'org.gnome.shell', 'enabled-extensions'],
-    capture_output=True, text=True, check=True).stdout.strip())
+ext_home = sys.argv[1]
+# A revision number must never be reused, even once its directory is gone: the
+# shell caches an imported module for the life of the session, so reloading a
+# path it has already seen silently runs the old code again. Directories alone
+# cannot tell us that, because the reset script deletes them.
+marker = os.path.join(ext_home, '.ai-usage-revision')
+try:
+    with open(marker) as handle:
+        highest = int(handle.read().strip() or 1)
+except (OSError, ValueError):
+    highest = 1
 
-# whichever of ours the shell is running right now: the canonical one on a fresh
-# login, or the last revision that was loaded into this session
-current = next((u for u in enabled if u.startswith('ai-usage')), uuid)
+for name in os.listdir(ext_home):
+    found = re.fullmatch(r'ai-usage-r(\d+)@.*', name)
+    if found:
+        highest = max(highest, int(found.group(1)))
 
-revisions = [int(m.group(1)) for name in os.listdir(ext_home)
-             if (m := re.fullmatch(r'ai-usage-r(\d+)@.*', name))]
-print(current, max(revisions, default=1) + 1)
-PY
+nxt = highest + 1
+with open(marker, 'w') as handle:
+    handle.write(str(nxt))
+print(nxt)
+PYEOF
 )"
 
 NEW="ai-usage-r${NEXT}@fredrickmakoffu.github.io"
 rm -rf "${EXT_HOME:?}/$NEW"
 cp -r "$REPO/gnome-shell-extension/$UUID" "$EXT_HOME/$NEW"
-python3 - "$EXT_HOME/$NEW/metadata.json" "$NEW" "$NEXT" <<'PY'
+python3 - "$EXT_HOME/$NEW/metadata.json" "$NEW" "$NEXT" <<'PYEOF'
 import json, pathlib, sys
 path, uuid, rev = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
 meta = json.loads(path.read_text())
 meta['uuid'] = uuid
 meta['name'] = f'AI Usage (live reload r{rev})'
 path.write_text(json.dumps(meta, indent=2) + '\n')
-PY
+PYEOF
 
 cat <<EOF
 
-Staged r${NEXT}.  Replacing: ${CURRENT}
+Staged r${NEXT}. It replaces whichever copy the shell has loaded, if any.
 
 Press Alt+F2, type lg, press Enter, then paste this and press Enter:
 
-const M = Main.extensionManager; const OLD = '${CURRENT}'; const NEW = '${NEW}'; await M.unloadExtension(M.lookup(OLD)); const st = new Gio.Settings({schema_id: 'org.gnome.shell'}); st.set_strv('enabled-extensions', st.get_strv('enabled-extensions').filter(u => u !== OLD).concat([NEW])); await M.loadExtension(M.createExtensionObject(NEW, Gio.File.new_for_path(GLib.get_user_data_dir() + '/gnome-shell/extensions/' + NEW), 2)); Main.panel.statusArea[NEW]
+const M = Main.extensionManager; const NEW = '${NEW}'; const mine = M.getUuids().filter(u => /^ai-usage(-r[0-9]+)?@/.test(u) && M.lookup(u)); await Promise.all(mine.map(u => M.unloadExtension(M.lookup(u)))); const st = new Gio.Settings({schema_id: 'org.gnome.shell'}); st.set_strv('enabled-extensions', st.get_strv('enabled-extensions').filter(u => !/^ai-usage(-r[0-9]+)?@/.test(u)).concat([NEW])); await M.loadExtension(M.createExtensionObject(NEW, Gio.File.new_for_path(GLib.get_user_data_dir() + '/gnome-shell/extensions/' + NEW), 2)); Main.panel.statusArea[NEW]
 
 Press Escape to close Looking Glass.
 
