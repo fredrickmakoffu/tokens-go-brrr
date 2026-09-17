@@ -50,6 +50,11 @@ const CONFIG_PATH = GLib.build_filenamev([
     "config.json",
 ]);
 const SCREEN_EASE = 160;
+// A row arrives just after the one above it, so the list reads as settling into
+// place rather than being stamped down all at once.
+const ROW_STAGGER = 34;
+const ROW_EASE = 210;
+const BAR_GROW = 420;
 
 const CAUTION_AT = 70;
 const CRITICAL_AT = 90;
@@ -334,6 +339,34 @@ const Bar = GObject.registerClass(
             this.queue_relayout();
         }
 
+        prepareGrow() {
+            // Collapsed just before the entry is scheduled, never on
+            // construction: a screen is built on every daemon poll, and only
+            // the path that also plays the entry is allowed to hide anything.
+            this._fill.set_pivot_point(0, 0.5);
+            this._fill.scale_x = 0;
+        }
+
+        settle() {
+            this._fill.remove_all_transitions();
+            this._fill.scale_x = 1;
+        }
+
+        grow() {
+            // The fill is allocated at its true width and scaled in from the
+            // left, so the animation never draws a value the meter does not
+            // have. Deliberately an ease-out with no overshoot: a bar that
+            // springs past its mark shows more usage than the provider
+            // reported, and a quota display has no business exaggerating even
+            // for a sixth of a second.
+            if (!St.Settings.get().enable_animations) return;
+            this._fill.ease({
+                scale_x: 1,
+                duration: BAR_GROW,
+                mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+            });
+        }
+
         vfunc_allocate(box) {
             this.set_allocation(box);
             const content = this.get_theme_node().get_content_box(box);
@@ -550,7 +583,8 @@ const Row = GObject.registerClass(
             info.add_child(meta);
 
             if (metered) {
-                info.add_child(new Bar(pct, color));
+                this._bar = new Bar(pct, color);
+                info.add_child(this._bar);
             }
             this.add_child(info);
 
@@ -628,6 +662,37 @@ const Row = GObject.registerClass(
             // Clicks on a badge belong to the badge (mockup: e.stopPropagation()).
             this.emit("navigate");
         }
+
+        prepareEntry() {
+            this.opacity = 0;
+            this.translation_y = 6;
+        }
+
+        settle() {
+            // Final state without animating, for any path that hid these
+            // actors and then found it could not play the entry.
+            this.remove_all_transitions();
+            this.opacity = 255;
+            this.translation_y = 0;
+            this._bar?.settle?.();
+        }
+
+        enter(index) {
+            // Each row arrives a beat after the one above it. The bar grows
+            // once its row has landed, so the eye follows the list down and
+            // then watches the meters fill, rather than everything moving at
+            // once.
+            this._bar?.grow?.();
+            if (!St.Settings.get().enable_animations) return;
+            const delay = index * ROW_STAGGER;
+            this.ease({
+                opacity: 255,
+                translation_y: 0,
+                delay,
+                duration: ROW_EASE,
+                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            });
+        }
     },
 );
 
@@ -691,9 +756,16 @@ const Indicator = GObject.registerClass(
                 if (open) {
                     this._ext.refresh();
                     if (this._screen !== "list") this._navigate("list");
+                    else this._beginEntry();
+                } else if (this._entryId) {
+                    GLib.source_remove(this._entryId);
+                    this._entryId = 0;
                 }
             });
 
+            this._entryId = 0;
+            this._entryRows = [];
+            this._entryBars = [];
             this._render(false);
         }
 
@@ -1007,6 +1079,8 @@ const Indicator = GObject.registerClass(
 
         _render(animate) {
             this.menu.box.destroy_all_children();
+            this._entryRows = [];
+            this._entryBars = [];
             const screen = new St.BoxLayout({
                 style_class: "ai-usage-screen",
                 orientation: Clutter.Orientation.VERTICAL,
@@ -1029,7 +1103,47 @@ const Indicator = GObject.registerClass(
                     duration: SCREEN_EASE,
                     mode: Clutter.AnimationMode.EASE_OUT_QUAD,
                 });
+                this._beginEntry();
             }
+        }
+
+        _beginEntry() {
+            // Hiding and revealing must be governed by one condition. They were
+            // not: rows were hidden on every render and revealed only on the
+            // animated path, so each daemon poll rebuilt the list invisible and
+            // left it that way until the menu was reopened.
+            if (!this.menu.isOpen) return;
+            if (!St.Settings.get().enable_animations) return;
+            for (const row of this._entryRows ?? []) row.prepareEntry();
+            for (const bar of this._entryBars ?? []) bar.prepareGrow();
+            this._queueEntry();
+        }
+
+        _queueEntry() {
+            // One turn of the loop later, so the rows have been allocated. An
+            // ease started on an actor that has not been laid out yet settles
+            // on its first frame, which is how this animation silently did
+            // nothing at all until it was measured.
+            if (this._entryId) return;
+            this._entryId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+                this._entryId = 0;
+                this._playEntry();
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+
+        _playEntry() {
+            const rows = this._entryRows ?? [];
+            const bars = this._entryBars ?? [];
+            if (!this.menu.isOpen) {
+                // Closed before the entry could run. These actors were hidden
+                // for it, so put them back rather than leaving them invisible.
+                for (const row of rows) row.settle();
+                for (const bar of bars) bar.settle();
+                return;
+            }
+            rows.forEach((row, index) => row.enter(index));
+            for (const bar of bars) bar.grow();
         }
 
         _header(title, withSettings = false) {
@@ -1164,6 +1278,7 @@ const Indicator = GObject.registerClass(
                 x_expand: true,
             });
             const selectedKind = selectedWindow(tools);
+            const rows = [];
             for (const tool of tools) {
                 const row = new Row(
                     this._icons,
@@ -1176,7 +1291,9 @@ const Indicator = GObject.registerClass(
                 );
                 row.connect("select", (_row, key) => this._select(tool, key));
                 section.add_child(row);
+                rows.push(row);
             }
+            this._entryRows = rows;
             this._lastSwapped = null;
             screen.add_child(section);
             const picker = this._windowPicker(tools, selectedKind);
@@ -1251,6 +1368,7 @@ const Indicator = GObject.registerClass(
                     : `${via.name}${via.model ? ` · ${via.model}` : ""} — ${tool.error || "no limits available"}`;
                 body.add_child(wrappedLabel(note, "ai-usage-via-note"));
             }
+            const bars = [];
             for (const m of tool.metrics ?? []) {
                 const pct = clampPct(m.value);
                 const color = colorFor(pct);
@@ -1269,10 +1387,14 @@ const Indicator = GObject.registerClass(
                     }),
                 );
                 block.add_child(top);
-                block.add_child(new Bar(pct, color));
+                const bar = new Bar(pct, color);
+                bars.push(bar);
+                block.add_child(bar);
                 block.add_child(label(m.resets ?? "", "ai-usage-detail-reset"));
                 body.add_child(block);
             }
+            this._entryBars = bars;
+
             const sessions = sessionRows(tool);
             if (sessions.length) {
                 const active = sessions.filter((s) => !s.paused);

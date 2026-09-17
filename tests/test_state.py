@@ -311,3 +311,52 @@ class PayloadSourceTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RefreshCooldownTest(unittest.TestCase):
+    """A refresh on every menu open must not become a request on every open."""
+
+    def _daemon(self, last_fetch):
+        from cursor_spend_monitor.daemon import UsageDaemon
+
+        stub = mock.Mock(spec=UsageDaemon)
+        stub._polling = False
+        stub.last_fetch = last_fetch
+        return stub
+
+    def poll(self, stub, **kwargs):
+        from cursor_spend_monitor.daemon import UsageDaemon
+
+        with mock.patch("cursor_spend_monitor.daemon.threading.Thread") as thread:
+            UsageDaemon.poll(stub, **kwargs)
+        return thread.called
+
+    def test_a_first_poll_always_runs(self):
+        self.assertTrue(self.poll(self._daemon(None)))
+
+    def test_a_second_poll_inside_the_cooldown_is_dropped(self):
+        just_now = datetime.now(timezone.utc) - timedelta(seconds=5)
+        self.assertFalse(self.poll(self._daemon(just_now)))
+
+    def test_a_poll_after_the_cooldown_runs(self):
+        from cursor_spend_monitor.daemon import REFRESH_COOLDOWN_SECONDS
+
+        stale = datetime.now(timezone.utc) - timedelta(
+            seconds=REFRESH_COOLDOWN_SECONDS + 5
+        )
+        self.assertTrue(self.poll(self._daemon(stale)))
+
+    def test_force_ignores_the_cooldown(self):
+        # The scheduled tick is already spaced by the poll interval.
+        just_now = datetime.now(timezone.utc) - timedelta(seconds=5)
+        self.assertTrue(self.poll(self._daemon(just_now), force=True))
+
+    def test_a_poll_already_in_flight_is_never_doubled(self):
+        stub = self._daemon(None)
+        stub._polling = True
+        self.assertFalse(self.poll(stub))
+
+    def test_force_does_not_override_a_poll_in_flight(self):
+        stub = self._daemon(None)
+        stub._polling = True
+        self.assertFalse(self.poll(stub, force=True))

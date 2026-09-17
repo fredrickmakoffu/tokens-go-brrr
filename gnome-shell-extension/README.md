@@ -127,6 +127,65 @@ St has no equivalent or the browser value does not survive the port: the CSS
 keyboard-focus class so the accent bar never shows on a mouse click, the drop
 shadow is retuned, and the type scale is relative.
 
+## Motion
+
+Opening the list plays an entry: each row fades and rises a beat after the one
+above it, and its meter grows from the left once it has landed, so the eye goes
+down the list and then watches the bars fill.
+
+Three things this had to get right.
+
+**It never overstates a meter.** The fill is allocated at its true width and
+scaled in, and the easing is a plain ease-out. A bar that springs past its mark
+and settles back shows more usage than the provider reported, and a quota display
+has no business exaggerating even for a sixth of a second.
+
+**It respects `enable-animations`.** With animations off nothing is hidden and
+nothing eases; the menu is simply drawn. Verified in a nested shell with the
+setting off — every row at full opacity and every bar at full width on the first
+sample.
+
+**Hiding and revealing are governed by one condition.** They were not at first,
+and the bug is worth keeping written down: rows were hidden as the list was
+built, and revealed only on the path that plays the entry. Four of the five
+render call sites do not animate — `setState` among them — so every daemon poll
+rebuilt the list invisible with nothing to bring it back, and the menu emptied
+itself a few minutes after opening. Only the code that will play the entry is
+allowed to hide anything for it, and if it hides and then cannot play, it puts
+the actors back.
+
+**The actors are hidden just before the entry is scheduled.** The entry runs one turn of the main loop after
+the screen is built, because an ease started on an actor that has not been
+allocated yet settles on its first frame — which is how the whole animation
+silently did nothing until it was measured rather than watched. Anything visible
+during that gap would flash at full value first, so rows and fills start at zero
+and the entry only reveals them.
+
+Opening the menu replays the entry even when the screen has not changed, which is
+the usual case: the list is already up from last time.
+
+## Surface and font
+
+The popover is slate — `#1e242f` with `#384152` edges — rather than the mockup's
+near-black. A blue-grey surface has a temperature where `#1c1c1e` has only a
+level, and it reads as a panel sitting on the desktop rather than a hole cut in
+it. Every colour on it was re-checked: text `#eef1f6` at 13.75:1, secondary
+`#9aa6b8` at 6.32:1, and the green / amber / red at 8.8, 7.9 and 5.1 — all past
+WCAG AA. `#748094` is reserved for rules and icon glyphs, where the 3:1 bar for
+UI components applies instead.
+
+The top bar keeps neutral colours. It sits on GNOME's panel, which is not our
+surface, so tinting its text to match a menu that is not open would be wrong.
+
+The popover sets no `font-family`. The mockup asked for Inter, which is not
+installed on a default Fedora or Ubuntu, so for the life of the project the menu
+quietly rendered in Noto Sans while the shell, the top bar and every other
+extension used Adwaita Sans. Inheriting is both more honest and more consistent.
+
+Numbers carry `font-feature-settings: "tnum"`. Proportional digits change width
+as they change value, so a meter ticking 9% to 10% nudged the text beside it, and
+in the top bar shifted every chip along the row.
+
 ## Type scale
 
 The popover sets no base `font-size`. The mockup pinned 13px and every child
