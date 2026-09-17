@@ -96,7 +96,10 @@ by the provider that knows, in the same spirit as `ProcessSpec`: the panel is
 told, it does not guess.
 
 The picker takes the row at the foot of the list, which Settings, Guide and
-About used to hold. That is the most reachable row in the menu and it was going
+About used to hold, and keeps their shape: three flat buttons dividing the row
+edge to edge. Selection cannot be carried by a fill alone, since hover fills
+too, so the chosen window keeps a brighter, heavier label and an accent rule
+along its top edge. That is the most reachable row in the menu and it was going
 to three things you press once to read something; the window is the choice you
 actually change. Those three move up into the header, in space the title was not
 using.
