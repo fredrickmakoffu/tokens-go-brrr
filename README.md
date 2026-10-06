@@ -50,7 +50,7 @@ back to `settings.json`'s default). When that account is one another provider he
 already polls, Pi's row **borrows** that provider's meters rather than fetching
 them again:
 
-```
+```text
 OpenCode   74%  ▓▓▓▓▓▓▓░░░
 Pi  via OpenCode Go   74%  ▓▓▓▓▓▓▓░░░   deepseek-v4-flash
 ```
@@ -157,7 +157,7 @@ Chip swaps persist in `primary_overrides`.
 
 ## Architecture
 
-```
+```text
 GNOME Shell extension (status dot + popover)
         ↑  io.github.fredrickmakoffu.AIUsage on the session bus
    daemon (poll, alert, publish)
@@ -235,7 +235,7 @@ have headroom; `--any` passes when one does.
 
 `best` answers the question that comes with paying for four subscriptions:
 
-```
+```console
 $ cursor-spend-monitor best --explain
 Use Cursor — 63% left (Claude Code 35% left, OpenCode 20% left).
 ```
@@ -249,7 +249,7 @@ Every poll is recorded to `~/.local/share/cursor-spend-monitor/history.db`, one
 row per meter, kept for `history_days` (90 by default; `0` turns recording off).
 From that series each meter gets a time-to-exhaustion:
 
-```
+```text
 Claude Code · Pro
   ★ 5-hour limit      62%  Resets in 3h 28m  ·  spent in 41m
 ```
@@ -282,3 +282,83 @@ for the session and says so once, rather than stopping the daemon.
 `design/menu-bar-concept.html` is the reference mockup; the extension stylesheet mirrors its
 values one to one. To test without a live login, run a mock daemon and a nested shell — see
 `gnome-shell-extension/README.md`.
+
+## Usage ledger and notifications
+
+Beyond the live meters, the daemon keeps a local ledger of what the AI spend was
+actually spent on — tokens per provider, model, project and hour — read from the
+tools' own stores. Nothing leaves the machine.
+
+```bash
+cursor-spend-monitor harvest                 # read every store into the ledger
+cursor-spend-monitor harvest --provider claude --full
+cursor-spend-monitor report                  # this month: provider / project / model
+cursor-spend-monitor report --week --by model
+cursor-spend-monitor report --checks         # cross-check disagreements
+cursor-spend-monitor quote                   # the latest generated message
+cursor-spend-monitor quote --generate --slot weekly
+cursor-spend-monitor quote --tweet           # SHARE: line, copied to the clipboard
+```
+
+| Source | What it gives | Fidelity |
+| --- | --- | --- |
+| `~/.local/share/opencode/opencode.db` | exact cost and every token kind per session | measured |
+| `~/.claude/projects/**/*.jsonl` | exact usage per response, incl. cache and thinking tokens | measured |
+| Cursor dashboard API | per-model spend for one billing cycle | measured, cost unit unverified |
+| `~/.codex/state_5.sqlite` | nothing yet on this machine — the reader probes and records why | absent |
+| Pi sessions | sessions, models, projects, durations | **no token data exists** |
+
+Every row is keyed and every write is idempotent: a second `harvest` with
+nothing new reports `no change`. Rows carry a `source`, and an aggregate that
+includes an estimate says so in the message rather than presenting a guess as a
+measurement.
+
+Digests and alerts run without any language model. With `llm_notifications`
+enabled and a generator configured, the wording is composed by whichever
+provider has the most capacity left, and falls back to the templates whenever it
+cannot.
+
+## Usage ledger
+
+Alongside the live meters, the daemon keeps a local ledger of *what the spend
+was spent on*: tokens per provider, model, project and hour, harvested
+idempotently from each tool's own store.
+
+```bash
+cursor-spend-monitor harvest                  # read every store into the ledger
+cursor-spend-monitor report                   # this month, by provider
+cursor-spend-monitor report --week --by model # last 7 days, by model
+cursor-spend-monitor report --checks          # cross-check disagreements
+cursor-spend-monitor harvest --full           # ignore watermarks, re-read all
+```
+
+| Source | What it gives | Fidelity |
+| --- | --- | --- |
+| `~/.local/share/opencode/opencode.db` | exact cost and every token kind per session | measured |
+| `~/.claude/projects/**/*.jsonl` | exact usage per response, including the cache split and thinking tokens | measured |
+| Cursor dashboard API | per-model spend for one billing cycle | measured; cost unit still unverified |
+| `~/.codex/state_5.sqlite` | nothing on this machine — the reader probes and records why | none yet |
+| Pi sessions | sessions, models, projects, durations | **no token data exists** |
+
+Every row is keyed and every write is idempotent: a second `harvest` with
+nothing new reports `no change`. A row carries a `source`, and an aggregate that
+includes an estimate says so rather than presenting a guess as a measurement.
+`report --checks` shows where two authorities disagree — the disagreement is
+recorded, never silently reconciled.
+
+## Notifications
+
+Digests and alerts are composed from the ledger, and **work with no LLM
+configured**: the wording is a template until a generator is enabled.
+
+```bash
+cursor-spend-monitor quote                     # the latest generated message
+cursor-spend-monitor quote --generate --slot weekly
+cursor-spend-monitor quote --tweet             # SHARE: line, copied to clipboard
+```
+
+The daemon sends a digest on its schedule (daily at `notify_daily_hour`, weekly
+on `notify_weekly_day`, monthly on the 1st), raises an actionable alert when a
+meter crosses the warning line or its burn rate would spend it before the window
+resets, and honours `notify_silent_hours`. Nothing is ever posted anywhere:
+`--tweet` copies the line and stops there.
