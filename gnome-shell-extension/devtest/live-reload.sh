@@ -19,7 +19,8 @@ mkdir -p "$EXT_HOME"
 rm -rf "${EXT_HOME:?}/$UUID"
 cp -r "$REPO/gnome-shell-extension/$UUID" "$EXT_HOME/"
 
-NEXT="$(python3 - "$EXT_HOME" <<'PYEOF'
+NEXT="$(
+  python3 - "$EXT_HOME" <<'PYEOF'
 import os, re, sys
 
 ext_home = sys.argv[1]
@@ -57,6 +58,15 @@ meta['uuid'] = uuid
 meta['name'] = f'AI Usage (live reload r{rev})'
 path.write_text(json.dumps(meta, indent=2) + '\n')
 PYEOF
+
+# Older revisions have done their job. Leaving them behind piles up installs
+# that the shell lists as separate extensions, so only the newest is kept. The
+# *number* is what must never be reused while this login lasts — the shell has
+# those modules cached — not the directory.
+for dir in "$EXT_HOME"/ai-usage-r*@*; do
+  [ "$(basename "$dir")" = "$NEW" ] && continue
+  rm -rf "$dir"
+done
 
 cat <<EOF
 
