@@ -6,10 +6,12 @@ import time
 import gi
 
 gi.require_version("Notify", "0.7")
-from gi.repository import Notify
+# gi is a C extension with no stubs, and require_version deliberately runs
+# before the import, so both rules are suppressed with a reason here.
+from gi.repository import Notify  # type: ignore  # noqa: E402
 
-from .config import CONFIG_DIR, MonitorConfig
-from .providers.base import ProviderSnapshot
+from .config import CONFIG_DIR, MonitorConfig  # noqa: E402
+from .providers.base import ProviderSnapshot  # noqa: E402
 
 ALERT_STATE_FILE = CONFIG_DIR / "alert-state.json"
 

@@ -4,7 +4,7 @@ import json
 from collections.abc import Callable
 from typing import Any
 
-from gi.repository import Gio, GLib
+from gi.repository import Gio, GLib  # type: ignore  # gi has no stubs
 
 BUS_NAME = "io.github.fredrickmakoffu.AIUsage"
 OBJECT_PATH = "/io/github/fredrickmakoffu/AIUsage"
@@ -35,9 +35,9 @@ class UsageService:
         *,
         version: str,
         get_state: Callable[[], dict[str, Any]],
-        on_refresh: Callable[[], None],
+        on_refresh: Callable[..., Any],
         on_set_primary: Callable[[str, str], None],
-        on_quit: Callable[[], None],
+        on_quit: Callable[..., Any],
         on_name_lost: Callable[[], None],
     ) -> None:
         self._version = version
@@ -67,7 +67,9 @@ class UsageService:
     def _name_lost(self, _connection, _name: str) -> None:
         self._on_name_lost()
 
-    def _method_call(self, _conn, _sender, _path, _iface, method, params, invocation) -> None:
+    def _method_call(
+        self, _conn, _sender, _path, _iface, method, params, invocation
+    ) -> None:
         if method == "GetState":
             payload = json.dumps(self._get_state())
             invocation.return_value(GLib.Variant("(s)", (payload,)))
@@ -83,7 +85,9 @@ class UsageService:
             GLib.idle_add(self._on_quit)
         else:
             invocation.return_error_literal(
-                Gio.dbus_error_quark(), Gio.DBusError.UNKNOWN_METHOD, f"Unknown {method}"
+                Gio.dbus_error_quark(),
+                Gio.DBusError.UNKNOWN_METHOD,
+                f"Unknown {method}",
             )
 
     def _get_property(self, _conn, _sender, _path, _iface, prop):
@@ -95,7 +99,11 @@ class UsageService:
         if self._connection is None:
             return
         self._connection.emit_signal(
-            None, OBJECT_PATH, INTERFACE, "StateChanged", GLib.Variant("(s)", (json.dumps(state),))
+            None,
+            OBJECT_PATH,
+            INTERFACE,
+            "StateChanged",
+            GLib.Variant("(s)", (json.dumps(state),)),
         )
 
     def close(self) -> None:

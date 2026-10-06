@@ -1,18 +1,42 @@
 from __future__ import annotations
 
+import http.client
 import json
-import urllib.error
-import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from .local_auth import LocalCursorAuth, resolve_access_token
+from .local_auth import resolve_access_token
 
-API2_BASE = "https://api2.cursor.sh"
+# The API host, kept apart from the scheme: requests below go over an
+# `HTTPSConnection`, so https is a property of the code rather than a string
+# that has to be validated.
+API2_HOST = "api2.cursor.sh"
+API2_BASE = f"https://{API2_HOST}"
 USAGE_PATH = "/aiserver.v1.DashboardService/GetCurrentPeriodUsage"
 PLAN_PATH = "/aiserver.v1.DashboardService/GetPlanInfo"
 HARD_LIMIT_PATH = "/aiserver.v1.DashboardService/GetHardLimit"
+# Per-model spend for a date range. The range must be epoch milliseconds: the
+# server rejects an ISO-8601 string outright (`cannot decode field … start_date`),
+# and a range much beyond a quarter answers HTTP 500, so callers pass one
+# billing cycle at a time.
+AGGREGATED_PATH = "/aiserver.v1.DashboardService/GetAggregatedUsageEvents"
+POLICY_PATH = "/aiserver.v1.DashboardService/GetUsageLimitPolicyStatus"
+
+
+def _as_int(value: Any) -> int:
+    """A spend figure as an int. The endpoint returns strings and nulls freely."""
+    try:
+        return int(value)
+    except (TypeError, ValueError, OverflowError):
+        return 0
+
+
+def _as_float(value: Any) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError, OverflowError):
+        return 0.0
 
 
 @dataclass
@@ -32,13 +56,17 @@ class UsageSummary:
     on_demand_used: int
 
     @classmethod
-    def from_dashboard(cls, data: dict[str, Any], *, membership_type: str = "") -> UsageSummary:
+    def from_dashboard(
+        cls, data: dict[str, Any], *, membership_type: str = ""
+    ) -> UsageSummary:
         plan = data.get("planUsage") or {}
         spend_limit = data.get("spendLimitUsage") or {}
         # Spend figures from api2 are in USD cents
-        included = int(plan.get("includedSpend") or 0)
-        limit = int(plan.get("limit") or 0)
-        on_demand_used = int(spend_limit.get("totalSpend") or spend_limit.get("used") or 0)
+        included = _as_int(plan.get("includedSpend"))
+        limit = _as_int(plan.get("limit"))
+        on_demand_used = _as_int(
+            spend_limit.get("totalSpend") or spend_limit.get("used")
+        )
         on_demand_enabled = bool(
             spend_limit.get("enabled")
             if "enabled" in spend_limit
@@ -51,12 +79,13 @@ class UsageSummary:
 
         return cls(
             raw=data,
-            membership_type=membership_type or str(data.get("membershipType") or "unknown"),
+            membership_type=membership_type
+            or str(data.get("membershipType") or "unknown"),
             billing_cycle_start=_parse_ms_or_iso(data.get("billingCycleStart")),
             billing_cycle_end=_parse_ms_or_iso(data.get("billingCycleEnd")),
-            auto_percent=float(plan.get("autoPercentUsed") or 0),
-            api_percent=float(plan.get("apiPercentUsed") or 0),
-            total_percent=float(plan.get("totalPercentUsed") or 0),
+            auto_percent=_as_float(plan.get("autoPercentUsed")),
+            api_percent=_as_float(plan.get("apiPercentUsed")),
+            total_percent=_as_float(plan.get("totalPercentUsed")),
             auto_message=str(data.get("autoModelSelectedDisplayMessage") or ""),
             api_message=str(data.get("namedModelSelectedDisplayMessage") or ""),
             plan_used=included,
@@ -79,7 +108,7 @@ class UsageSummary:
         delta = self.billing_cycle_end - now
         if delta.total_seconds() <= 0:
             return "Resets soon"
-        hours, rem = divmod(int(delta.total_seconds()), 3600)
+        hours, rem = divmod(_as_int(delta.total_seconds()), 3600)
         if hours >= 48:
             days = hours // 24
             return f"Resets in {days}d"
@@ -93,7 +122,9 @@ def _parse_ms_or_iso(value: Any) -> datetime | None:
         return None
     try:
         # api2 returns unix ms as strings
-        if isinstance(value, (int, float)) or (isinstance(value, str) and value.isdigit()):
+        if isinstance(value, (int, float)) or (
+            isinstance(value, str) and value.isdigit()
+        ):
             ms = int(value)
             return datetime.fromtimestamp(ms / 1000, tz=timezone.utc)
         return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
@@ -125,42 +156,75 @@ class CursorUsageClient:
             usage = self._connect_json(USAGE_PATH, auth.access_token)
 
         membership = auth.membership_type
-        try:
-            plan = self._connect_json(PLAN_PATH, auth.access_token)
-            membership = (
-                ((plan.get("planInfo") or {}).get("planName") or membership or "unknown")
-            )
+        plan = self._best_effort(PLAN_PATH, auth.access_token)
+        if plan:
+            plan_name = (plan.get("planInfo") or {}).get("planName")
+            membership = plan_name or membership or "unknown"
             usage["_planInfo"] = plan
-        except Exception:
-            pass
 
-        try:
-            hard = self._connect_json(HARD_LIMIT_PATH, auth.access_token)
+        hard = self._best_effort(HARD_LIMIT_PATH, auth.access_token)
+        if hard:
             usage.update(hard)
-        except Exception:
-            pass
 
-        return UsageSummary.from_dashboard(usage, membership_type=str(membership).lower())
+        return UsageSummary.from_dashboard(
+            usage, membership_type=str(membership).lower()
+        )
+
+    def _best_effort(self, path: str, access_token: str) -> dict[str, Any]:
+        """An optional endpoint, where a refusal is not a usage failure.
+
+        The plan name and the hard-limit overrides are extras: the usage answer
+        stands without them, so a rejection is dropped here instead of taking
+        down a poll that succeeded.
+        """
+        try:
+            return self._connect_json(path, access_token)
+        except (PermissionError, RuntimeError, OSError, ValueError):
+            return {}
 
     def _connect_json(self, path: str, access_token: str) -> dict[str, Any]:
-        req = urllib.request.Request(
-            f"{API2_BASE}{path}",
-            data=b"{}",
-            method="POST",
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json",
-                "Connect-Protocol-Version": "1",
-                "User-Agent": "cursor-spend-monitor/0.1",
-            },
-        )
+        return self.post_json(path, {}, access_token)
+
+    def post_json(
+        self, path: str, body: dict[str, Any], access_token: str
+    ) -> dict[str, Any]:
+        """POST a Connect-RPC body and decode the JSON reply.
+
+        Kept separate from `_connect_json` because some endpoints need a real
+        body — the aggregated-usage query takes the range it should sum.
+        """
+        # `HTTPSConnection` is TLS by construction — there is no scheme to get
+        # wrong and no URL to open, which is why this does not use urllib.
+        # Constructed outside the `try` so the `finally` below always has one to
+        # close. `HTTPSConnection` does not connect here, so it cannot fail.
+        connection = http.client.HTTPSConnection(API2_HOST, timeout=30)
         try:
-            with urllib.request.urlopen(req, timeout=30) as response:
-                return json.loads(response.read().decode())
-        except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")[:200]
-            if exc.code in {401, 403}:
-                raise PermissionError(
-                    "Cursor API rejected the IDE token. Open Cursor and sign in again."
-                ) from exc
-            raise RuntimeError(f"HTTP {exc.code} from {path}: {detail}") from exc
+            connection.request(
+                "POST",
+                path,
+                body=json.dumps(body),
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                    "Connect-Protocol-Version": "1",
+                    "User-Agent": "cursor-spend-monitor/0.1",
+                },
+            )
+            response = connection.getresponse()
+            status = int(response.status)
+            detail = response.read().decode("utf-8", errors="replace")
+        except OSError as exc:
+            raise RuntimeError(f"Cursor API unreachable: {exc}") from exc
+        finally:
+            connection.close()
+
+        if status in {401, 403}:
+            raise PermissionError(
+                "Cursor API rejected the IDE token. Open Cursor and sign in again."
+            )
+        if status >= 400:
+            raise RuntimeError(f"HTTP {status} from {path}: {detail[:200]}")
+        try:
+            return json.loads(detail)
+        except ValueError as exc:
+            raise RuntimeError(f"Cursor API returned invalid JSON for {path}") from exc
