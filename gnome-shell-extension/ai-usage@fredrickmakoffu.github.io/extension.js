@@ -726,6 +726,11 @@ const Indicator = GObject.registerClass(
             // so the id is recorded when it is shown, not when it is dismissed.
             this._landingShownId = null;
             this._landingMode = "fresh"; // "fresh" (acknowledges) | "latest"
+            // At most one landing page per open. The daemon is asked for state
+            // when the popover opens, so a new message can arrive a moment
+            // later; without this, Continue would show the *next* message
+            // immediately instead of returning to the list.
+            this._landingShownThisOpen = false;
 
             this._dot = new St.Widget({
                 style_class: "ai-usage-dot",
@@ -769,6 +774,7 @@ const Indicator = GObject.registerClass(
             this.menu.connect("open-state-changed", (_menu, open) => {
                 if (open) {
                     this._ext.refresh();
+                    this._landingShownThisOpen = false;
                     const billboard = this._state?.billboard;
                     // The daemon decides whether anything is worth interrupting
                     // for: `billboard` is set only while a message is
@@ -776,6 +782,7 @@ const Indicator = GObject.registerClass(
                     // here is the only routing the extension does.
                     if (billboard && billboard.id !== this._landingShownId) {
                         this._landingShownId = billboard.id;
+                        this._landingShownThisOpen = true;
                         this._landingMode = "fresh";
                         this._navigate("landing");
                     } else if (this._screen !== "list") {
@@ -985,6 +992,25 @@ const Indicator = GObject.registerClass(
             }
             this._updateDot();
             this._updateSessions();
+
+            // The daemon is asked for state on open, so the answer -- possibly
+            // carrying a message generated seconds ago -- lands after the
+            // popover has already rendered the list. Take the turn then, but
+            // only once per open and only from the list.
+            const billboard = state?.billboard;
+            if (
+                this.menu.isOpen &&
+                !this._landingShownThisOpen &&
+                this._screen === "list" &&
+                billboard &&
+                billboard.id !== this._landingShownId
+            ) {
+                this._landingShownId = billboard.id;
+                this._landingShownThisOpen = true;
+                this._landingMode = "fresh";
+                this._navigate("landing");
+                return;
+            }
             this._render(false);
         }
 

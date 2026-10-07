@@ -339,7 +339,12 @@ class DaemonBillboardTest(unittest.TestCase):
         stub._billboard = None
         stub._latest_message = None
         stub._publish = mock.Mock()
-        stub._refresh_billboard = types.MethodType(UsageDaemon._refresh_billboard, stub)
+        for name in (
+            "_billboard_ids",
+            "_refresh_billboard",
+            "_publish_billboard_change",
+        ):
+            setattr(stub, name, types.MethodType(getattr(UsageDaemon, name), stub))
         return stub
 
     def test_a_pending_message_becomes_the_billboard(self):
@@ -381,6 +386,32 @@ class DaemonBillboardTest(unittest.TestCase):
         stub = self.daemon(billboard_freshness_hours=1)
         stub._refresh_billboard(self.con)
         self.assertIsNone(stub._billboard)
+
+    def test_a_new_message_is_published_exactly_once(self):
+        # The popover triggers this on every open, so it has to be cheap and
+        # quiet when nothing has changed.
+        stub = self.daemon()
+        self.assertFalse(stub._publish_billboard_change())
+        ledger.store_message(self.con, kind="fun", key="k", body="body")
+        self.assertTrue(stub._publish_billboard_change())
+        self.assertFalse(stub._publish_billboard_change())
+        self.assertEqual(stub._publish.call_count, 1)
+
+    def test_acknowledging_republishes_with_the_next_message(self):
+        from cursor_spend_monitor.daemon import UsageDaemon
+
+        first = ledger.store_message(self.con, kind="fun", key="a", body="a")
+        ledger.store_message(self.con, kind="fun", key="b", body="b")
+        stub = self.daemon()
+        stub._publish_billboard_change()
+        newest = ledger.latest_message(self.con)
+        assert newest is not None
+        self.assertEqual(stub._billboard["id"], newest["id"])
+
+        UsageDaemon.acknowledge(stub, stub._billboard["id"])
+        # Acknowledging the newest leaves the older one as what the page offers.
+        self.assertEqual(stub._billboard["id"], first)
+        self.assertEqual(stub._publish.call_count, 2)
 
     def test_the_payload_carries_both_fields_when_absent(self):
         from cursor_spend_monitor.daemon import UsageDaemon
