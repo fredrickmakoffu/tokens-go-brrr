@@ -396,7 +396,14 @@
 .ai-usage-landing-icon { margin-top: 2px; }
 .ai-usage-landing-name { font-size: 0.98em; font-weight: 700; color: #f0f0f0; }
 .ai-usage-landing-role { font-size: 0.84em; color: #a3a5a8; }
-.ai-usage-landing-actions { spacing: 8px; margin-top: 8px; }
+/* The popover's content box has no padding of its own, so whatever sits last
+   decides how far the panel floor is. This row is last on the landing page, and
+   with no bottom margin the button rested on the border. */
+.ai-usage-landing-actions {
+  spacing: 8px;
+  margin-top: 10px;
+  margin-bottom: 16px;
+}
 .ai-usage-landing-continue {
   height: 38px;
   padding: 0 26px;
