@@ -440,5 +440,97 @@ class CredentialTest(unittest.TestCase):
             self.assertEqual(list(Path(tmp).iterdir()), [])
 
 
+class DaemonComposeTest(unittest.TestCase):
+    """The daemon's wiring: templates, unless a model can improve on them."""
+
+    def setUp(self) -> None:
+        import tempfile as _tempfile
+
+        from cursor_spend_monitor import ledger as _ledger
+
+        self._dir = _tempfile.TemporaryDirectory()
+        self.addCleanup(self._dir.cleanup)
+        self.con = _ledger.connect(Path(self._dir.name) / "usage.db")
+        self.addCleanup(self.con.close)
+        self.ledger = _ledger
+
+    def daemon(self, **values):
+        import types as _types
+
+        from cursor_spend_monitor.config import MonitorConfig
+        from cursor_spend_monitor.daemon import UsageDaemon
+
+        stub = mock.Mock()
+        stub.config = MonitorConfig(**values)
+        stub.snapshots = []
+        stub._facts_for = _types.MethodType(UsageDaemon._facts_for, stub)
+        return stub
+
+    def message(self) -> Message:
+        return Message(kind=INFORMATIVE, key="weekly:1", body="template body")
+
+    def compose(self, stub):
+        from cursor_spend_monitor.daemon import UsageDaemon
+
+        return UsageDaemon._compose(stub, self.con, [self.message()])
+
+    def test_the_model_is_not_consulted_while_the_feature_is_off(self):
+        stub = self.daemon(llm_notifications=False)
+        with mock.patch.object(llm, "choose") as choose:
+            result = self.compose(stub)
+        choose.assert_not_called()
+        self.assertEqual(result[0].body, "template body")
+
+    def test_no_generator_with_room_keeps_the_template(self):
+        stub = self.daemon(llm_notifications=True)
+        with mock.patch.object(llm, "choose", return_value=None) as choose:
+            result = self.compose(stub)
+        choose.assert_called_once()
+        self.assertEqual(result[0].body, "template body")
+
+    def test_a_written_message_replaces_the_template(self):
+        stub = self.daemon(llm_notifications=True)
+        written = Message(kind=INFORMATIVE, key="weekly:1", body="model body")
+        with (
+            mock.patch.object(llm, "choose", return_value=self.generator()),
+            mock.patch.object(llm, "rewrite", return_value=written),
+        ):
+            result = self.compose(stub)
+        self.assertEqual(result[0].body, "model body")
+
+    def test_a_failed_rewrite_keeps_the_template(self):
+        stub = self.daemon(llm_notifications=True)
+        with (
+            mock.patch.object(llm, "choose", return_value=self.generator()),
+            mock.patch.object(llm, "rewrite", return_value=None),
+        ):
+            result = self.compose(stub)
+        self.assertEqual(result[0].body, "template body")
+
+    def test_the_floor_and_the_pins_come_from_the_config(self):
+        stub = self.daemon(
+            llm_notifications=True,
+            llm_min_headroom=42,
+            llm_generator_provider="opencode",
+            llm_generator_model="a-cheap-model",
+        )
+        with mock.patch.object(llm, "choose", return_value=None) as choose:
+            self.compose(stub)
+        kwargs = choose.call_args.kwargs
+        self.assertEqual(kwargs["floor"], 42)
+        self.assertEqual(kwargs["provider"], "opencode")
+        self.assertEqual(kwargs["model"], "a-cheap-model")
+
+    def generator(self) -> llm.Generator:
+        return llm.Generator(
+            provider_id="claude",
+            name="Claude Code",
+            model="a-cheap-model",
+            short_headroom=60,
+            monthly_headroom=None,
+            reason="test",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
