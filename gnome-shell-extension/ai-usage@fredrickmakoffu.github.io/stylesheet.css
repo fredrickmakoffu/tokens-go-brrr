@@ -370,11 +370,16 @@
    under it as a badge plus a name, so the page answers "what is this about" as
    well as "what does it say". */
 .ai-usage-landing { padding: 14px 16px 16px 16px; spacing: 10px; }
+/* The mark sits beside the quote rather than above it. On its own line its tall
+   line box left a gap the height of the glyph, which read as the quote floating
+   away from its own opening mark. `line-height: 1` keeps the box tight to the
+   glyph; a negative margin is what broke this screen once already. */
+.ai-usage-landing-quote-row { spacing: 6px; }
 .ai-usage-landing-mark {
-  font-size: 2.2em;
+  font-size: 1.8em;
   font-weight: 700;
   color: #3a3e44;
-  margin-bottom: 2px;
+  line-height: 1;
 }
 .ai-usage-landing-quote {
   font-size: 1.18em;

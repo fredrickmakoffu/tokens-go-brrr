@@ -35,7 +35,7 @@ ln -sfn "$REPO/gnome-shell-extension/$UUID" "$RUNTIME/data/gnome-shell/extension
 
 # A keyfile settings backend, so the test never touches the real session's
 # enabled-extensions.
-cat > "$RUNTIME/config/glib-2.0/settings/keyfile" <<EOF
+cat >"$RUNTIME/config/glib-2.0/settings/keyfile" <<EOF
 [org/gnome/shell]
 enabled-extensions=['$UUID']
 disable-user-extensions=false
@@ -51,25 +51,40 @@ if (!i) {
     let n = 0;
     i.menu.open();
     GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
-        if (n >= screens.length) {
-            log('[layout-smoke] walked ' + n + ' screens');
-            return GLib.SOURCE_REMOVE;
+        if (n < screens.length) {
+            const name = screens[n++];
+            const toolId = i.tools && i.tools.length ? i.tools[0].id : null;
+            try {
+                i._navigate(name, toolId);
+            } catch (e) {
+                log('[layout-smoke] ' + name + ' threw: ' + e.message);
+            }
+            return GLib.SOURCE_CONTINUE;
         }
-        const name = screens[n++];
-        const toolId = i.tools && i.tools.length ? i.tools[0].id : null;
+        // Behaviour, not layout: Continue has to get the user out of this
+        // screen. It once did not, because the proxy's interface XML declared
+        // no Acknowledge method and the missing call threw before the
+        // navigation ran — stranding anyone who opened the page.
+        i._landingMode = 'latest';
+        i._navigate('landing');
+        const before = i._screen;
         try {
-            i._navigate(name, toolId);
+            i._leaveLanding();
         } catch (e) {
-            log('[layout-smoke] ' + name + ' threw: ' + e.message);
+            log('[layout-smoke] leaveLanding threw: ' + e.message);
         }
-        return GLib.SOURCE_CONTINUE;
+        if (before !== 'landing' || i._screen !== 'list') {
+            log('[layout-smoke] continue FAILED: was ' + before + ', now ' + i._screen);
+        }
+        log('[layout-smoke] walked ' + n + ' screens');
+        return GLib.SOURCE_REMOVE;
     });
 }
 'started'
 JS
 
 export XDG_CONFIG_HOME="$RUNTIME/config" XDG_DATA_HOME="$RUNTIME/data" \
-       XDG_CACHE_HOME="$RUNTIME/cache" GSETTINGS_BACKEND=keyfile
+      XDG_CACHE_HOME="$RUNTIME/cache" GSETTINGS_BACKEND=keyfile
 # Exported because the driver is evaluated by the *inner* shell: DRIVER is
 # referenced inside the escaped string below, so without this it expands to
 # nothing and the test walks no screens at all.
@@ -90,37 +105,47 @@ dbus-run-session -- bash -c "
 
 echo
 if [ ! -s "$LOG" ]; then
-  echo "FAIL: the shell produced no log at all; it never started."
-  echo "      (check that gnome-shell can run with --headless here)"
-  exit 2
+      echo "FAIL: the shell produced no log at all; it never started."
+      echo "      (check that gnome-shell can run with --headless here)"
+      exit 2
 fi
 
 if grep -q "\[layout-smoke\] extension not loaded" "$LOG" 2>/dev/null; then
-  echo "FAIL: the extension was not loaded in the nested shell."
-  exit 2
+      echo "FAIL: the extension was not loaded in the nested shell."
+      exit 2
 fi
 
 # Eval's return value does not survive gdbus here, so the driver announces
 # itself in the log instead. Without this, a driver that never ran would look
 # exactly like a clean pass — which is worse than having no test.
 if ! grep -q "\[layout-smoke\] walked" "$LOG" 2>/dev/null; then
-  echo "FAIL: the screen driver never ran, so nothing was actually tested."
-  echo "      Eval said: $(head -c 200 "$RUNTIME/eval.log" 2>/dev/null)"
-  exit 2
+      echo "FAIL: the screen driver never ran, so nothing was actually tested."
+      echo "      Eval said: $(head -c 200 "$RUNTIME/eval.log" 2>/dev/null)"
+      exit 2
 fi
 
 ALLOCATIONS="$(grep -c "tried to allocate a size" "$LOG" 2>/dev/null)"
 THROWN="$(grep -c "\[layout-smoke\].*threw" "$LOG" 2>/dev/null)"
+CONTINUE_BROKE="$(grep -c "\[layout-smoke\] continue FAILED" "$LOG" 2>/dev/null)"
+
+if [ "${CONTINUE_BROKE:-0}" != "0" ]; then
+  echo "FAIL: Continue did not return to the provider list."
+  grep "\[layout-smoke\] continue FAILED" "$LOG" | head -3
+  echo
+  echo "The landing page must always be escapable — check that nothing in"
+  echo "_leaveLanding() can throw before it navigates."
+  exit 1
+fi
 
 if [ "${ALLOCATIONS:-0}" != "0" ] || [ "${THROWN:-0}" != "0" ]; then
-  echo "FAIL: $ALLOCATIONS allocation warning(s), $THROWN screen(s) threw."
-  echo
-  grep "tried to allocate a size" "$LOG" | sort -u | head -10
-  grep "\[layout-smoke\].*threw" "$LOG" | head -10
-  echo
-  echo "A negative height means a box is subtracting more than it has —"
-  echo "look for a negative margin or an unset dimension in that screen's CSS."
-  exit 1
+      echo "FAIL: $ALLOCATIONS allocation warning(s), $THROWN screen(s) threw."
+      echo
+      grep "tried to allocate a size" "$LOG" | sort -u | head -10
+      grep "\[layout-smoke\].*threw" "$LOG" | head -10
+      echo
+      echo "A negative height means a box is subtracting more than it has —"
+      echo "look for a negative margin or an unset dimension in that screen's CSS."
+      exit 1
 fi
 
 echo "PASS: $(grep -o 'walked [0-9]* screens' "$LOG" | head -1) and every one laid"
