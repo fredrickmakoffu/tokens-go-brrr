@@ -31,36 +31,36 @@ from typing import Protocol
 
 @dataclass
 class HarvestResult:
-  """What one reader did, in terms the CLI prints and tests assert."""
+    """What one reader did, in terms the CLI prints and tests assert."""
 
-  harvester: str
-  provider: str
-  scanned: int = 0
-  # Rows that actually changed in the ledger. Re-reading an unchanged store
-  # reports 0 here, which is the evidence that idempotency holds.
-  sessions: int = 0
-  per_model: int = 0
-  folded_days: int = 0
-  watermark: str | None = None
-  note: str = ""
-  failed: bool = False
+    harvester: str
+    provider: str
+    scanned: int = 0
+    # Rows that actually changed in the ledger. Re-reading an unchanged store
+    # reports 0 here, which is the evidence that idempotency holds.
+    sessions: int = 0
+    per_model: int = 0
+    folded_days: int = 0
+    watermark: str | None = None
+    note: str = ""
+    failed: bool = False
 
-  @property
-  def changed(self) -> int:
-    return self.sessions + self.per_model
+    @property
+    def changed(self) -> int:
+        return self.sessions + self.per_model
 
 
 class Harvester(Protocol):
-  # Stable name for watermarks and log lines (`opencode`, `claude_jsonl`).
-  id: str
-  # The provider id this reader feeds, matching the panel's provider list.
-  # `cursor_api` reads for provider `cursor`, so the two differ.
-  provider: str
+    # Stable name for watermarks and log lines (`opencode`, `claude_jsonl`).
+    id: str
+    # The provider id this reader feeds, matching the panel's provider list.
+    # `cursor_api` reads for provider `cursor`, so the two differ.
+    provider: str
 
-  def available(self) -> bool:
-    """True when the local store this reader needs is present."""
-    ...
+    def available(self) -> bool:
+        """True when the local store this reader needs is present."""
+        ...
 
-  def harvest(self, con: sqlite3.Connection, *, full: bool = False) -> HarvestResult:
-    """Read the store and write what changed. Must not raise."""
-    ...
+    def harvest(self, con: sqlite3.Connection, *, full: bool = False) -> HarvestResult:
+        """Read the store and write what changed. Must not raise."""
+        ...
