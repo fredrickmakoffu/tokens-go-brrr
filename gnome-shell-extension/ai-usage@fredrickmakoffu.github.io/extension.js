@@ -25,6 +25,9 @@ const IFACE_XML = `
       <arg type="s" direction="in" name="provider"/>
       <arg type="s" direction="in" name="metric"/>
     </method>
+    <method name="Acknowledge">
+      <arg type="u" direction="in" name="id"/>
+    </method>
     <method name="Quit"/>
     <signal name="StateChanged"><arg type="s" name="json"/></signal>
   </interface>
@@ -1650,10 +1653,21 @@ const Indicator = GObject.registerClass(
                 orientation: Clutter.Orientation.VERTICAL,
                 x_expand: true,
             });
-            body.add_child(label("\u201c", "ai-usage-landing-mark"));
-            body.add_child(
+            // The opening mark sits beside the text rather than above it: on its
+            // own line its tall line box left a gap the height of the glyph.
+            const quote = new St.BoxLayout({
+                style_class: "ai-usage-landing-quote-row",
+                x_expand: true,
+            });
+            quote.add_child(
+                label("\u201c", "ai-usage-landing-mark", {
+                    y_align: Clutter.ActorAlign.START,
+                }),
+            );
+            quote.add_child(
                 wrappedLabel(billboard.text ?? "", "ai-usage-landing-quote"),
             );
+            body.add_child(quote);
             if (billboard.share)
                 body.add_child(
                     wrappedLabel(billboard.share, "ai-usage-landing-share"),
@@ -1700,7 +1714,6 @@ const Indicator = GObject.registerClass(
                 style_class: "ai-usage-landing-continue",
                 label: "Continue",
                 can_focus: true,
-                x_expand: true,
             });
             cont.connect("clicked", () => this._leaveLanding());
             actions.add_child(cont);
@@ -1726,13 +1739,16 @@ const Indicator = GObject.registerClass(
         }
 
         _leaveLanding() {
+            const billboard = this._landingBillboard();
+            // Leave first. Getting out of this screen must not depend on a
+            // D-Bus call succeeding: when the proxy's interface XML had no
+            // Acknowledge, the missing method threw and stranded the user here.
+            this._navigate("list");
+            if (billboard?.id === undefined || billboard?.id === null) return;
             // Pressing Continue is the user saying they have seen it, so the
             // daemon records that and never offers this one again. The same
             // applies to reading it back through Latest.
-            const billboard = this._landingBillboard();
-            if (billboard?.id !== undefined && billboard?.id !== null)
-                this._ext.acknowledge(billboard.id);
-            this._navigate("list");
+            this._ext.acknowledge(billboard.id);
         }
 
         _renderGuide(screen) {
@@ -1961,8 +1977,16 @@ export default class AiUsageExtension extends Extension {
 
     acknowledge(messageId) {
         // Durable by design: the daemon stores this, so a dismissal survives a
-        // reload or a logout and the message cannot come back.
-        if (this._proxy?.g_name_owner)
+        // reload or a logout and the message cannot come back. Defensive on
+        // purpose: the proxy only exposes AcknowledgeRemote if this file's
+        // interface XML declares it, and a method that is missing or refused
+        // must never break the caller.
+        if (!this._proxy?.g_name_owner) return;
+        if (typeof this._proxy.AcknowledgeRemote !== "function") return;
+        try {
             this._proxy.AcknowledgeRemote(messageId, () => {});
+        } catch (e) {
+            console.error(`[ai-usage] acknowledge failed: ${e.message}`);
+        }
     }
 }
