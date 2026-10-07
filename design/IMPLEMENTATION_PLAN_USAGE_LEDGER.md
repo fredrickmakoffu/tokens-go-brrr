@@ -494,28 +494,64 @@ yields the template; a 429 yields the template; credential files are untouched.
 
 ---
 
-## Phase 6 — Panel billboard (the only UI change)
+## Phase 6 — The landing page (the only UI change)
 
-### Step 6.1 — Daemon publishes `billboard`
+**Authoritative design:** `design/BILLBOARD_LANDING_PAGE.md`. This phase is the
+implementation order for it; read that document for the routing rules, the state
+contract and the open decisions.
 
-- Optional state field `billboard: {id, text, share, kind, created_at}` — the
-  last generated message. Additive; `state.SCHEMA_VERSION` stays `1`.
+The panel gains one screen: a notification blown up as a quote, with the AI it is
+about underneath (icon and name) and a **Continue** back to the provider list. It
+does **not** appear on every open — the daemon decides whether anything is worth
+interrupting for, and remembers a dismissal so it survives a logout.
 
-### Step 6.2 — Extension
+> The design's own note applies here: the earlier §9 of the analytics doc
+described a weaker version (a quote swapped in place of the list, dismissed by a
+chevron or a timer) with no way to tell which message deserved the interruption
+and no memory of being dismissed. That is why it would have shown on every open.
 
-- `extension.js`: a `billboard` screen shown when the popover opens *and* state
-  carries a fresh `billboard` id that has not been shown; renders the message as
-  a quote with the design mockup's footer styling; a **Next** chevron (the
-  existing `chevronRight` icon) and a **4-second** GLib timeout both fall through
-  to the list. Reopening inside the cooldown goes straight to the list.
+### Step 6.1 — Routing policy, in the daemon
 
-### Step 6.3 — Styles + devtest
+- `notify_engine`: a `PRIORITY` per kind and a freshness window per kind;
+  `expires_at` on `Message`; **digests start setting `provider`** (only
+  actionable messages set it today), plus the `role` the landing page renders.
+- `ledger`: `messages.seen_at`, plus a **guarded, idempotent** `ALTER TABLE`
+  migration. This is the first additive schema change since the ledger shipped,
+  so it has to upgrade an existing `usage.db` in place rather than demanding a
+  fresh one. Also `mark_message_seen(id)`; `latest_message()` stays agnostic to
+  acknowledgement and expiry.
+- `billboard_for(con, now)`: unacknowledged and unexpired, priority then newest,
+  one message or `None`.
 
-- `stylesheet.css` quote classes; `devtest/mock_daemon.py` gains a `billboard`
-  so the flow is testable against the mock (design §13).
+### Step 6.2 — Publish and acknowledge
 
-**DoD:** with the mock daemon: open → quote → Next → list; open → quote → wait
-4 s → list; reopen immediately → list.
+- State gains `billboard` (the one message to show, or `null`) and
+  `latest_message` (newest regardless of ack or expiry). Additive, so
+  `state.SCHEMA_VERSION` stays `1` and an older extension behaves as it does now.
+- D-Bus gains `Acknowledge(id)`, wired through `dbus_service` to the daemon, so a
+  dismissal is durable across logins and extension reloads.
+
+### Step 6.3 — Extension
+
+- A `landing` screen dispatched beside `list`/`detail`/`sessions`/`guide`/`about`;
+  the open-flow routes to it on a per-session `_landingShownId`.
+- Continue (acknowledge, then the list), a quieter Skip chevron, and Copy for
+  `SHARE:` lines via `St.Clipboard`.
+- A **Latest** header button, shown only when a message exists, and a subtle
+  `has-update` marker on the status dot.
+
+### Step 6.4 — Styles and devtest
+
+- `ai-usage-landing-*` classes in `stylesheet.css`. There is no quote styling to
+  reuse today; this is new CSS.
+- `devtest/mock_daemon.py` gains a `billboard` and a way to cycle to the next
+  message; `stress_daemon.py` gains a maximum-length quote to prove wrapping.
+
+**DoD, against the mock daemon:** open → quote → Continue → list; reopen → list
+with no repeat; Latest → quote; a new mock message lands again; an acknowledged
+message never lands; `billboard` is `null` on an empty ledger. Plus the Python
+routing tests in `tests/test_billboard.py`, including that the migration is a
+no-op the second time it runs.
 
 ---
 

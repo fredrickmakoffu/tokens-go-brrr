@@ -428,6 +428,13 @@ cooldown per kind.
 
 ## 9. The quote-mode panel (billboard) — optional, minimal
 
+> **Superseded in detail by `design/BILLBOARD_LANDING_PAGE.md`.** That document
+> keeps this intent — a quote shown instead of the provider list, dismissible —
+> and settles what this section left open: which message earns the interruption,
+> the featured AI shown under the quote, a dismissal that survives a logout, and
+> a way to read the latest one on demand. Where the two differ, the newer
+> document wins.
+
 The existing GNOME Shell popover keeps its provider list. New behavior — when
 state publishes a fresh generated message (`billboard` field), the popover
 opens showing the **quote in the billboard style** instead of the list:
