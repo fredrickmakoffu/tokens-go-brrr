@@ -170,6 +170,11 @@ class UsageDaemon:
         the provider is least able to answer. force is for the scheduled tick,
         which is already spaced by the poll interval.
         """
+        # An out-of-band message -- the `quote` command writes straight to the
+        # ledger from another process, and the scheduler ticks on its own clock --
+        # should reach the panel on the next open rather than at the next slow
+        # timer. Two indexed reads, and a republish only when something changed.
+        self._publish_billboard_change()
         if self._polling:
             return False
         if not force and self.last_fetch is not None:
@@ -353,7 +358,9 @@ class UsageDaemon:
                         continue
                     reader.harvest(con, full=self._harvest_full)
                 ledger.prune(con, keep_days=self.config.ledger_days)
-                self._refresh_billboard(con)
+                # Back to the main loop before touching D-Bus: this runs on a
+                # worker thread, and the state signal is GLib's to emit.
+                GLib.idle_add(self._publish_billboard_change)
         except Exception as exc:  # noqa: BLE001 - a reader must not stop the daemon
             print(f"Ledger harvest failed: {exc}", file=sys.stderr, flush=True)
         finally:
@@ -434,7 +441,7 @@ class UsageDaemon:
             if self._wanted(message.kind):
                 send("AI usage", message.body)
         if fresh:
-            self._refresh_billboard(con)
+            self._publish_billboard_change()
         return True
 
     def _notify_events(self) -> None:
@@ -469,7 +476,7 @@ class UsageDaemon:
             )
             send("AI usage", message.body, urgency="critical" if spent else "normal")
         if fresh:
-            self._refresh_billboard(con)
+            self._publish_billboard_change()
 
     def _wanted(self, kind: str) -> bool:
         return kind in (self.config.notify_types or [])
@@ -497,6 +504,31 @@ class UsageDaemon:
             return
         self._refresh_billboard(con)
         self._publish()
+
+    def _billboard_ids(self) -> tuple[Any, Any]:
+        return (
+            (self._billboard or {}).get("id"),
+            (self._latest_message or {}).get("id"),
+        )
+
+    def _publish_billboard_change(self) -> bool:
+        """Re-read the landing page, republishing only if it changed.
+
+        Messages reach the ledger from several places -- the scheduler, an event,
+        and the `quote` command in a different process -- so the billboard can
+        move without a poll having happened. Comparing ids first keeps the check
+        cheap enough to run on every open, which is what makes an out-of-band
+        message show up on the next click instead of minutes later.
+        """
+        con = self.ledger.connection
+        if con is None:
+            return False
+        before = self._billboard_ids()
+        self._refresh_billboard(con)
+        if self._billboard_ids() == before:
+            return False
+        self._publish()
+        return True
 
     def _refresh_billboard(self, con: sqlite3.Connection) -> None:
         """Choose the one message the panel should open on, if any.
