@@ -453,6 +453,29 @@ template; `quote` prints the latest; nothing repeats inside its cooldown.
 **Goal:** swap wording for an LLM chosen by capacity, with hard floors and
 template fallback.
 
+**Status:** ✅ **done.** Shipped as **one module**, `llm_composer.py`, rather than
+`routing.py` + `generators/` + `prompt.py`. Those three are one pipeline sharing
+one vocabulary, and a single file keeps the whole contract in view — the same
+reasoning that turned Phase 4's package into `notify_engine.py`.
+`tests/test_llm_composer.py` adds 40 tests; the suite is at 391.
+
+What it does: picks the writer by short-window headroom (weekly/rolling, with
+monthly only a tiebreak and the trigger provider excluded outright), asks for the
+wording **and** for `FEATURED: <id>` chosen from a ranked list of real provider
+facts, validates that id and falls back to the derived one, and returns the
+template on every failure — no generator with room, a missing credential, a 429,
+an unparseable reply. Credentials are opened read-only for both providers, and a
+test asserts the file's bytes and mtime are unchanged afterwards.
+
+Wired into the daemon through `_compose`, which runs on a **worker thread**
+because a network call on the main loop would freeze the panel, and delivers back
+through `GLib.idle_add`. `_deliver` owns the sending so both the scheduled and
+the event path share it.
+
+**Not verified here:** no live call was made, so the two endpoints and the
+default model ids are unproven against the real services. A wrong model id
+degrades to the template, which is exactly why that is survivable.
+
 ### Step 5.1 — `routing.py` (§6.2)
 
 - Score providers with usable meters: rolling/weekly headroom primary, monthly
