@@ -785,10 +785,10 @@ const Indicator = GObject.registerClass(
                         this._landingShownThisOpen = true;
                         this._landingMode = "fresh";
                         this._navigate("landing");
-                    } else if (this._screen !== "list") {
-                        this._navigate("list");
-                    } else {
+                    } else if (this._screen === "list") {
                         this._beginEntry();
+                    } else {
+                        this._navigate("list");
                     }
                 } else if (this._entryId) {
                     GLib.source_remove(this._entryId);
