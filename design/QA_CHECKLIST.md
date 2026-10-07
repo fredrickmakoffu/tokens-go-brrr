@@ -3,6 +3,10 @@
 What to verify by hand, what the automated suite already covers, and what is
 expected to look broken because it is not built yet.
 
+> **Testing the panel?** Use `design/UI_TEST_GUIDE.md` instead. This file is
+> about the ledger and the command line; that one walks the landing page by
+> hand and includes the commands that make the periodic paths fire on demand.
+
 Run everything from the repo root.
 
 ---
@@ -20,9 +24,10 @@ systemctl --user restart cursor-spend-monitor.service   # NEVER with sudo
 `systemctl --user` acts on your own user manager; `sudo` makes the caller root
 and looks in root's manager, where the unit does not exist.
 
-The extension needs no reload — it is unchanged by this work. Reload it only
-after `extension.js` or `stylesheet.css` changes, with
-`gnome-shell-extension/devtest/live-reload.sh`.
+The extension **does** need a reload for the landing page: `extension.js` and
+`stylesheet.css` both changed. GNOME Shell reads an extension only at login, so
+reload the running one with `gnome-shell-extension/devtest/live-reload.sh` —
+`design/UI_TEST_GUIDE.md` §0 has the paste step.
 
 **Evidence the new code is live:** `~/.local/share/cursor-spend-monitor/usage.db`
 appears within about a minute of the restart.
@@ -35,7 +40,7 @@ appears within about a minute of the restart.
 python3 -m unittest discover -s tests -q
 ```
 
-Expect **323 tests, OK**. What it pins, by module:
+Expect **396 tests, OK**. What it pins, by module:
 
 | Area | Tests | The property that matters |
 | --- | --- | --- |
@@ -46,6 +51,8 @@ Expect **323 tests, OK**. What it pins, by module:
 | `test_codex_state.py` | 8 | no token column → no rows, no failure, and the schema is recorded |
 | `test_pi_sessions.py` | 8 | no token figure is invented; a vanished session keeps its last-seen end |
 | `test_notifications.py` | 28 | an empty ledger produces no digest; an estimate is labelled; borrowed rows never counted twice; cooldowns hold and release |
+| `test_billboard.py` | 28 | priority order and per-kind freshness; an acknowledged message never lands again; the `seen_at` migration upgrades an old store and is a no-op the second time |
+| `test_llm_composer.py` | 45 | the writer is chosen by headroom with the trigger excluded; the prompt carries the numbers and asks for `FEATURED`; a refusal or an unknown `FEATURED` id keeps the template; credentials are never written to |
 | `test_config.py` | 6 | a corrupt config falls back instead of killing the daemon |
 | `test_state.py` | +2 | **the idle callbacks fire once** — the regression that pegged a CPU core |
 

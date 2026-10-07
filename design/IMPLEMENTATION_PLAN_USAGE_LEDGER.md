@@ -601,11 +601,20 @@ no-op the second time it runs.
 
 ## Phase 7 — Docs, version, and release hygiene
 
-- README: ledger section, `harvest`/`report`/`quote`, notification config, and
-  the **privacy note** (numbers only; prompts go to a provider the user already
-  pays; no auto-posting).
-- `config` command prints the new keys; `setup` names the harvester sources.
-- Version bump to `0.5.0`; worktree/PR via the repo's normal flow.
+**Status:** ✅ **done.** README consolidated (two earlier appends had left the
+ledger section duplicated) and extended with the landing page and the LLM
+wording, including the note that the default generator model ids are unverified.
+Version bumped to **0.5.0** in `pyproject.toml` and `__init__.py`.
+
+`design/UI_TEST_GUIDE.md` is new: the panel tested by clicking, with commands
+that make the daily/weekly/monthly clocks and the actionable alert fire on
+demand rather than being waited for.
+
+**Deliberately not done:** `metadata.json`'s integer `version` is left at `1`.
+GNOME Shell refuses to hot-reload an extension whose version changed while
+unloaded ("you need to log out"), and the live-reload workflow depends on being
+able to swap the running extension without a logout. That integer only matters
+for extensions.gnome.org.
 
 ---
 
