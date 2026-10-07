@@ -186,6 +186,7 @@ CREATE TABLE IF NOT EXISTS messages (
     body       TEXT    NOT NULL,
     share      TEXT,
     meta       TEXT,
+    seen_at    INTEGER,                    -- set when the panel has shown it
     UNIQUE(kind, key, created_at)
 );
 
@@ -440,9 +441,24 @@ def connect(path: Path | None = None) -> sqlite3.Connection:
     # versa; the daemon and a `report` in a terminal are routinely concurrent.
     con.execute("PRAGMA journal_mode = WAL")
     con.executescript(SCHEMA)
+    _migrate_messages(con)
     _stamp_format(con)
     con.commit()
     return con
+
+
+def _migrate_messages(con: sqlite3.Connection) -> None:
+    """Add columns to `messages` that an older store predates.
+
+    `CREATE TABLE IF NOT EXISTS` cannot alter a table that already exists, so an
+    additive change needs a step of its own. This is idempotent, and safe in
+    both directions: an older daemon never reads the column, and a newer one
+    upgrades the store in place rather than demanding a fresh database or a
+    `harvest --full`.
+    """
+    columns = {row[1] for row in con.execute("PRAGMA table_info(messages)")}
+    if "seen_at" not in columns:
+        con.execute("ALTER TABLE messages ADD COLUMN seen_at INTEGER")
 
 
 def _stamp_format(con: sqlite3.Connection) -> None:
@@ -1279,10 +1295,44 @@ def recent_checks(con: sqlite3.Connection, *, limit: int = 20) -> list[dict[str,
 
 def latest_message(con: sqlite3.Connection) -> dict[str, Any] | None:
     row = con.execute(
-        "SELECT id, kind, key, created_at, provider, body, share, meta FROM messages"
-        " ORDER BY created_at DESC, id DESC LIMIT 1"
+        "SELECT id, kind, key, created_at, provider, body, share, meta, seen_at"
+        " FROM messages ORDER BY created_at DESC, id DESC LIMIT 1"
     ).fetchone()
     return dict(row) if row else None
+
+
+def pending_messages(
+    con: sqlite3.Connection, *, limit: int = 20
+) -> list[dict[str, Any]]:
+    """Unacknowledged messages, newest first, for the landing page to choose from.
+
+    Freshness is deliberately not applied here: how long a message stays worth
+    interrupting for depends on its kind, which is a wording-layer concern. This
+    returns everything unread and lets `notify_engine.choose_billboard` decide.
+    """
+    rows = con.execute(
+        "SELECT id, kind, key, created_at, provider, body, share, meta"
+        " FROM messages WHERE seen_at IS NULL"
+        " ORDER BY created_at DESC, id DESC LIMIT ?",
+        (_as_int(limit),),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def mark_message_seen(
+    con: sqlite3.Connection, message_id: int, *, at: datetime | None = None
+) -> int:
+    """Mark a message read so the panel stops offering it. Rows changed.
+
+    Only ever sets the column, never clears it, so a dismissal survives a logout
+    and an extension reload.
+    """
+    cur = con.execute(
+        "UPDATE messages SET seen_at = ? WHERE id = ? AND seen_at IS NULL",
+        (_stamp(at), _as_int(message_id)),
+    )
+    con.commit()
+    return cur.rowcount or 0
 
 
 def store_message(
@@ -1428,7 +1478,9 @@ __all__ = [
     "ingest_transcript_messages",
     "last_message_age",
     "latest_message",
+    "mark_message_seen",
     "model_family_of",
+    "pending_messages",
     "period_totals",
     "project_of",
     "prune",

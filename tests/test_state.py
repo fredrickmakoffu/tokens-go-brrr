@@ -275,6 +275,7 @@ class DaemonPayloadTest(unittest.TestCase):
             last_fetch=datetime.now(timezone.utc),
             last_error=None,
             _billboard=None,
+            _latest_message=None,
         )
 
         payload = UsageDaemon.state_payload(stub)
@@ -287,7 +288,11 @@ class DaemonPayloadTest(unittest.TestCase):
         from cursor_spend_monitor.daemon import UsageDaemon
 
         stub = mock.Mock(
-            snapshots=[], last_fetch=None, last_error=None, _billboard=None
+            snapshots=[],
+            last_fetch=None,
+            last_error=None,
+            _billboard=None,
+            _latest_message=None,
         )
         self.assertIsNone(UsageDaemon.state_payload(stub)["updated_at"])
 

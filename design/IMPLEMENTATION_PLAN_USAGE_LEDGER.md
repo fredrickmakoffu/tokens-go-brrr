@@ -480,6 +480,12 @@ template fallback.
   instruct ≤ 3 sentences, one concrete action when actionable, never invent
   numbers, and the `SHARE:` one-liner (≤ 200 chars) when a shareable variant is
   requested.
+- **Ask for the featured provider too.** The reply carries `FEATURED: <id>`
+  alongside the sentence, chosen from the ranked provider facts in the prompt.
+  Without it the panel renders a badge for whoever the ledger ranked first
+  while the prose talks about someone else. Validate the id against the
+  providers we know and fall back to `notify_engine.featured_provider` — see
+  `design/BILLBOARD_LANDING_PAGE.md` §4b.
 
 ### Step 5.4 — Wire into the mixer
 
@@ -499,6 +505,21 @@ yields the template; a 429 yields the template; credential files are untouched.
 **Authoritative design:** `design/BILLBOARD_LANDING_PAGE.md`. This phase is the
 implementation order for it; read that document for the routing rules, the state
 contract and the open decisions.
+
+**Status:** ✅ **implemented** — daemon, protocol, extension and fixtures — with
+one piece of QA outstanding (it has not been seen on a real screen yet).
+
+What shipped: `messages.seen_at` plus the ledger's first additive migration;
+`notify_engine` priority/freshness/`featured_provider`/`choose_billboard`;
+`billboard` and `latestMessage` in state; `Acknowledge` on D-Bus; the `landing`
+screen with Continue, Copy and a Latest header button; a `has-update` ring on the
+dot; the `ai-usage-landing-*` styles; and fixtures in both devtest daemons.
+`tests/test_billboard.py` adds 26 tests, and the suite is at 349.
+
+The featured AI is **derived from the ledger** rather than mapped, per §4b: the
+leader by tokens (`leading`), or a cheaper provider with a real share of the
+work (`value`), or the provider with the most live headroom for an actionable
+message (`suggested`).
 
 The panel gains one screen: a notification blown up as a quote, with the AI it is
 about underneath (icon and name) and a **Continue** back to the provider list. It

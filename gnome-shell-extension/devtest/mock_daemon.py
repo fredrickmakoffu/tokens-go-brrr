@@ -194,6 +194,59 @@ tools = [
         },
     },
 ]
+
+# Three messages to cycle through, so the landing page can be exercised without
+# waiting for a real one: a recommendation, a value finding, and something
+# shareable. Acknowledging advances to the next.
+BILLBOARDS = [
+    {
+        "id": 1,
+        "kind": "actionable",
+        "priority": 3,
+        "text": (
+            "Claude Code 5-hour limit is at 93%, spent in about 40m. OpenCode "
+            "has room — start the handoff there."
+        ),
+        "share": "",
+        "featured": {
+            "providerId": "opencode",
+            "name": "OpenCode",
+            "role": "suggested",
+        },
+        "createdAt": 1791288693,
+        "expiresAt": None,
+        "reason": "5-hour limit at 93%",
+    },
+    {
+        "id": 2,
+        "kind": "informative",
+        "priority": 2,
+        "text": (
+            "Last week: 38 sessions, 1.9M tokens. OpenCode carried 71% — 1.4M "
+            "tokens for $4.10, the cheapest work in the period."
+        ),
+        "share": "",
+        "featured": {"providerId": "opencode", "name": "OpenCode", "role": "value"},
+        "createdAt": 1791288693,
+        "expiresAt": None,
+        "reason": "1.4M tokens for $4.10",
+    },
+    {
+        "id": 3,
+        "kind": "shareable",
+        "priority": 1,
+        "text": "This month: 154 AI coding sessions and 8.4M tokens across 11 projects.",
+        "share": (
+            "SHARE: This month I ran 154 AI coding sessions across 11 projects. "
+            "One provider did 71% of the work for $4.10."
+        ),
+        "featured": {"providerId": "claude", "name": "Claude Code", "role": "leading"},
+        "createdAt": 1791288693,
+        "expiresAt": None,
+        "reason": "8.4M tokens",
+    },
+]
+_shown = 0
 loop = GLib.MainLoop()
 
 
@@ -203,7 +256,17 @@ def state():
         "updated_at": "2026-09-13T15:00:00+00:00",
         "error": None,
         "tools": tools,
+        "billboard": BILLBOARDS[_shown] if _shown < len(BILLBOARDS) else None,
+        "latestMessage": BILLBOARDS[-1],
     }
+
+
+def acknowledge(message_id):
+    """Advance to the next message, so dismissal can be seen in a row."""
+    global _shown
+    print("mock: Acknowledge", message_id, flush=True)
+    _shown = min(_shown + 1, len(BILLBOARDS))
+    svc.emit_state(state())
 
 
 def set_primary(pid, key):
@@ -223,6 +286,7 @@ svc = UsageService(
     get_state=state,
     on_refresh=refresh,
     on_set_primary=set_primary,
+    on_acknowledge=acknowledge,
     on_quit=loop.quit,
     on_name_lost=loop.quit,
 )

@@ -65,7 +65,7 @@ Two additive fields on the payload the daemon already publishes:
     "featured": {                      // the AI this message is about
       "providerId": "opencode",        // drives the badge icon
       "name": "OpenCode",
-      "role": "suggested"              // suggested | leading | featured
+      "role": "suggested"              // suggested | leading | value
     },
     "createdAt": 1791288693,
     "expiresAt": 1791331893,           // freshness deadline; null = never expires
@@ -125,6 +125,47 @@ Rules, in the order they are applied:
 should work even months later, from `quote` or from the panel.
 
 ---
+
+## 4b. How the featured AI is chosen
+
+The featured AI is **read out of the ledger**, never looked up from a list. Two
+questions decide it, in order:
+
+1. **Which provider carried the period?** The one with the most tokens. That is
+   the default answer, with the role `leading`.
+2. **Did a cheaper one do enough work to be the better story?** If a provider
+   with a real share of the period (at least 20% of its tokens) moved more
+   tokens per dollar than the leader, it becomes the answer with the role
+   `value` — "most use for the least spend" is the thing actually worth telling
+   someone. A provider with no recorded cost cannot win this way: its
+   tokens-per-dollar is unknown, not infinite.
+
+For an **actionable** message the question is different, because the point is
+where to go next: the featured AI is the provider with the most live headroom,
+role `suggested`. The provider in trouble is kept in `meta.trigger`, so the
+message can name both, and the advice is about capacity rather than history.
+
+Display names come from the provider classes themselves
+(`PROVIDERS[id].display_name`), so there is no second copy of "Claude Code" to
+drift out of date.
+
+### The LLM has to name it too
+
+When the wording comes from a model (Phase 5), the prompt must ask for the
+featured provider as well as the sentence. Otherwise the panel renders a badge
+for whoever the ledger ranked first while the prose talks about someone else.
+The generation contract therefore gains a second line:
+
+```text
+FEATURED: <provider id>
+```
+
+with the ranked provider facts in the prompt, so the model chooses from real
+numbers instead of guessing. The daemon validates the returned id against the
+providers it knows, and an unknown or missing one falls back to
+`notify_engine.featured_provider` — so a bad answer degrades to the derived
+choice rather than losing the badge. Templates already behave this way, which is
+what keeps the LLM an upgrade rather than a dependency.
 
 ## 5. Acknowledgement
 
@@ -333,7 +374,7 @@ again.
 | 2 | Once per session even without pressing Continue | yes — closing must not mean it nags next open; it re-lands once at next login if still fresh |
 | 3 | Auto-advance | **off** by default; Continue is the only way out. An 8s safety net is the alternative |
 | 4 | Silent hours | do **not** suppress the landing page (user-initiated); they still suppress desktop notifications |
-| 5 | Featured AI semantics | `suggested` = move here (actionable); `leading` = top of the period (informative/shareable) |
+| 5 | Featured AI semantics | **Resolved:** derived from the ledger (§4b) — `leading` = most tokens, `value` = most tokens per dollar with a real share, `suggested` = most live headroom for an actionable message |
 | 6 | Unread marker on the dot | yes, subtle — discoverability |
 | 7 | Latest button placement | header, beside Guide and About |
 | 8 | In-panel Copy for `SHARE:` lines | yes, via `St.Clipboard`, alongside `quote --tweet` |

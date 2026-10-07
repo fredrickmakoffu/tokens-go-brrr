@@ -94,6 +94,27 @@ tools = [
 ]
 loop = GLib.MainLoop()
 
+# The longest message the generator can produce, to prove the quote wraps rather
+# than being clipped.
+LONG_QUOTE = (
+    "Last month: 214 sessions, 8.4M tokens across 11 projects, up 22% on the "
+    "month before. OpenCode Go carried 71% of the tokens for $4.10, Claude "
+    "Code 26% for $20, and Cursor the remaining 3%. Your top project by tokens "
+    "was cursor-spend-monitor at 1.1M, and 87% of all input tokens were cache "
+    "reads."
+)
+BILLBOARD = {
+    "id": 1,
+    "kind": "informative",
+    "priority": 2,
+    "text": LONG_QUOTE,
+    "share": "",
+    "featured": {"providerId": "opencode", "name": "OpenCode", "role": "value"},
+    "createdAt": 1791288693,
+    "expiresAt": None,
+    "reason": "8.4M tokens for $4.10",
+}
+
 
 def state():
     return {
@@ -101,6 +122,8 @@ def state():
         "updated_at": "2026-09-13T15:00:00+00:00",
         "error": None,
         "tools": tools,
+        "billboard": BILLBOARD,
+        "latestMessage": BILLBOARD,
     }
 
 
@@ -116,6 +139,7 @@ svc = UsageService(
     get_state=state,
     on_refresh=lambda: None,
     on_set_primary=set_primary,
+    on_acknowledge=lambda _id: None,
     on_quit=loop.quit,
     on_name_lost=loop.quit,
 )
