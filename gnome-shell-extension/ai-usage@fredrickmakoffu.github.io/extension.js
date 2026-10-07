@@ -658,7 +658,7 @@ const Row = GObject.registerClass(
             });
         }
 
-        activate(event) {
+        activate(_event) {
             // Clicks on a badge belong to the badge (mockup: e.stopPropagation()).
             this.emit("navigate");
         }
