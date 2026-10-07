@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+# Walk every popover screen in a throwaway headless Shell and fail if any of
+# them lays out to an impossible size.
+#
+# Why this exists: a Clutter allocation warning ("tried to allocate a size of
+# 360.00 x -2147483648.00") is a *layout* bug, not noise, and it is invisible to
+# every other kind of test — no exception is thrown, the JS all runs, and the
+# popover is simply drawn as nothing. That is exactly how a negative
+# `margin-bottom` on one label made clicking Latest appear to close the menu.
+#
+# Nothing here needs a display, a mouse, or the real daemon:
+#   * the mock daemon supplies state (including a billboard and a latest message)
+#   * `--unsafe-mode` re-enables org.gnome.Shell.Eval, which drives the screens
+#   * the Shell's own log is the assertion
+#
+# One trap worth knowing, because it cost an afternoon: the *D-Bus* Eval method
+# evaluates a plain script. Unlike the Alt+F2 Looking Glass console, neither
+# `await` nor `return` is available to it ("SyntaxError: await is only valid in
+# async functions", "return not in function"). Sequencing is therefore done with
+# a GLib timeout chain, and the driver reports itself through the log rather than
+# through a return value.
+#
+# Usage: ./layout-smoke.sh [seconds-to-wait-for-startup]
+set -uo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(cd "$HERE/../.." && pwd)"
+UUID="ai-usage@fredrickmakoffu.github.io"
+BOOT="${1:-12}"
+RUNTIME="$(mktemp -d)"
+LOG="$RUNTIME/shell.log"
+
+mkdir -p "$RUNTIME"/config/glib-2.0/settings "$RUNTIME"/data/gnome-shell/extensions "$RUNTIME"/cache
+ln -sfn "$REPO/gnome-shell-extension/$UUID" "$RUNTIME/data/gnome-shell/extensions/$UUID"
+
+# A keyfile settings backend, so the test never touches the real session's
+# enabled-extensions.
+cat > "$RUNTIME/config/glib-2.0/settings/keyfile" <<EOF
+[org/gnome/shell]
+enabled-extensions=['$UUID']
+disable-user-extensions=false
+welcome-dialog-last-shown-version='99.0'
+EOF
+
+read -r -d '' DRIVER <<'JS'
+const i = Main.panel.statusArea['ai-usage@fredrickmakoffu.github.io'];
+if (!i) {
+    log('[layout-smoke] extension not loaded');
+} else {
+    const screens = ['list', 'guide', 'about', 'landing', 'detail', 'sessions'];
+    let n = 0;
+    i.menu.open();
+    GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
+        if (n >= screens.length) {
+            log('[layout-smoke] walked ' + n + ' screens');
+            return GLib.SOURCE_REMOVE;
+        }
+        const name = screens[n++];
+        const toolId = i.tools && i.tools.length ? i.tools[0].id : null;
+        try {
+            i._navigate(name, toolId);
+        } catch (e) {
+            log('[layout-smoke] ' + name + ' threw: ' + e.message);
+        }
+        return GLib.SOURCE_CONTINUE;
+    });
+}
+'started'
+JS
+
+export XDG_CONFIG_HOME="$RUNTIME/config" XDG_DATA_HOME="$RUNTIME/data" \
+       XDG_CACHE_HOME="$RUNTIME/cache" GSETTINGS_BACKEND=keyfile
+# Exported because the driver is evaluated by the *inner* shell: DRIVER is
+# referenced inside the escaped string below, so without this it expands to
+# nothing and the test walks no screens at all.
+export DRIVER
+
+dbus-run-session -- bash -c "
+  python3 '$HERE/mock_daemon.py' '$REPO' >'$RUNTIME/mock.log' 2>&1 &
+  sleep 1
+  gnome-shell --headless --virtual-monitor 1280x720 --no-x11 --unsafe-mode >'$LOG' 2>&1 &
+  SHELL_PID=\$!
+  sleep $BOOT
+  gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell \
+    --method org.gnome.Shell.Eval \"\$DRIVER\" >'$RUNTIME/eval.log' 2>&1
+  sleep 6
+  kill \$SHELL_PID 2>/dev/null
+  kill %1 2>/dev/null
+" 2>/dev/null
+
+echo
+if [ ! -s "$LOG" ]; then
+  echo "FAIL: the shell produced no log at all; it never started."
+  echo "      (check that gnome-shell can run with --headless here)"
+  exit 2
+fi
+
+if grep -q "\[layout-smoke\] extension not loaded" "$LOG" 2>/dev/null; then
+  echo "FAIL: the extension was not loaded in the nested shell."
+  exit 2
+fi
+
+# Eval's return value does not survive gdbus here, so the driver announces
+# itself in the log instead. Without this, a driver that never ran would look
+# exactly like a clean pass — which is worse than having no test.
+if ! grep -q "\[layout-smoke\] walked" "$LOG" 2>/dev/null; then
+  echo "FAIL: the screen driver never ran, so nothing was actually tested."
+  echo "      Eval said: $(head -c 200 "$RUNTIME/eval.log" 2>/dev/null)"
+  exit 2
+fi
+
+ALLOCATIONS="$(grep -c "tried to allocate a size" "$LOG" 2>/dev/null)"
+THROWN="$(grep -c "\[layout-smoke\].*threw" "$LOG" 2>/dev/null)"
+
+if [ "${ALLOCATIONS:-0}" != "0" ] || [ "${THROWN:-0}" != "0" ]; then
+  echo "FAIL: $ALLOCATIONS allocation warning(s), $THROWN screen(s) threw."
+  echo
+  grep "tried to allocate a size" "$LOG" | sort -u | head -10
+  grep "\[layout-smoke\].*threw" "$LOG" | head -10
+  echo
+  echo "A negative height means a box is subtracting more than it has —"
+  echo "look for a negative margin or an unset dimension in that screen's CSS."
+  exit 1
+fi
+
+echo "PASS: $(grep -o 'walked [0-9]* screens' "$LOG" | head -1) and every one laid"
+echo "      out cleanly (0 allocation warnings)."
