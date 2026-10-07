@@ -102,7 +102,7 @@ def _meta_of(row: dict[str, Any]) -> dict[str, Any]:
     return parsed if isinstance(parsed, dict) else {}
 
 
-def _provider_label(provider_id: str) -> str:
+def provider_label(provider_id: str) -> str:
     """A provider id's display name, taken from the provider classes themselves.
 
     Not a second copy of the names: the providers are already the source of
@@ -251,7 +251,7 @@ def featured_provider(facts: dict[str, Any]) -> dict[str, str] | None:
         provider_id = str(row.get("provider") or "")
         return {
             "providerId": provider_id,
-            "name": _provider_label(provider_id),
+            "name": provider_label(provider_id),
             "role": "value",
             "reason": (
                 f"{ledger.format_tokens(row.get('tokens'))} tokens for "
@@ -262,7 +262,7 @@ def featured_provider(facts: dict[str, Any]) -> dict[str, str] | None:
     provider_id = str(leader.get("provider") or "")
     return {
         "providerId": provider_id,
-        "name": _provider_label(provider_id),
+        "name": provider_label(provider_id),
         "role": "leading",
         "reason": (
             f"{_pct(100 * _as_int(leader.get('tokens')) / total)}% "
@@ -584,7 +584,7 @@ def billboard_payload(row: dict[str, Any]) -> dict[str, Any]:
     featured = (
         {
             "providerId": provider,
-            "name": str(meta.get("providerName") or _provider_label(provider)),
+            "name": str(meta.get("providerName") or provider_label(provider)),
             "role": str(meta.get("role") or "featured"),
         }
         if provider

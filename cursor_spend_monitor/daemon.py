@@ -11,7 +11,15 @@ from typing import Any
 
 from gi.repository import GLib  # type: ignore  # gi has no stubs
 
-from . import __version__, burn, harvesters, history, ledger, notify_engine
+from . import (
+    __version__,
+    burn,
+    harvesters,
+    history,
+    ledger,
+    notify_engine,
+)
+from . import llm_composer as llm
 from .config import MonitorConfig, write_state
 from .dbus_service import UsageService
 from .instances import InstanceReport, scan, signature
@@ -421,14 +429,28 @@ class UsageDaemon:
         """Send the scheduled digest when its clock comes round."""
         if not self.config.notify_enabled or self._quiet_now():
             return True
-        con = self.ledger.connection
-        if con is None:
+        if self.ledger.connection is None:
             return True
         slot = self._due_slot()
         if slot is None:
             return True
+        # Composing can reach a network, so it never runs on the main loop.
+        threading.Thread(
+            target=self._digest_worker,
+            args=(slot,),
+            name="ai-usage-digest",
+            daemon=True,
+        ).start()
+        return True
+
+    def _digest_worker(self, slot: str) -> None:
+        con = self.ledger.connection
+        if con is None:
+            return
         try:
-            messages = notify_engine.scheduled_messages(con, slot=slot)
+            messages = self._compose(
+                con, notify_engine.scheduled_messages(con, slot=slot)
+            )
             fresh = notify_engine.keep(
                 con, messages, cooldown_seconds=notify_engine.DEFAULT_COOLDOWN_SECONDS
             )
@@ -436,13 +458,74 @@ class UsageDaemon:
             print(
                 f"Could not build the {slot} digest: {exc}", file=sys.stderr, flush=True
             )
-            return True
-        for message in fresh:
-            if self._wanted(message.kind):
+            return
+        GLib.idle_add(self._deliver, fresh, False)
+
+    def _compose(
+        self, con: sqlite3.Connection, messages: list[Any], *, trigger: str = ""
+    ) -> list[Any]:
+        """The templates, reworded by a model when one has capacity to spare.
+
+        Every failure -- no generator with enough headroom, a missing
+        credential, a refusal -- leaves the template in place. The LLM is an
+        upgrade, and an upgrade that can break the notification path is not one.
+        """
+        if not (self.config.llm_notifications and messages):
+            return messages
+        generator = llm.choose(
+            self.snapshots,
+            trigger=trigger,
+            floor=self.config.llm_min_headroom,
+            model=self.config.llm_generator_model,
+            provider=self.config.llm_generator_provider,
+        )
+        if generator is None:
+            return messages
+        improved: list[Any] = []
+        for message in messages:
+            rewritten = llm.rewrite(
+                message,
+                generator=generator,
+                facts=self._facts_for(con, message),
+                max_tokens=self.config.llm_max_output_tokens,
+            )
+            improved.append(rewritten or message)
+        return improved
+
+    def _facts_for(self, con: sqlite3.Connection, message: Any) -> dict[str, Any]:
+        """The ranked providers the model may choose the featured AI from.
+
+        A trailing month, so the list is stable and always has ids in it; the
+        message keeps its own period's numbers, which are already in the draft.
+        """
+        start, end = notify_engine.day_range(30)
+        return {
+            "period": str((message.meta or {}).get("period") or "last 30 days"),
+            "ranked": ledger.period_totals(
+                con, start_day=start, end_day=end, group_by="provider"
+            ),
+        }
+
+    def _deliver(self, messages: list[Any], actionable: bool) -> bool:
+        """Send what was composed and republish, back on the main loop."""
+        for message in messages:
+            if not self._wanted(message.kind):
+                continue
+            if not actionable:
                 send("AI usage", message.body)
-        if fresh:
-            self._publish_billboard_change()
-        return True
+                continue
+            # Urgency comes from the recorded percentage rather than from
+            # reading the sentence back, which would make prose load-bearing.
+            percent = (message.meta or {}).get("percent")
+            spent = (
+                isinstance(percent, (int, float)) and percent >= notify_engine.SPENT_AT
+            )
+            send("AI usage", message.body, urgency="critical" if spent else "normal")
+        con = self.ledger.connection
+        if messages and con is not None:
+            self._refresh_billboard(con)
+            self._publish()
+        return False
 
     def _notify_events(self) -> None:
         """Speak up when a meter is about to run out."""
@@ -450,6 +533,13 @@ class UsageDaemon:
             return
         if not self._wanted(notify_engine.ACTIONABLE):
             return
+        if self.ledger.connection is None:
+            return
+        threading.Thread(
+            target=self._events_worker, name="ai-usage-event", daemon=True
+        ).start()
+
+    def _events_worker(self) -> None:
         con = self.ledger.connection
         if con is None:
             return
@@ -457,6 +547,8 @@ class UsageDaemon:
             messages = notify_engine.event_messages(
                 self.snapshots, wind_down_hours=self.config.wind_down_hours
             )
+            trigger = messages[0].meta.get("trigger", "") if messages else ""
+            messages = self._compose(con, messages, trigger=trigger)
             fresh = notify_engine.keep(
                 con, messages, cooldown_seconds=notify_engine.DEFAULT_COOLDOWN_SECONDS
             )
@@ -467,16 +559,7 @@ class UsageDaemon:
                 flush=True,
             )
             return
-        for message in fresh:
-            # The urgency comes from the recorded percentage rather than from
-            # reading the sentence back, which would make prose load-bearing.
-            percent = message.meta.get("percent")
-            spent = (
-                isinstance(percent, (int, float)) and percent >= notify_engine.SPENT_AT
-            )
-            send("AI usage", message.body, urgency="critical" if spent else "normal")
-        if fresh:
-            self._publish_billboard_change()
+        GLib.idle_add(self._deliver, fresh, True)
 
     def _wanted(self, kind: str) -> bool:
         return kind in (self.config.notify_types or [])
