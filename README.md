@@ -283,41 +283,6 @@ for the session and says so once, rather than stopping the daemon.
 values one to one. To test without a live login, run a mock daemon and a nested shell — see
 `gnome-shell-extension/README.md`.
 
-## Usage ledger and notifications
-
-Beyond the live meters, the daemon keeps a local ledger of what the AI spend was
-actually spent on — tokens per provider, model, project and hour — read from the
-tools' own stores. Nothing leaves the machine.
-
-```bash
-cursor-spend-monitor harvest                 # read every store into the ledger
-cursor-spend-monitor harvest --provider claude --full
-cursor-spend-monitor report                  # this month: provider / project / model
-cursor-spend-monitor report --week --by model
-cursor-spend-monitor report --checks         # cross-check disagreements
-cursor-spend-monitor quote                   # the latest generated message
-cursor-spend-monitor quote --generate --slot weekly
-cursor-spend-monitor quote --tweet           # SHARE: line, copied to the clipboard
-```
-
-| Source | What it gives | Fidelity |
-| --- | --- | --- |
-| `~/.local/share/opencode/opencode.db` | exact cost and every token kind per session | measured |
-| `~/.claude/projects/**/*.jsonl` | exact usage per response, incl. cache and thinking tokens | measured |
-| Cursor dashboard API | per-model spend for one billing cycle | measured, cost unit unverified |
-| `~/.codex/state_5.sqlite` | nothing yet on this machine — the reader probes and records why | absent |
-| Pi sessions | sessions, models, projects, durations | **no token data exists** |
-
-Every row is keyed and every write is idempotent: a second `harvest` with
-nothing new reports `no change`. Rows carry a `source`, and an aggregate that
-includes an estimate says so in the message rather than presenting a guess as a
-measurement.
-
-Digests and alerts run without any language model. With `llm_notifications`
-enabled and a generator configured, the wording is composed by whichever
-provider has the most capacity left, and falls back to the templates whenever it
-cannot.
-
 ## Usage ledger
 
 Alongside the live meters, the daemon keeps a local ledger of *what the spend
@@ -325,11 +290,12 @@ was spent on*: tokens per provider, model, project and hour, harvested
 idempotently from each tool's own store.
 
 ```bash
-cursor-spend-monitor harvest                  # read every store into the ledger
-cursor-spend-monitor report                   # this month, by provider
-cursor-spend-monitor report --week --by model # last 7 days, by model
-cursor-spend-monitor report --checks          # cross-check disagreements
-cursor-spend-monitor harvest --full           # ignore watermarks, re-read all
+cursor-spend-monitor harvest                   # read every store into the ledger
+cursor-spend-monitor harvest --provider claude  # one provider only
+cursor-spend-monitor harvest --full            # ignore watermarks, re-read all
+cursor-spend-monitor report                    # this month, by provider
+cursor-spend-monitor report --week --by model  # last 7 days, by model
+cursor-spend-monitor report --checks           # cross-check disagreements
 ```
 
 | Source | What it gives | Fidelity |
@@ -362,3 +328,48 @@ on `notify_weekly_day`, monthly on the 1st), raises an actionable alert when a
 meter crosses the warning line or its burn rate would spend it before the window
 resets, and honours `notify_silent_hours`. Nothing is ever posted anywhere:
 `--tweet` copies the line and stops there.
+
+## The landing page
+
+When there is something worth saying, the popover opens on it instead of the
+provider list: one notification as a quote, the AI it is about underneath, and a
+**Continue** back to the list.
+
+It does **not** appear on every open. The daemon decides whether anything is
+worth interrupting for — urgency by kind (an actionable warning outranks a
+curiosity), a freshness window per kind, and a dismissal that survives a logout.
+A **Latest** button in the header reopens the newest message on demand, and the
+status dot carries a quiet ring while one is waiting.
+
+The featured AI is read from the ledger, never from a fixed list: the provider
+with the most tokens, or a cheaper one carrying a real share of the work ("most
+use for the least spend"), or whichever has the most room when the message is
+advice about where to move to.
+
+## The LLM wording
+
+Off by default. With `llm_notifications` enabled the wording is composed by
+whichever provider has the most short-window headroom, and **falls back to the
+template on every failure** — no capacity, a missing credential, a 429, an
+unparseable reply.
+
+```jsonc
+{
+  "llm_notifications": true,
+  "llm_generator_model": "",   // "" = the cheap default for each provider
+  "llm_min_headroom": 15       // never spend capacity to warn about capacity
+}
+```
+
+The reply names the AI it is about (`FEATURED:`), chosen from ranked provider
+facts sent in the prompt; the daemon validates it and falls back to the derived
+choice, so the badge and the prose cannot disagree.
+
+Claude's token and OpenCode's key are opened **read-only** — never refreshed, so
+this cannot sign you out of either CLI. Only numbers travel: no transcript text,
+no prompt history, no file contents.
+
+> **The default model ids may need updating.** They are the cheap end of each
+> provider (`claude-haiku-4-5`, `deepseek-v4-flash`) and have not been verified
+> against the live services. A wrong id is not fatal — the provider refuses and
+> the template is used — but set `llm_generator_model` to pin a specific one.
