@@ -331,3 +331,33 @@ python3 -c "import json,os;d=json.load(open('/run/user/%d/cursor-spend-monitor/s
 
 The last one is the most useful: if `billboard` is `null` the daemon has nothing
 to offer, and the panel is behaving correctly by showing the list.
+
+### When a screen opens empty — a layout bug, not a JS bug
+
+If the popover seems to vanish, or a screen comes up blank, the JavaScript
+probably ran fine and the *layout* is broken. Nothing throws, so there is no
+stack trace to follow, and the panel simply draws nothing.
+
+One command reproduces every screen headlessly, with the mock daemon, no mouse
+and no display:
+
+```bash
+./gnome-shell-extension/devtest/layout-smoke.sh
+```
+
+It walks list, guide, about, landing, detail and sessions in a throwaway Shell
+and fails if any of them lays out to an impossible size. This is how the landing
+page's own bug was found: a `margin-bottom: -8px` on one decorative label
+subtracted more height than the box had, so the popover's preferred height
+underflowed to −2147483648 and it was drawn as nothing.
+
+The signal to grep for, in `journalctl /usr/bin/gnome-shell` or the shell's own
+log:
+
+```text
+Actor 'unnamed [StBin]' tried to allocate a size of 360.00 x -2147483648.00
+cogl_framebuffer_set_viewport: assertion 'width > 0 && height > 0' failed
+```
+
+A **negative** height there means a box is subtracting more than it has — a
+negative margin, or an unset dimension in that screen's CSS.
