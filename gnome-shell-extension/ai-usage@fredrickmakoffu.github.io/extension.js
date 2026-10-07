@@ -251,7 +251,11 @@ function kindOfMetric(m) {
     const text = (m.label || "").toLowerCase();
     if (text.includes("week")) return "weekly";
     if (text.includes("month")) return "monthly";
-    if (text.includes("hour") || text.includes("rolling") || text.includes("daily"))
+    if (
+        text.includes("hour") ||
+        text.includes("rolling") ||
+        text.includes("daily")
+    )
         return "rolling";
     return "other";
 }
@@ -1653,8 +1657,10 @@ const Indicator = GObject.registerClass(
                 orientation: Clutter.Orientation.VERTICAL,
                 x_expand: true,
             });
-            // The opening mark sits beside the text rather than above it: on its
-            // own line its tall line box left a gap the height of the glyph.
+            // The marks sit beside the text rather than above it: on their own
+            // line their tall line boxes left a gap the height of the glyph. The
+            // closing one aligns to the bottom of the block, so the pair bookends
+            // the quote instead of both hanging at the top.
             const quote = new St.BoxLayout({
                 style_class: "ai-usage-landing-quote-row",
                 x_expand: true,
@@ -1666,6 +1672,11 @@ const Indicator = GObject.registerClass(
             );
             quote.add_child(
                 wrappedLabel(billboard.text ?? "", "ai-usage-landing-quote"),
+            );
+            quote.add_child(
+                label("\u201d", "ai-usage-landing-mark", {
+                    y_align: Clutter.ActorAlign.END,
+                }),
             );
             body.add_child(quote);
             if (billboard.share)
@@ -1706,9 +1717,11 @@ const Indicator = GObject.registerClass(
             }
             screen.add_child(body);
 
+            // Centred as a pair rather than stretched across the row: a button
+            // that fills the width reads as a form submit, not a way back.
             const actions = new St.BoxLayout({
                 style_class: "ai-usage-landing-actions",
-                x_expand: true,
+                x_align: Clutter.ActorAlign.CENTER,
             });
             const cont = new St.Button({
                 style_class: "ai-usage-landing-continue",
@@ -1735,7 +1748,9 @@ const Indicator = GObject.registerClass(
             screen.add_child(actions);
 
             if (this._landingMode === "latest")
-                screen.add_child(label("Earlier update", "ai-usage-landing-note"));
+                screen.add_child(
+                    label("Earlier update", "ai-usage-landing-note"),
+                );
         }
 
         _leaveLanding() {
