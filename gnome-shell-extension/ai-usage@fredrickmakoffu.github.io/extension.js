@@ -696,6 +696,15 @@ const Row = GObject.registerClass(
     },
 );
 
+// What the featured AI's role means, in words the panel owns. The role itself
+// is decided by the daemon from the ledger, never here.
+const ROLE_COPY = {
+    suggested: "has room — worth moving to",
+    leading: "doing the heavy lifting",
+    value: "most tokens for the least spend",
+    featured: "worth a look",
+};
+
 const Indicator = GObject.registerClass(
     class AiUsageIndicator extends PanelMenu.Button {
         _init(ext) {
@@ -712,6 +721,11 @@ const Indicator = GObject.registerClass(
             this._probedMatch = null; // {toolId, project, title} from async pid probe
             this._probeTimeoutId = 0;
             this._probeSerial = 0;
+            // The landing page opens once per message per session. Closing it
+            // without pressing Continue must not make it nag on the next open,
+            // so the id is recorded when it is shown, not when it is dismissed.
+            this._landingShownId = null;
+            this._landingMode = "fresh"; // "fresh" (acknowledges) | "latest"
 
             this._dot = new St.Widget({
                 style_class: "ai-usage-dot",
@@ -755,8 +769,20 @@ const Indicator = GObject.registerClass(
             this.menu.connect("open-state-changed", (_menu, open) => {
                 if (open) {
                     this._ext.refresh();
-                    if (this._screen !== "list") this._navigate("list");
-                    else this._beginEntry();
+                    const billboard = this._state?.billboard;
+                    // The daemon decides whether anything is worth interrupting
+                    // for: `billboard` is set only while a message is
+                    // unacknowledged and still fresh. The once-per-session guard
+                    // here is the only routing the extension does.
+                    if (billboard && billboard.id !== this._landingShownId) {
+                        this._landingShownId = billboard.id;
+                        this._landingMode = "fresh";
+                        this._navigate("landing");
+                    } else if (this._screen !== "list") {
+                        this._navigate("list");
+                    } else {
+                        this._beginEntry();
+                    }
                 } else if (this._entryId) {
                     GLib.source_remove(this._entryId);
                     this._entryId = 0;
@@ -983,6 +1009,11 @@ const Indicator = GObject.registerClass(
             for (const cls of ["caution", "critical", "error"])
                 this._dot.remove_style_class_name(cls);
             if (level !== "ok") this._dot.add_style_class_name(level);
+            // A quiet hint that the popover has something to say, so the
+            // landing page is discoverable rather than a surprise.
+            if (this._state?.billboard)
+                this._dot.add_style_class_name("has-update");
+            else this._dot.remove_style_class_name("has-update");
         }
 
         // The percentage rides along only once a provider reaches caution. Below that
@@ -1088,6 +1119,7 @@ const Indicator = GObject.registerClass(
             });
             if (this._screen === "detail") this._renderDetail(screen);
             else if (this._screen === "sessions") this._renderSessions(screen);
+            else if (this._screen === "landing") this._renderLanding(screen);
             else if (this._screen === "guide") this._renderGuide(screen);
             else if (this._screen === "about") this._renderAbout(screen);
             else this._renderList(screen);
@@ -1171,6 +1203,11 @@ const Indicator = GObject.registerClass(
                 b.connect("clicked", cb);
                 header.add_child(b);
             };
+            if (this._state?.latestMessage)
+                add("Latest", () => {
+                    this._landingMode = "latest";
+                    this._navigate("landing");
+                });
             if (withSettings) add("Settings", () => this._openSettings());
             add("Guide", () => this._navigate("guide"));
             add("About", () => this._navigate("about"));
@@ -1566,6 +1603,112 @@ const Indicator = GObject.registerClass(
             return item;
         }
 
+        _landingBillboard() {
+            // Fresh for the routing case, the newest stored one for Latest.
+            return this._landingMode === "latest"
+                ? (this._state?.latestMessage ?? null)
+                : (this._state?.billboard ?? null);
+        }
+
+        _renderLanding(screen) {
+            const billboard = this._landingBillboard();
+            if (!billboard) {
+                this._screen = "list";
+                this._renderList(screen);
+                return;
+            }
+            screen.add_child(this._header("AI usage", false));
+
+            const body = new St.BoxLayout({
+                style_class: "ai-usage-landing",
+                orientation: Clutter.Orientation.VERTICAL,
+                x_expand: true,
+            });
+            body.add_child(label("\u201c", "ai-usage-landing-mark"));
+            body.add_child(
+                wrappedLabel(billboard.text ?? "", "ai-usage-landing-quote"),
+            );
+            if (billboard.share)
+                body.add_child(
+                    wrappedLabel(billboard.share, "ai-usage-landing-share"),
+                );
+
+            const featured = billboard.featured;
+            if (featured?.name || featured?.providerId) {
+                const row = new St.BoxLayout({
+                    style_class: "ai-usage-landing-featured",
+                    x_expand: true,
+                });
+                row.add_child(
+                    new St.Icon({
+                        style_class: "ai-usage-landing-icon",
+                        gicon: this._icons.badge(
+                            featured.providerId ?? "cursor",
+                        ),
+                        icon_size: 22,
+                        y_align: Clutter.ActorAlign.CENTER,
+                    }),
+                );
+                const text = new St.BoxLayout({
+                    orientation: Clutter.Orientation.VERTICAL,
+                    x_expand: true,
+                });
+                text.add_child(
+                    label(
+                        featured.name ?? featured.providerId ?? "",
+                        "ai-usage-landing-name",
+                    ),
+                );
+                const role = ROLE_COPY[featured.role];
+                if (role) text.add_child(label(role, "ai-usage-landing-role"));
+                row.add_child(text);
+                body.add_child(row);
+            }
+            screen.add_child(body);
+
+            const actions = new St.BoxLayout({
+                style_class: "ai-usage-landing-actions",
+                x_expand: true,
+            });
+            const cont = new St.Button({
+                style_class: "ai-usage-landing-continue",
+                label: "Continue",
+                can_focus: true,
+                x_expand: true,
+            });
+            cont.connect("clicked", () => this._leaveLanding());
+            actions.add_child(cont);
+            if (billboard.share) {
+                const copy = new St.Button({
+                    style_class: "ai-usage-landing-copy",
+                    label: "Copy",
+                    can_focus: true,
+                    y_align: Clutter.ActorAlign.CENTER,
+                });
+                copy.connect("clicked", () =>
+                    St.Clipboard.get_default().set_text(
+                        St.ClipboardType.CLIPBOARD,
+                        billboard.share,
+                    ),
+                );
+                actions.add_child(copy);
+            }
+            screen.add_child(actions);
+
+            if (this._landingMode === "latest")
+                screen.add_child(label("Earlier update", "ai-usage-landing-note"));
+        }
+
+        _leaveLanding() {
+            // Pressing Continue is the user saying they have seen it, so the
+            // daemon records that and never offers this one again. The same
+            // applies to reading it back through Latest.
+            const billboard = this._landingBillboard();
+            if (billboard?.id !== undefined && billboard?.id !== null)
+                this._ext.acknowledge(billboard.id);
+            this._navigate("list");
+        }
+
         _renderGuide(screen) {
             screen.add_child(this._detailHeader("Status colors", null));
             const body = new St.BoxLayout({
@@ -1788,5 +1931,12 @@ export default class AiUsageExtension extends Extension {
     setPrimary(providerId, metricKey) {
         if (this._proxy?.g_name_owner)
             this._proxy.SetPrimaryRemote(providerId, metricKey, () => {});
+    }
+
+    acknowledge(messageId) {
+        // Durable by design: the daemon stores this, so a dismissal survives a
+        // reload or a logout and the message cannot come back.
+        if (this._proxy?.g_name_owner)
+            this._proxy.AcknowledgeRemote(messageId, () => {});
     }
 }

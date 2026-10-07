@@ -25,6 +25,7 @@ The rules this module will not break:
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -45,6 +46,16 @@ SPENT_AT = 100
 # One message per (kind, key) inside this window. Long enough that a meter
 # hovering at a threshold cannot repeat itself every poll.
 DEFAULT_COOLDOWN_SECONDS = 6 * 3600
+
+# How much a message deserves to interrupt, and how long it stays worth it. The
+# landing page picks one message by this order, so an actionable warning always
+# outranks a curiosity, and a stale digest stops nagging on its own.
+PRIORITY = {ACTIONABLE: 3, INFORMATIVE: 2, SHAREABLE: 1, FUN: 0}
+FRESHNESS_HOURS = {ACTIONABLE: 6, INFORMATIVE: 24, SHAREABLE: 24, FUN: 12}
+
+# A cheaper provider is only the story if it is doing real work. Without a
+# floor, one cheap session would outrank a month of heavy use.
+VALUE_SHARE_FLOOR = 0.20
 
 
 # -- coercion ----------------------------------------------------------------
@@ -70,6 +81,55 @@ def _as_float(value: Any) -> float:
 def _pct(value: Any) -> int:
     """A percentage as a whole number, tolerating junk."""
     return _as_int(round(_as_float(value)))
+
+
+def _epoch(now: datetime | None = None) -> int:
+    try:
+        return int((now or datetime.now(timezone.utc)).timestamp())
+    except (OSError, OverflowError, ValueError):
+        return 0
+
+
+def _meta_of(row: dict[str, Any]) -> dict[str, Any]:
+    """A stored message's `meta` column, parsed, or an empty dict."""
+    raw = row.get("meta")
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _provider_label(provider_id: str) -> str:
+    """A provider id's display name, taken from the provider classes themselves.
+
+    Not a second copy of the names: the providers are already the source of
+    truth for what each one is called.
+    """
+    from .providers import PROVIDERS
+
+    cls = PROVIDERS.get(provider_id)
+    if cls is None:
+        return provider_id
+    return str(getattr(cls, "display_name", provider_id))
+
+
+def _featured_meta(featured: dict[str, str] | None, **extra: Any) -> dict[str, Any]:
+    """Message meta carrying who the message is about, and why."""
+    meta: dict[str, Any] = dict(extra)
+    if featured:
+        meta["providerName"] = featured.get("name", "")
+        meta["role"] = featured.get("role", "")
+        meta["reason"] = featured.get("reason", "")
+    return meta
+
+
+def expires_at_for(kind: str, created_at: int) -> int | None:
+    """When a message stops being worth interrupting for, or None."""
+    hours = FRESHNESS_HOURS.get(kind)
+    return created_at + _as_int(hours * 3600) if hours else None
 
 
 @dataclass
@@ -156,6 +216,59 @@ def digest_facts(
 
 
 # -- wording -----------------------------------------------------------------
+
+
+def featured_provider(facts: dict[str, Any]) -> dict[str, str] | None:
+    """The AI a period is really about, read out of the ledger.
+
+    Never a fixed mapping. The featured AI is whichever provider the numbers say
+    matters, decided by two questions in order: which one carried the period,
+    and whether some cheaper provider did enough work to be the more interesting
+    answer. "Most use for the least spend" is the thing worth telling someone,
+    so a value provider wins when it clears the share floor; otherwise the
+    leader does.
+    """
+    ranked = [row for row in (facts.get("ranked") or []) if _as_int(row.get("tokens"))]
+    if not ranked:
+        return None
+    total = sum(_as_int(row.get("tokens")) for row in ranked) or 1
+    leader = max(ranked, key=lambda row: _as_int(row.get("tokens")))
+
+    best_value: tuple[float, dict] | None = None
+    for row in ranked:
+        cost = _as_float(row.get("cost_usd"))
+        share = _as_int(row.get("tokens")) / total
+        if cost <= 0 or share < VALUE_SHARE_FLOOR:
+            continue
+        ratio = _as_int(row.get("tokens")) / cost
+        if best_value is None or ratio > best_value[0]:
+            best_value = (ratio, row)
+
+    if best_value is not None and best_value[1].get("provider") != leader.get(
+        "provider"
+    ):
+        row = best_value[1]
+        provider_id = str(row.get("provider") or "")
+        return {
+            "providerId": provider_id,
+            "name": _provider_label(provider_id),
+            "role": "value",
+            "reason": (
+                f"{ledger.format_tokens(row.get('tokens'))} tokens for "
+                f"{ledger.format_cost(row.get('cost_usd'))}"
+            ),
+        }
+
+    provider_id = str(leader.get("provider") or "")
+    return {
+        "providerId": provider_id,
+        "name": _provider_label(provider_id),
+        "role": "leading",
+        "reason": (
+            f"{_pct(100 * _as_int(leader.get('tokens')) / total)}% "
+            "of the period's tokens"
+        ),
+    }
 
 
 def _provider_share(facts: dict[str, Any]) -> str:
@@ -262,7 +375,10 @@ def daily_digest(
         kind=INFORMATIVE,
         key=f"daily:{start}",
         body=render_digest(facts, headline="Today"),
-        meta={"period": "daily"},
+        provider=featured["providerId"]
+        if (featured := featured_provider(facts))
+        else "",
+        meta=_featured_meta(featured, period="daily"),
     )
 
 
@@ -277,7 +393,10 @@ def weekly_digest(
         kind=INFORMATIVE,
         key=f"weekly:{end}",
         body=render_digest(facts, headline="Last week"),
-        meta={"period": "weekly"},
+        provider=featured["providerId"]
+        if (featured := featured_provider(facts))
+        else "",
+        meta=_featured_meta(featured, period="weekly"),
     )
 
 
@@ -302,7 +421,10 @@ def monthly_digest(
         kind=INFORMATIVE,
         key=f"monthly:{start}",
         body=body,
-        meta={"period": "monthly"},
+        provider=featured["providerId"]
+        if (featured := featured_provider(facts))
+        else "",
+        meta=_featured_meta(featured, period="monthly"),
     )
 
 
@@ -312,7 +434,14 @@ def fun_fact(con: sqlite3.Connection, *, now: datetime | None = None) -> Message
     body = render_fun(facts)
     if not body:
         return None
-    return Message(kind=FUN, key=f"fun:{end}", body=body)
+    featured = featured_provider(facts)
+    return Message(
+        kind=FUN,
+        key=f"fun:{end}",
+        body=body,
+        provider=featured["providerId"] if featured else "",
+        meta=_featured_meta(featured, period="fun"),
+    )
 
 
 def share_line(
@@ -328,6 +457,10 @@ def share_line(
         key=f"share:{start}",
         body=share.removeprefix("SHARE: ").strip(),
         share=share,
+        provider=featured["providerId"]
+        if (featured := featured_provider(facts))
+        else "",
+        meta=_featured_meta(featured, period="share"),
     )
 
 
@@ -355,13 +488,14 @@ def scheduled_messages(
 # -- events ------------------------------------------------------------------
 
 
-def _best_headroom(snapshots: list[Any], *, exclude: str) -> str:
-    """The provider with the most room, as a name worth naming.
+def _best_room(snapshots: list[Any], *, exclude: str) -> dict[str, str] | None:
+    """The provider with the most room, as a featured suggestion.
 
-    Borrowed rows are skipped: they are a second view of a subscription that is
-    already counted under its own provider.
+    Borrowed rows are skipped: they are a second view of a subscription already
+    counted under its own provider. This is read from live headroom, so the AI
+    named here is whichever one actually has capacity right now.
     """
-    best: tuple[float, str] | None = None
+    best: tuple[float, Any] | None = None
     for snap in snapshots:
         if snap.provider_id == exclude or snap.status != "ok":
             continue
@@ -369,8 +503,16 @@ def _best_headroom(snapshots: list[Any], *, exclude: str) -> str:
             continue
         headroom = 100.0 - _as_float(snap.primary.percent)
         if best is None or headroom > best[0]:
-            best = (headroom, snap.display_name)
-    return best[1] if best else ""
+            best = (headroom, snap)
+    if best is None:
+        return None
+    headroom, snap = best
+    return {
+        "providerId": str(snap.provider_id),
+        "name": str(snap.display_name),
+        "role": "suggested",
+        "reason": f"{_pct(headroom)}% left",
+    }
 
 
 def event_messages(
@@ -396,22 +538,25 @@ def event_messages(
             if meter.percent < WARN_AT and not burning_out:
                 continue
             eta_label = _eta_label(eta_seconds)
+            featured = _best_room(snapshots, exclude=snap.provider_id)
             messages.append(
                 Message(
                     kind=ACTIONABLE,
                     key=f"meter:{snap.provider_id}:{meter.key}:{_as_int(meter.percent)}",
-                    provider=snap.provider_id,
+                    provider=(featured["providerId"] if featured else snap.provider_id),
                     body=render_actionable(
                         provider=snap.display_name,
                         label=meter.label,
                         percent=meter.percent,
                         eta=eta_label,
-                        better=_best_headroom(snapshots, exclude=snap.provider_id),
+                        better=featured["name"] if featured else "",
                     ),
-                    meta={
-                        "meter": meter.key,
-                        "percent": round(_as_float(meter.percent), 1),
-                    },
+                    meta=_featured_meta(
+                        featured,
+                        meter=meter.key,
+                        percent=round(_as_float(meter.percent), 1),
+                        trigger=snap.provider_id,
+                    ),
                 )
             )
     return messages
@@ -425,6 +570,60 @@ def _eta_label(eta_seconds: float | None) -> str:
         return f"{max(1, minutes)}m"
     hours, rem = divmod(minutes, 60)
     return f"{hours}h {rem}m" if rem else f"{hours}h"
+
+
+# -- the landing page --------------------------------------------------------
+
+
+def billboard_payload(row: dict[str, Any]) -> dict[str, Any]:
+    """The state shape the panel renders for one stored message."""
+    meta = _meta_of(row)
+    kind = str(row.get("kind") or "")
+    created = _as_int(row.get("created_at"))
+    provider = str(row.get("provider") or "")
+    featured = (
+        {
+            "providerId": provider,
+            "name": str(meta.get("providerName") or _provider_label(provider)),
+            "role": str(meta.get("role") or "featured"),
+        }
+        if provider
+        else None
+    )
+    return {
+        "id": _as_int(row.get("id")),
+        "kind": kind,
+        "priority": PRIORITY.get(kind, 0),
+        "text": str(row.get("body") or ""),
+        "share": str(row.get("share") or ""),
+        "featured": featured,
+        "createdAt": created,
+        "expiresAt": expires_at_for(kind, created),
+        "reason": str(meta.get("reason") or ""),
+    }
+
+
+def choose_billboard(
+    rows: list[dict[str, Any]], *, now: datetime | None = None
+) -> dict[str, Any] | None:
+    """The one message worth interrupting for, or None.
+
+    Priority first, newest second, and only while the message is still fresh.
+    `rows` are unacknowledged messages; acknowledgement is the database's job,
+    so nothing already read can reach this point.
+    """
+    now_ts = _epoch(now)
+    candidates: list[tuple[int, int, dict[str, Any]]] = []
+    for row in rows:
+        created = _as_int(row.get("created_at"))
+        expires = expires_at_for(str(row.get("kind") or ""), created)
+        if expires is not None and expires <= now_ts:
+            continue
+        candidates.append((PRIORITY.get(str(row.get("kind")), 0), created, row))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    return billboard_payload(candidates[0][2])
 
 
 # -- cooldowns ---------------------------------------------------------------

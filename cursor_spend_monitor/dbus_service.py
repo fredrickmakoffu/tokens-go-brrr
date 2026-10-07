@@ -10,6 +10,15 @@ BUS_NAME = "io.github.fredrickmakoffu.AIUsage"
 OBJECT_PATH = "/io/github/fredrickmakoffu/AIUsage"
 INTERFACE = BUS_NAME
 
+
+def _as_int(value: Any) -> int:
+    """A value off the bus as an int; a malformed one is not worth raising for."""
+    try:
+        return int(value)
+    except (TypeError, ValueError, OverflowError):
+        return 0
+
+
 INTERFACE_XML = """
 <node>
   <interface name="io.github.fredrickmakoffu.AIUsage">
@@ -19,6 +28,9 @@ INTERFACE_XML = """
     <method name="SetPrimary">
       <arg type="s" direction="in" name="provider"/>
       <arg type="s" direction="in" name="metric"/>
+    </method>
+    <method name="Acknowledge">
+      <arg type="u" direction="in" name="id"/>
     </method>
     <method name="Quit"/>
     <signal name="StateChanged"><arg type="s" name="json"/></signal>
@@ -37,6 +49,7 @@ class UsageService:
         get_state: Callable[[], dict[str, Any]],
         on_refresh: Callable[..., Any],
         on_set_primary: Callable[[str, str], None],
+        on_acknowledge: Callable[[int], None],
         on_quit: Callable[..., Any],
         on_name_lost: Callable[[], None],
     ) -> None:
@@ -44,6 +57,7 @@ class UsageService:
         self._get_state = get_state
         self._on_refresh = on_refresh
         self._on_set_primary = on_set_primary
+        self._on_acknowledge = on_acknowledge
         self._on_quit = on_quit
         self._on_name_lost = on_name_lost
         self._connection: Gio.DBusConnection | None = None
@@ -80,6 +94,12 @@ class UsageService:
             provider, metric = params.unpack()
             self._on_set_primary(str(provider), str(metric))
             invocation.return_value(None)
+        elif method == "Acknowledge":
+            # The panel has shown this message; the daemon records that so it
+            # is never offered again, across logins and extension reloads.
+            (message_id,) = params.unpack()
+            invocation.return_value(None)
+            self._on_acknowledge(_as_int(message_id))
         elif method == "Quit":
             invocation.return_value(None)
             GLib.idle_add(self._on_quit)

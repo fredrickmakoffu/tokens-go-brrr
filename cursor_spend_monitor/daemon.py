@@ -27,11 +27,18 @@ NOTIFY_CHECK_SECONDS = 300
 
 
 def _as_int(value: Any, default: int = 0) -> int:
-    """Quiet hours come from a config file a person edits; a typo is not fatal."""
+    """A config value as an int; a typo is not worth taking the daemon down."""
     try:
         return int(value)
     except (TypeError, ValueError, OverflowError):
         return default
+
+
+def _now_ts() -> int:
+    try:
+        return int(datetime.now(timezone.utc).timestamp())
+    except (OSError, OverflowError, ValueError):
+        return 0
 
 
 # Shortest gap between two rounds of provider requests. Matches the floor the
@@ -58,6 +65,7 @@ class UsageDaemon:
         self._harvest_full = True
         self._last_slot: dict[str, str] = {}
         self._billboard: dict[str, Any] | None = None
+        self._latest_message: dict[str, Any] | None = None
         self.snapshots: list[ProviderSnapshot] = []
         self.last_error: str | None = None
         self.last_fetch: datetime | None = None
@@ -78,6 +86,7 @@ class UsageDaemon:
             get_state=self.state_payload,
             on_refresh=self.poll,
             on_set_primary=self.set_primary,
+            on_acknowledge=self.acknowledge,
             on_quit=self.quit,
             on_name_lost=self._name_lost,
         )
@@ -465,18 +474,61 @@ class UsageDaemon:
     def _wanted(self, kind: str) -> bool:
         return kind in (self.config.notify_types or [])
 
-    def _refresh_billboard(self, con: sqlite3.Connection) -> None:
-        """Publish the newest message for the panel to quote."""
-        latest = ledger.latest_message(con)
-        if latest is None:
+    # -- the landing page ----------------------------------------------------
+
+    def acknowledge(self, message_id: int) -> None:
+        """The panel has shown a message; stop offering it.
+
+        Recorded in the database on purpose. The extension cannot remember a
+        dismissal across a reload or a login, and a message that keeps coming
+        back is worse than one that never appears.
+        """
+        con = self.ledger.connection
+        if con is None or not message_id:
             return
-        self._billboard = {
-            "id": latest.get("id"),
-            "text": latest.get("body"),
-            "share": latest.get("share"),
-            "kind": latest.get("kind"),
-            "createdAt": latest.get("created_at"),
-        }
+        try:
+            ledger.mark_message_seen(con, message_id)
+        except sqlite3.Error as exc:
+            print(
+                f"Could not acknowledge message {message_id}: {exc}",
+                file=sys.stderr,
+                flush=True,
+            )
+            return
+        self._refresh_billboard(con)
+        self._publish()
+
+    def _refresh_billboard(self, con: sqlite3.Connection) -> None:
+        """Choose the one message the panel should open on, if any.
+
+        The daemon decides, not the extension: acknowledgement has to outlive a
+        login, and priority and freshness are rules worth testing in Python. The
+        configured `billboard_freshness_hours` is a ceiling over the per-kind
+        windows; zero disables the ceiling.
+        """
+        if not self.config.billboard_enabled:
+            self._billboard = None
+            self._latest_message = None
+            return
+
+        pending = ledger.pending_messages(con)
+        ceiling = max(0, self.config.billboard_freshness_hours) * 3600
+        if ceiling:
+            now_ts = _now_ts()
+            pending = [
+                row
+                for row in pending
+                if not row.get("created_at")
+                or now_ts - _as_int(row.get("created_at")) <= ceiling
+            ]
+        self._billboard = notify_engine.choose_billboard(pending)
+
+        latest = ledger.latest_message(con)
+        # `latest_message` is deliberately unfiltered by acknowledgement or
+        # freshness: "show me the most recent one" should work months later.
+        self._latest_message = (
+            notify_engine.billboard_payload(latest) if latest else None
+        )
 
     def _attach_forecasts(self) -> None:
         """Give each meter a time-to-exhaustion from its recorded samples.
@@ -535,11 +587,14 @@ class UsageDaemon:
             updated_at=self.last_fetch,
             error=self.last_error,
         )
-        # Additive: an older extension ignores it, and one that knows it quotes
-        # the message instead of the list. Nothing existing changes meaning, so
-        # the state schema version stays as it is.
-        if self._billboard:
-            payload["billboard"] = dict(self._billboard)
+        # Additive: both fields are new, an older extension ignores them, and
+        # nothing that already exists changes meaning, so the state schema
+        # version stays as it is. `billboard` is null far more often than not —
+        # that is what keeps the landing page from appearing on every open.
+        payload["billboard"] = dict(self._billboard) if self._billboard else None
+        payload["latestMessage"] = (
+            dict(self._latest_message) if self._latest_message else None
+        )
         return payload
 
     def _publish(self) -> None:

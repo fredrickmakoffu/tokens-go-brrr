@@ -74,8 +74,13 @@ class MonitorConfig:
     llm_generator_model: str = ""
     llm_max_output_tokens: int = 200
     llm_min_headroom: int = 15
-    # Show a generated message on the popover instead of the provider list.
-    quote_panel: bool = True
+    # The landing page: one notification shown as a quote when the popover
+    # opens. `billboard_auto_advance_seconds` of 0 means Continue is the only
+    # way out; `billboard_freshness_hours` is a ceiling over the per-kind
+    # windows in `notify_engine`.
+    billboard_enabled: bool = True
+    billboard_auto_advance_seconds: int = 0
+    billboard_freshness_hours: int = 24
     primary_alerts: list[int] = field(
         default_factory=lambda: list(DEFAULT_PRIMARY_ALERTS)
     )
@@ -130,7 +135,15 @@ class MonitorConfig:
             llm_generator_model=str(data.get("llm_generator_model") or ""),
             llm_max_output_tokens=_as_int(data.get("llm_max_output_tokens"), 200),
             llm_min_headroom=_as_int(data.get("llm_min_headroom"), 15),
-            quote_panel=bool(data.get("quote_panel", True)),
+            billboard_enabled=bool(
+                data.get("billboard_enabled", data.get("quote_panel", True))
+            ),
+            billboard_auto_advance_seconds=_as_int(
+                data.get("billboard_auto_advance_seconds"), 0
+            ),
+            billboard_freshness_hours=_as_int(
+                data.get("billboard_freshness_hours"), 24
+            ),
             primary_alerts=[_as_int(x, 0) for x in (alerts or DEFAULT_PRIMARY_ALERTS)],
             enabled_providers=list(data.get("enabled_providers") or DEFAULT_PROVIDERS),
             primary_overrides=dict(data.get("primary_overrides") or {}),
@@ -157,7 +170,9 @@ class MonitorConfig:
             "llm_generator_model": self.llm_generator_model,
             "llm_max_output_tokens": self.llm_max_output_tokens,
             "llm_min_headroom": self.llm_min_headroom,
-            "quote_panel": self.quote_panel,
+            "billboard_enabled": self.billboard_enabled,
+            "billboard_auto_advance_seconds": self.billboard_auto_advance_seconds,
+            "billboard_freshness_hours": self.billboard_freshness_hours,
             "primary_alerts": self.primary_alerts,
             "enabled_providers": self.enabled_providers,
             "primary_overrides": self.primary_overrides,
