@@ -1236,7 +1236,9 @@ const Indicator = GObject.registerClass(
                 b.connect("clicked", cb);
                 header.add_child(b);
             };
-            if (this._state?.latestMessage)
+            // Not on the landing page itself: it would be offering what is
+            // already in front of you, one click from going nowhere.
+            if (this._state?.latestMessage && this._screen !== "landing")
                 add("Latest", () => {
                     this._landingMode = "latest";
                     this._navigate("landing");
