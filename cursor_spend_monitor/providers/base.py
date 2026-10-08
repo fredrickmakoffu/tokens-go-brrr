@@ -189,7 +189,9 @@ class Provider(Protocol):
     id: str
     display_name: str
     # How to recognise this tool's running sessions. Empty means it reports none.
-    process_specs: list[ProcessSpec]
+    # A tuple, not a list: this is a class attribute, and every instance
+    # sharing one mutable list is a bug waiting for someone to append to it.
+    process_specs: tuple[ProcessSpec, ...]
 
     def available(self) -> bool:
         """True when credentials/local state suggest this provider can be polled."""

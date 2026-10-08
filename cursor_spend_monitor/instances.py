@@ -8,10 +8,11 @@ any particular tool.
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 PROC = Path("/proc")
 _CLOCK_TICKS = os.sysconf("SC_CLK_TCK")
@@ -132,12 +133,17 @@ def _unique(values: list[str]) -> list[str]:
 
 
 def _boot_time(proc: Path = PROC) -> float:
+    """Seconds since boot, or 0.0 when there is no procfs to ask (a container)."""
     try:
-        for line in (proc / "stat").read_text().splitlines():
-            if line.startswith("btime "):
-                return float(line.split()[1])
+        text = (proc / "stat").read_text()
     except OSError:
-        pass
+        return 0.0
+    for line in text.splitlines():
+        if line.startswith("btime "):
+            try:
+                return float(line.split()[1])
+            except (ValueError, IndexError):
+                return 0.0
     return 0.0
 
 
@@ -228,9 +234,10 @@ def scan(
 
     for entry in proc_root.iterdir():
         pid_text = entry.name
-        if not pid_text.isdigit():
-            continue
-        pid = int(pid_text)
+        try:
+            pid = int(pid_text)
+        except ValueError:
+            continue  # /proc holds more than processes
         if pid in ignore:
             continue
 
