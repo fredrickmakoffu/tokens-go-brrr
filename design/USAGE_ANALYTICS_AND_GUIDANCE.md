@@ -1,6 +1,9 @@
 # Usage ledger + LLM notification engine — design & feasibility (v2)
 
-**Status:** proposal for review — nothing implemented
+**Status:** implemented — merged to `main` as PR #10, version 0.5.0. The ledger,
+the notification engine and the landing page all shipped. §9 below is superseded
+by `BILLBOARD_LANDING_PAGE.md`, and Phase 8 (tuning against a real week) is the
+only part still open in `IMPLEMENTATION_PLAN_USAGE_LEDGER.md`.
 **Date:** 2026-10-04 (v2 — supersedes the v1 analytics doc: storage-first, notifications as the product, minimal UI)
 **Scope:** (1) store accurately how the user's AI spend is actually used — tokens
 per provider, per model, per project, across time; (2) periodically prompt an

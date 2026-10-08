@@ -1,7 +1,9 @@
 # QA checklist — usage ledger, harvesters and notifications
 
 What to verify by hand, what the automated suite already covers, and what is
-expected to look broken because it is not built yet.
+still only checkable by a person at a live desktop. Nothing here is expected to
+be broken: the feature shipped in 0.5.0, so a failure below is a defect rather
+than a gap.
 
 > **Testing the panel?** Use `design/UI_TEST_GUIDE.md` instead. This file is
 > about the ledger and the command line; that one walks the landing page by

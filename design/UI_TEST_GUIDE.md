@@ -205,8 +205,10 @@ cursor-spend-monitor quote --generate --slot daily
 cursor-spend-monitor quote --generate --slot monthly
 ```
 
-- [ ] Weekly is a period digest; monthly adds a month-over-month comparison
-- [ ] `quote --generate --slot daily` produces a digest **or** a fun fact
+- [ ] `--slot weekly` writes a weekly digest *and* a fun fact; the command prints
+      the newest of the two, so a fun fact on screen is a pass, not a failure
+- [ ] `--slot monthly` adds a month-over-month comparison
+- [ ] `--slot daily` produces a digest **or** a fun fact
 - [ ] Each one appears on the landing page on the next open
 
 ### B3. An actionable alert, without a meter actually hitting 90%
