@@ -12,6 +12,7 @@ import io
 import json
 import sqlite3
 import tempfile
+import threading
 import unittest
 from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
@@ -576,6 +577,49 @@ class RecorderTest(LedgerCase):
         rows = [make()]
         self.assertEqual(recorder.upsert_sessions(rows), 1)
         self.assertEqual(recorder.fold_days(ledger.affected_days(rows)), 1)
+
+    def test_a_worker_thread_gets_its_own_connection(self):
+        # The daemon harvests and composes on worker threads, and a sqlite3
+        # connection belongs to the thread that created it. Borrowing the main
+        # loop's made every harvest fail on "SQLite objects created in a thread
+        # can only be used in that same thread", so the ledger quietly stopped
+        # filling while the panel still looked perfectly healthy.
+        recorder = ledger.LedgerRecorder(self.path)
+        self.addCleanup(recorder.close)
+        result: list[object] = []
+
+        def work() -> None:
+            try:
+                with recorder.worker() as con:
+                    self.assertIsNot(con, recorder.connection)
+                    if con is None:
+                        result.append("the worker got no connection")
+                    else:
+                        row = con.execute("SELECT COUNT(*) FROM sessions").fetchone()
+                        result.append(row[0])
+            except Exception as exc:  # noqa: BLE001 - reported by the assertion
+                result.append(exc)
+
+        thread = threading.Thread(target=work, name="ai-usage-test")
+        thread.start()
+        thread.join()
+        self.assertEqual(result, [0])
+
+    def test_a_worker_write_reaches_the_main_connection(self):
+        # What the harvest does, end to end: the worker writes on its own
+        # connection and the next read anywhere sees it.
+        recorder = ledger.LedgerRecorder(self.path)
+        self.addCleanup(recorder.close)
+
+        def work() -> None:
+            with recorder.worker() as con:
+                if con is not None:
+                    ledger.upsert_sessions(con, [make()])
+
+        thread = threading.Thread(target=work, name="ai-usage-test")
+        thread.start()
+        thread.join()
+        self.assertEqual(self.count("sessions"), 1)
 
     def test_an_unopenable_store_disables_quietly(self):
         with (

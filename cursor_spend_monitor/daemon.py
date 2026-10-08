@@ -358,17 +358,20 @@ class UsageDaemon:
         return True
 
     def _harvest_worker(self) -> None:
-        con = self.ledger.connection
         try:
-            if con is not None:
+            # A worker thread needs its own connection: the ledger's belongs to
+            # the main loop, and SQLite refuses to let another thread use it.
+            with self.ledger.worker() as con:
+                if con is None:
+                    return
                 for reader in harvesters.build():
                     if not reader.available():
                         continue
                     reader.harvest(con, full=self._harvest_full)
                 ledger.prune(con, keep_days=self.config.ledger_days)
-                # Back to the main loop before touching D-Bus: this runs on a
-                # worker thread, and the state signal is GLib's to emit.
-                GLib.idle_add(self._publish_billboard_change)
+            # Back to the main loop before touching D-Bus: this runs on a
+            # worker thread, and the state signal is GLib's to emit.
+            GLib.idle_add(self._publish_billboard_change)
         except Exception as exc:  # noqa: BLE001 - a reader must not stop the daemon
             print(f"Ledger harvest failed: {exc}", file=sys.stderr, flush=True)
         finally:
@@ -444,16 +447,18 @@ class UsageDaemon:
         return True
 
     def _digest_worker(self, slot: str) -> None:
-        con = self.ledger.connection
-        if con is None:
-            return
         try:
-            messages = self._compose(
-                con, notify_engine.scheduled_messages(con, slot=slot)
-            )
-            fresh = notify_engine.keep(
-                con, messages, cooldown_seconds=notify_engine.DEFAULT_COOLDOWN_SECONDS
-            )
+            with self.ledger.worker() as con:
+                if con is None:
+                    return
+                messages = self._compose(
+                    con, notify_engine.scheduled_messages(con, slot=slot)
+                )
+                fresh = notify_engine.keep(
+                    con,
+                    messages,
+                    cooldown_seconds=notify_engine.DEFAULT_COOLDOWN_SECONDS,
+                )
         except sqlite3.Error as exc:
             print(
                 f"Could not build the {slot} digest: {exc}", file=sys.stderr, flush=True
@@ -540,21 +545,24 @@ class UsageDaemon:
         ).start()
 
     def _events_worker(self) -> None:
-        con = self.ledger.connection
-        if con is None:
-            return
         try:
-            messages = notify_engine.event_messages(
-                self.snapshots, wind_down_hours=self.config.wind_down_hours
-            )
-            trigger = messages[0].meta.get("trigger", "") if messages else ""
-            messages = self._compose(con, messages, trigger=trigger)
-            fresh = notify_engine.keep(
-                con, messages, cooldown_seconds=notify_engine.DEFAULT_COOLDOWN_SECONDS
-            )
+            with self.ledger.worker() as con:
+                if con is None:
+                    return
+                messages = notify_engine.event_messages(
+                    self.snapshots, wind_down_hours=self.config.wind_down_hours
+                )
+                trigger = messages[0].meta.get("trigger", "") if messages else ""
+                messages = self._compose(con, messages, trigger=trigger)
+                fresh = notify_engine.keep(
+                    con,
+                    messages,
+                    cooldown_seconds=notify_engine.DEFAULT_COOLDOWN_SECONDS,
+                )
         except sqlite3.Error as exc:
             print(
-                f"Could not build an actionable message: {exc}",
+                "Could not build an actionable message: "
+                f"{exc}",
                 file=sys.stderr,
                 flush=True,
             )

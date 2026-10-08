@@ -43,12 +43,13 @@ Design decisions worth knowing before changing anything here:
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
 import sqlite3
 import sys
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from itertools import pairwise
@@ -425,16 +426,23 @@ def default_path() -> Path:
     return base / "cursor-spend-monitor" / "usage.db"
 
 
-def connect(path: Path | None = None) -> sqlite3.Connection:
+def connect(path: Path | None = None, *, prepare: bool = True) -> sqlite3.Connection:
     """Open the ledger, creating it if needed. Never refuses to open.
 
     A too-new store still opens so `report` can read it; only writing is
     refused, by `assert_writable`.
+
+    `prepare=False` skips the schema, the migrations and the format stamp, for a
+    second connection opened while the first already holds them: two connections
+    racing the same `ALTER TABLE` is an error, and re-creating the schema on every
+    worker connection is waste besides.
     """
     target = path or default_path()
     target.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(target, timeout=BUSY_TIMEOUT_MS / 1000)
     con.row_factory = sqlite3.Row
+    if not prepare:
+        return con
     # `timeout` above already sets SQLite's busy handler to BUSY_TIMEOUT_MS, so
     # there is no separate `PRAGMA busy_timeout` to issue.
     # WAL keeps the reporting reads from blocking a harvester's write, and vice
@@ -1407,10 +1415,12 @@ class LedgerRecorder:
 
     def __init__(self, path: Path | None = None, *, keep_days: int = 90) -> None:
         self.keep_days = keep_days
+        # Kept so a worker thread can open its own connection to the same store.
+        self._path = path or default_path()
         self._con: sqlite3.Connection | None = None
         self._failed = False
         try:
-            self._con = connect(path)
+            self._con = connect(self._path)
             assert_writable(self._con)
             prune(self._con, keep_days=keep_days)
         except LedgerTooNewError as exc:
@@ -1425,6 +1435,38 @@ class LedgerRecorder:
     @property
     def connection(self) -> sqlite3.Connection | None:
         return self._con
+
+    @contextlib.contextmanager
+    def worker(self) -> Iterator[sqlite3.Connection | None]:
+        """A connection for a worker thread, closed when the block ends.
+
+        A `sqlite3.Connection` belongs to the thread that created it, so a worker
+        must not borrow the main loop's. Doing that made every harvest fail with
+        "SQLite objects created in a thread can only be used in that same
+        thread", and the ledger quietly stopped filling while the panel still
+        looked perfectly healthy. A second connection is the supported model, and
+        WAL lets it read and write alongside the first -- which is what the busy
+        timeout is for.
+
+        Opened unprepared, because the main connection has already created the
+        schema and run the migrations, and two connections racing the same
+        `ALTER TABLE` is an error rather than a no-op.
+        """
+        if not self.active:
+            yield None
+            return
+        con: sqlite3.Connection | None = None
+        try:
+            con = connect(self._path, prepare=False)
+        except LedgerTooNewError as exc:
+            self._disable(str(exc))
+        except (sqlite3.Error, OSError) as exc:
+            self._disable(f"Could not open the usage ledger: {exc}")
+        try:
+            yield con
+        finally:
+            if con is not None:
+                con.close()
 
     def _disable(self, message: str) -> None:
         if not self._failed:
