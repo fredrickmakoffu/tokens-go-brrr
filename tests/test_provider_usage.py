@@ -87,9 +87,7 @@ class UsageFetchTest(unittest.TestCase):
                 target.fetch(target.token)
                 socket = self.sockets[-1]
                 self.assertEqual(socket.host, target.host)
-                self.assertEqual(
-                    socket.request.call_args[0][:2], ("GET", target.path)
-                )
+                self.assertEqual(socket.request.call_args[0][:2], ("GET", target.path))
 
     def test_a_reply_is_decoded(self):
         self.answer = reply(200, '{"weekly": {"percent": 12}}')
