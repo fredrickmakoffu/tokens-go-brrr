@@ -151,7 +151,7 @@ class CursorApiHarvester:
         result.scanned = len(rows)
         result.per_model = ledger.upsert_per_model(con, rows)
 
-        self._record_checks(con, period, payload, rows, token)
+        self._record_checks(con, period, payload, rows, token, cycle_key)
         ledger.set_reader_format(con, self.id, READER_VERSION)
         ledger.set_watermark(
             con,
@@ -204,9 +204,16 @@ class CursorApiHarvester:
         payload: dict[str, Any],
         rows: list[ledger.PerModelRow],
         token: str,
+        cycle_key: str,
     ) -> None:
         """Record what the numbers are, not what we assumed them to be."""
-        summed = sum(row.cost_usd or 0 for row in rows) * 100
+        # Only the rows belonging to the cycle the response total describes. A
+        # first or full harvest also fetches the window before this cycle, and
+        # summing both against one cycle's total is what made this check report a
+        # ~30x "unit" disagreement that was really two cycles added together.
+        summed = (
+            sum(row.cost_usd or 0 for row in rows if row.cycle_key == cycle_key) * 100
+        )
         reported = _as_float(payload.get("totalCostCents"))
         plan = period.get("planUsage") or {}
         limit = _as_int(plan.get("limit"))
