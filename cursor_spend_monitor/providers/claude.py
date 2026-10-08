@@ -27,6 +27,8 @@ def _as_float(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
 DASHBOARD_URL = "https://claude.ai/settings/usage"
 OAUTH_BETA = "oauth-2025-04-20"
 CREDENTIALS_FILE = Path.home() / ".claude" / ".credentials.json"
@@ -119,8 +121,11 @@ class ClaudeProvider:
                 continue
             metrics.append(
                 Meter(
-                    key, label, utilization,
-                    resets_at=_parse_iso(window.get("resets_at")), kind=kind,
+                    key,
+                    label,
+                    utilization,
+                    resets_at=_parse_iso(window.get("resets_at")),
+                    kind=kind,
                 )
             )
 

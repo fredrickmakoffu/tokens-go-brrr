@@ -26,6 +26,8 @@ def _as_float(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
 DASHBOARD_URL = "https://opencode.ai/console"
 AUTH_KEY = "opencode-go"
 
@@ -124,8 +126,11 @@ class OpenCodeProvider:
                 continue
             metrics.append(
                 Meter(
-                    key_name, label, percent,
-                    resets_at=_parse_iso(window.get("resetsAt")), kind=kind,
+                    key_name,
+                    label,
+                    percent,
+                    resets_at=_parse_iso(window.get("resetsAt")),
+                    kind=kind,
                 )
             )
 

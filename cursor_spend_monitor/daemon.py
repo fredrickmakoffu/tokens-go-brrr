@@ -570,8 +570,7 @@ class UsageDaemon:
                 )
         except sqlite3.Error as exc:
             print(
-                "Could not build an actionable message: "
-                f"{exc}",
+                f"Could not build an actionable message: {exc}",
                 file=sys.stderr,
                 flush=True,
             )
