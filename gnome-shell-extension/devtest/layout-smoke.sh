@@ -49,6 +49,68 @@ if (!i) {
 } else {
     const screens = ['list', 'guide', 'about', 'landing', 'detail', 'sessions'];
     let n = 0;
+
+    // Structure, not pixels. Each of these was a bug once, and each is a
+    // property of the actor tree the screen builds, so it can be asserted here
+    // instead of being looked at in a live session.
+    const collect = (root, styleClass) => {
+        const found = [];
+        const walk = (actor) => {
+            if (actor.style_class === styleClass) found.push(actor);
+            for (const child of actor.get_children ? actor.get_children() : [])
+                walk(child);
+        };
+        walk(root);
+        return found;
+    };
+    const texts = (root) => {
+        const found = [];
+        const walk = (actor) => {
+            if (typeof actor.text === 'string') found.push(actor.text);
+            for (const child of actor.get_children ? actor.get_children() : [])
+                walk(child);
+        };
+        walk(root);
+        return found;
+    };
+    const checkLanding = () => {
+        try {
+            const root = i.menu.box;
+            const marks = collect(root, 'ai-usage-landing-mark').length;
+            if (marks !== 2)
+                log('[layout-smoke] quote marks: expected 2, got ' + marks);
+            const rows = collect(root, 'ai-usage-landing-quote-row');
+            const children = rows.length ? rows[0].get_children().length : 0;
+            if (children !== 3)
+                log('[layout-smoke] quote row: expected mark, text, mark; got '
+                    + children + ' child(ren)');
+            if (texts(root).includes('Latest'))
+                log('[layout-smoke] the landing page offers Latest, which is itself');
+            const cont = collect(root, 'ai-usage-landing-continue')[0];
+            if (!cont) log('[layout-smoke] no Continue button on the landing page');
+            else if (cont.x_expand) log('[layout-smoke] Continue is set to expand');
+            // Clutter.ActorAlign.CENTER is 2. The enum is not in Eval's scope --
+            // only GLib and Main are -- and GJS reads enum properties as numbers.
+            const centre = 2;
+            const actions = collect(root, 'ai-usage-landing-actions')[0];
+            if (actions && actions.x_align !== centre)
+                log('[layout-smoke] the actions row is not centred');
+        } catch (e) {
+            // A broken assertion must not take the walk down with it: reported
+            // here, it still fails the run rather than passing quietly.
+            log('[layout-smoke] landing check threw: ' + e.message);
+        }
+    };
+    const checkList = () => {
+        try {
+            if (i._state && i._state.latestMessage
+                && !texts(i.menu.box).includes('Latest'))
+                log('[layout-smoke] Latest is missing from the list screen');
+        } catch (e) {
+            log('[layout-smoke] list check threw: ' + e.message);
+        }
+    };
+
     i.menu.open();
     GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
         if (n < screens.length) {
@@ -59,6 +121,8 @@ if (!i) {
             } catch (e) {
                 log('[layout-smoke] ' + name + ' threw: ' + e.message);
             }
+            if (name === 'landing') checkLanding();
+            if (name === 'list') checkList();
             return GLib.SOURCE_CONTINUE;
         }
         // Behaviour, not layout: Continue has to get the user out of this
@@ -134,6 +198,16 @@ if [ "${CONTINUE_BROKE:-0}" != "0" ]; then
   echo
   echo "The landing page must always be escapable — check that nothing in"
   echo "_leaveLanding() can throw before it navigates."
+  exit 1
+fi
+
+# Anything else the driver reports is a failed expectation: the success path logs
+# only the screen walk. A new assertion in the driver is therefore enforced here
+# without needing a matching branch, which is how it should be.
+UNEXPECTED="$(grep '\[layout-smoke\]' "$LOG" 2>/dev/null | grep -vc 'walked .* screens')"
+if [ "${UNEXPECTED:-0}" != "0" ]; then
+  echo "FAIL: $UNEXPECTED unexpected condition(s) from the driver:"
+  grep '\[layout-smoke\]' "$LOG" | grep -v 'walked .* screens' | head -5
   exit 1
 fi
 
