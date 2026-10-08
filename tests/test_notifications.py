@@ -188,6 +188,36 @@ class FunAndShareTest(NotifyCase):
         assert message is not None
         self.assertIn("4 days in a row", message.body)
 
+    def test_the_streak_is_measured_against_the_given_clock(self):
+        # Four consecutive days ending at NOW, so any other clock has to change
+        # the answer. Streaks were the only one of the nine facts that read the
+        # wall clock instead of the `now` it was handed, which let a digest state
+        # a streak belonging to a different day than the numbers beside it.
+        self.seed(
+            [
+                make(
+                    "claude",
+                    f"k{index}",
+                    started=NOW.replace(hour=9) - timedelta(days=index),
+                )
+                for index in range(4)
+            ]
+        )
+        day = NOW.date().isoformat()
+        live = notify.digest_facts(
+            self.con, start=day, end=day, period="today", now=NOW
+        )
+        self.assertEqual(live["streaks"]["current"], 4)
+        # The same rows, read a month later: the streak is over by then.
+        stale = notify.digest_facts(
+            self.con,
+            start=day,
+            end=day,
+            period="today",
+            now=NOW + timedelta(days=30),
+        )
+        self.assertEqual(stale["streaks"]["current"], 0)
+
     def test_no_fun_fact_is_invented_from_nothing(self):
         self.assertIsNone(notify.fun_fact(self.con, now=NOW))
 

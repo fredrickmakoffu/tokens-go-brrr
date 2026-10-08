@@ -194,7 +194,12 @@ def _estimate_note(con: sqlite3.Connection, start: str, end: str) -> str:
 
 
 def digest_facts(
-    con: sqlite3.Connection, *, start: str, end: str, period: str
+    con: sqlite3.Connection,
+    *,
+    start: str,
+    end: str,
+    period: str,
+    now: datetime | None = None,
 ) -> dict[str, Any]:
     """Every number a digest is allowed to use, in one place."""
     totals = ledger.totals(con, start_day=start, end_day=end)
@@ -208,7 +213,7 @@ def digest_facts(
         "top_project": _top(con, start, end, "project"),
         "top_model": _top(con, start, end, "model"),
         "cache": ledger.cache_share(con, start_day=start, end_day=end),
-        "streaks": ledger.streaks(con),
+        "streaks": ledger.streaks(con, now=now),
         "records": ledger.records(con, start_day=start, end_day=end),
         "shape": ledger.session_shape(con, start_day=start, end_day=end),
         "estimate_note": _estimate_note(con, start, end),
@@ -368,7 +373,7 @@ def daily_digest(
     con: sqlite3.Connection, *, now: datetime | None = None
 ) -> Message | None:
     start, end = day_range(1, now=now)
-    facts = digest_facts(con, start=start, end=end, period="today")
+    facts = digest_facts(con, start=start, end=end, period="today", now=now)
     if not facts["totals"]["sessions"]:
         return None
     return Message(
@@ -386,7 +391,7 @@ def weekly_digest(
     con: sqlite3.Connection, *, now: datetime | None = None
 ) -> Message | None:
     start, end = day_range(7, now=now)
-    facts = digest_facts(con, start=start, end=end, period="last 7 days")
+    facts = digest_facts(con, start=start, end=end, period="last 7 days", now=now)
     if not facts["totals"]["sessions"]:
         return None
     return Message(
@@ -404,7 +409,7 @@ def monthly_digest(
     con: sqlite3.Connection, *, now: datetime | None = None
 ) -> Message | None:
     start, end = month_range(now)
-    facts = digest_facts(con, start=start, end=end, period="this month")
+    facts = digest_facts(con, start=start, end=end, period="this month", now=now)
     if not facts["totals"]["sessions"]:
         return None
     body = render_digest(facts, headline="This month")
@@ -430,7 +435,7 @@ def monthly_digest(
 
 def fun_fact(con: sqlite3.Connection, *, now: datetime | None = None) -> Message | None:
     start, end = day_range(7, now=now)
-    facts = digest_facts(con, start=start, end=end, period="last 7 days")
+    facts = digest_facts(con, start=start, end=end, period="last 7 days", now=now)
     body = render_fun(facts)
     if not body:
         return None
@@ -448,7 +453,7 @@ def share_line(
     con: sqlite3.Connection, *, now: datetime | None = None
 ) -> Message | None:
     start, end = month_range(now)
-    facts = digest_facts(con, start=start, end=end, period="this month")
+    facts = digest_facts(con, start=start, end=end, period="this month", now=now)
     share = render_share(facts)
     if not share:
         return None
