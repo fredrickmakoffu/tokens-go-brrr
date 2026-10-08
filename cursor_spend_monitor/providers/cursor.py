@@ -13,7 +13,7 @@ DASHBOARD_URL = "https://cursor.com/dashboard/spending"
 class CursorProvider:
     id = "cursor"
     display_name = "Cursor"
-    process_specs = [
+    process_specs = (
         # The terminal agent: launched through a shell wrapper, so argv[0] is the
         # node entry point and the distinguishing part is the install path.
         # worker-server is an internal helper; --print is non-interactive (Task /
@@ -31,7 +31,7 @@ class CursorProvider:
             exclude_args=("--type=",),
             label="editor",
         ),
-    ]
+    )
 
     def __init__(self) -> None:
         self._client = CursorUsageClient()
@@ -60,13 +60,19 @@ class CursorProvider:
             plan=plan,
             metrics=[
                 Meter(
-                    "monthly", "Monthly limit", usage.auto_percent,
-                    resets_at=resets, kind="monthly",
+                    "monthly",
+                    "Monthly limit",
+                    usage.auto_percent,
+                    resets_at=resets,
+                    kind="monthly",
                 ),
                 # Spend on models outside the plan, not a window that resets.
                 Meter(
-                    "other", "Other models", usage.api_percent,
-                    resets_at=resets, kind="other",
+                    "other",
+                    "Other models",
+                    usage.api_percent,
+                    resets_at=resets,
+                    kind="other",
                 ),
             ],
             primary_key="monthly",

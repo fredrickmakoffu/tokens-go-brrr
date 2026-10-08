@@ -43,7 +43,12 @@ def tool_dict(
         },
         "via": None,
         "metrics": [
-            {"key": "five_hour", "label": "5-hour limit", "value": value, "resets": "in 2h"},
+            {
+                "key": "five_hour",
+                "label": "5-hour limit",
+                "value": value,
+                "resets": "in 2h",
+            },
             {"key": "seven_day", "label": "Weekly", "value": 12, "resets": "in 4 days"},
         ],
     }
@@ -85,6 +90,7 @@ class StateFileTest(unittest.TestCase):
         self.write(payload_dict())
         result = state.read_state(self.config)
         self.assertIsNotNone(result)
+        assert result is not None
         self.assertEqual(result["tools"][0]["id"], "claude")
 
     def test_state_older_than_two_polls_is_stale(self):
@@ -119,7 +125,10 @@ class StateFileTest(unittest.TestCase):
         payload = payload_dict()
         del payload["schema"]
         self.write(payload)
-        self.assertEqual(state.read_state(self.config)["schema"], state.SCHEMA_VERSION)
+        stamped = state.read_state(self.config)
+        self.assertIsNotNone(stamped)
+        assert stamped is not None
+        self.assertEqual(stamped["schema"], state.SCHEMA_VERSION)
 
     def test_max_age_respects_the_daemons_minimum_interval(self):
         # The daemon clamps its timer to 60s, so a smaller configured interval
@@ -191,7 +200,9 @@ class StatusCommandTest(unittest.TestCase):
 
     def test_format_joins_providers_with_the_separator(self):
         payload = payload_dict([tool_dict("claude"), tool_dict("opencode", value=7)])
-        _, out, _, _ = self.run_status(["--format", "{pct}", "--separator", " | "], payload)
+        _, out, _, _ = self.run_status(
+            ["--format", "{pct}", "--separator", " | "], payload
+        )
         self.assertEqual(out.strip(), "42 | 7")
 
     def test_format_shows_a_dash_rather_than_zero_when_not_ok(self):
@@ -222,7 +233,9 @@ class StatusCommandTest(unittest.TestCase):
 
     def test_provider_filter_selects_one_row(self):
         payload = payload_dict([tool_dict("claude"), tool_dict("opencode", value=7)])
-        _, out, _, _ = self.run_status(["--format", "{id}", "--provider", "opencode"], payload)
+        _, out, _, _ = self.run_status(
+            ["--format", "{id}", "--provider", "opencode"], payload
+        )
         self.assertEqual(out.strip(), "opencode")
 
     def test_unmatched_provider_filter_is_its_own_exit_code(self):
@@ -261,6 +274,8 @@ class DaemonPayloadTest(unittest.TestCase):
             snapshots=[snapshot],
             last_fetch=datetime.now(timezone.utc),
             last_error=None,
+            _billboard=None,
+            _latest_message=None,
         )
 
         payload = UsageDaemon.state_payload(stub)
@@ -272,7 +287,13 @@ class DaemonPayloadTest(unittest.TestCase):
     def test_daemon_payload_without_a_fetch_yet_has_no_timestamp(self):
         from cursor_spend_monitor.daemon import UsageDaemon
 
-        stub = mock.Mock(snapshots=[], last_fetch=None, last_error=None)
+        stub = mock.Mock(
+            snapshots=[],
+            last_fetch=None,
+            last_error=None,
+            _billboard=None,
+            _latest_message=None,
+        )
         self.assertIsNone(UsageDaemon.state_payload(stub)["updated_at"])
 
 
@@ -360,3 +381,28 @@ class RefreshCooldownTest(unittest.TestCase):
         stub = self._daemon(None)
         stub._polling = True
         self.assertFalse(self.poll(stub, force=True))
+
+
+class DaemonStartupTest(unittest.TestCase):
+    """Startup idle callbacks must fire once, not forever.
+
+    `GLib.idle_add` re-schedules any callback that returns True. The scan and
+    harvest functions return True because their own timers need them to stay
+    scheduled, so queueing them as idle callbacks directly spun the main loop
+    at idle priority and pegged a CPU core — 6h24m of CPU in 6h30m of wall time
+    before it was found.
+    """
+
+    def test_the_startup_scan_removes_its_idle_source(self):
+        from cursor_spend_monitor.daemon import UsageDaemon
+
+        stub = mock.Mock()
+        self.assertFalse(UsageDaemon._startup_scan(stub))
+        stub._scan_instances.assert_called_once_with()
+
+    def test_the_startup_harvest_removes_its_idle_source(self):
+        from cursor_spend_monitor.daemon import UsageDaemon
+
+        stub = mock.Mock()
+        self.assertFalse(UsageDaemon._startup_harvest(stub))
+        stub._harvest_tick.assert_called_once_with()

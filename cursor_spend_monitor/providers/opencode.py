@@ -1,9 +1,8 @@
 from __future__ import annotations
 
+import http.client
 import json
 import os
-import urllib.error
-import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -11,7 +10,24 @@ from typing import Any
 from ..instances import ProcessSpec
 from .base import Meter, ProviderSnapshot
 
-USAGE_URL = "https://opencode.ai/zen/go/v1/usage"
+# A host and a path rather than a URL: the fetch below uses `HTTPSConnection`,
+# where https is a property of the code and there is no scheme to get wrong.
+USAGE_HOST = "opencode.ai"
+USAGE_PATH = "/zen/go/v1/usage"
+
+
+def _as_float(value: Any) -> float | None:
+    """The number the API sent, or None.
+
+    A `Meter` is a claim about how much of a limit is used, so a reading that
+    will not parse drops the window instead of becoming a zero we invented.
+    """
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 DASHBOARD_URL = "https://opencode.ai/console"
 AUTH_KEY = "opencode-go"
 
@@ -54,9 +70,7 @@ class OpenCodeProvider:
 
     id = "opencode"
     display_name = "OpenCode"
-    process_specs = [
-        ProcessSpec(names=frozenset({"opencode"}), label="session"),
-    ]
+    process_specs = (ProcessSpec(names=frozenset({"opencode"}), label="session"),)
 
     def _read_key(self) -> str:
         env_key = os.environ.get("OPENCODE_API_KEY", "").strip()
@@ -107,13 +121,16 @@ class OpenCodeProvider:
             window = usage.get(key_name)
             if not isinstance(window, dict):
                 continue
-            percent = window.get("percent")
+            percent = _as_float(window.get("percent"))
             if percent is None:
                 continue
             metrics.append(
                 Meter(
-                    key_name, label, float(percent),
-                    resets_at=_parse_iso(window.get("resetsAt")), kind=kind,
+                    key_name,
+                    label,
+                    percent,
+                    resets_at=_parse_iso(window.get("resetsAt")),
+                    kind=kind,
                 )
             )
 
@@ -150,19 +167,35 @@ class OpenCodeProvider:
         )
 
     def _get_usage(self, api_key: str) -> dict[str, Any]:
-        request = urllib.request.Request(
-            USAGE_URL,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-                "User-Agent": "cursor-spend-monitor",
-            },
-        )
+        """Read the usage endpoint, mapping its failures onto ours."""
+        # `HTTPSConnection` rather than `urlopen`: TLS is a property of the code,
+        # with no URL to open and no scheme to get wrong. `api.py` does the same,
+        # for the same reason. Constructed outside the `try` so the `finally`
+        # always has one to close -- it does not connect here, so it cannot fail.
+        connection = http.client.HTTPSConnection(USAGE_HOST, timeout=30)
         try:
-            with urllib.request.urlopen(request, timeout=30) as response:
-                return json.loads(response.read().decode())
-        except urllib.error.HTTPError as exc:
-            if exc.code in {401, 403}:
-                raise PermissionError("OpenCode key rejected — sign in again") from exc
-            detail = exc.read().decode("utf-8", errors="replace")[:200]
-            raise RuntimeError(f"HTTP {exc.code} from OpenCode usage: {detail}") from exc
+            connection.request(
+                "GET",
+                USAGE_PATH,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "cursor-spend-monitor",
+                },
+            )
+            response = connection.getresponse()
+            status = int(response.status)
+            detail = response.read().decode("utf-8", errors="replace")
+        except OSError as exc:
+            raise RuntimeError(f"OpenCode usage unreachable: {exc}") from exc
+        finally:
+            connection.close()
+
+        if status in {401, 403}:
+            raise PermissionError("OpenCode key rejected — sign in again")
+        if status >= 400:
+            raise RuntimeError(f"HTTP {status} from OpenCode usage: {detail[:200]}")
+        try:
+            return json.loads(detail)
+        except ValueError as exc:
+            raise RuntimeError("OpenCode usage returned invalid JSON") from exc

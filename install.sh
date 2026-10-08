@@ -4,7 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UUID="ai-usage@fredrickmakoffu.github.io"
 EXT_SRC="$ROOT/gnome-shell-extension/$UUID"
-EXT_DST="$HOME/.local/share/gnome-shell/extensions/$UUID"
+EXT_HOME="$HOME/.local/share/gnome-shell/extensions"
+EXT_DST="$EXT_HOME/$UUID"
 SERVICE_SRC="$ROOT/systemd/cursor-spend-monitor.service"
 SERVICE_DST="$HOME/.config/systemd/user/cursor-spend-monitor.service"
 
@@ -23,6 +24,30 @@ echo "==> Installing systemd user service..."
 mkdir -p "$HOME/.config/systemd/user"
 cp "$SERVICE_SRC" "$SERVICE_DST"
 systemctl --user daemon-reload
+
+echo "==> Removing leftover live-reload revisions..."
+# `live-reload.sh` stages each revision under a new uuid, which is how it makes
+# the shell re-import a changed file. Those copies are throwaway, and an install
+# that skips this leaves a stale revision enabled beside the real one — two "AI
+# Usage" extensions in the list, which is exactly what happened once.
+python3 - <<'PY'
+import ast, re, subprocess
+
+enabled = ast.literal_eval(subprocess.run(
+    ['gsettings', 'get', 'org.gnome.shell', 'enabled-extensions'],
+    capture_output=True, text=True, check=True).stdout.strip())
+kept = [u for u in enabled if not re.match(r'ai-usage-r\d+@', u)]
+if kept != enabled:
+    subprocess.run(
+        ['gsettings', 'set', 'org.gnome.shell', 'enabled-extensions', repr(kept)],
+        check=True)
+    print('  enabled-extensions ->', kept)
+PY
+for dir in "$EXT_HOME"/ai-usage-r*@*; do
+  [ -e "$dir" ] || continue
+  rm -rf "$dir"
+  echo "  removed $(basename "$dir")"
+done
 
 echo "==> Enabling the extension..."
 gsettings set org.gnome.shell disable-user-extensions false
