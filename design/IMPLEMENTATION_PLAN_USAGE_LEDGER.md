@@ -2,7 +2,9 @@
 
 **Implements:** `design/USAGE_ANALYTICS_AND_GUIDANCE.md` (v2)
 **Branch:** `feature/usage-ledger-notifications`
-**Status:** plan for review — no code written
+**Status:** implemented — merged to `main` as PR #10, version 0.5.0. Phases 1–7
+are done; **Phase 8 is in progress**, because it is the one phase that needs
+calendar time rather than code.
 **Baseline:** 152 tests green (`python3 -m unittest discover -s tests`), stdlib-only (`dependencies = []`), Python ≥ 3.11
 
 This plan turns the design into ordered, independently shippable steps. Each
@@ -619,6 +621,11 @@ for extensions.gnome.org.
 ---
 
 ## Phase 8 — Tune against real data
+
+**Status:** ⏳ **in progress.** The daemon has harvested on its own schedule since
+2026-10-08, so the review is due a week on. One question is already waiting for
+it: Cursor's `limit` and `totalPercentUsed` do not reconcile with the cycle
+total, which is why the `cost_unit` check still reports "unit assumed cents".
 
 - Run a week of real harvests; inspect `report --checks` for cross-check drift;
   tune `shareable_share`, digest hour, quiet hours; confirm each §8 catalog row
