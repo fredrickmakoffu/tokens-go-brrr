@@ -76,6 +76,22 @@ def aggregated(rows: list[dict] | None = None) -> dict:
     }
 
 
+def cents(total: float) -> dict:
+    """One model, one figure: the shape the cost cross-check compares."""
+    return aggregated(
+        [
+            {
+                "modelIntent": "default",
+                "inputTokens": "1",
+                "outputTokens": "1",
+                "cacheReadTokens": "0",
+                "totalCents": total,
+                "tier": 1,
+            }
+        ]
+    )
+
+
 class FakeClient:
     """Answers each endpoint from a fixture, so no test touches the network."""
 
@@ -84,6 +100,7 @@ class FakeClient:
         *,
         period_payload=None,
         aggregated_payload=None,
+        earlier_payload=None,
         policy_payload=None,
         fail_path=None,
     ):
@@ -91,6 +108,10 @@ class FakeClient:
         self.aggregated_payload = (
             aggregated_payload if aggregated_payload is not None else aggregated()
         )
+        # What the window before this cycle answers with. None means the same
+        # payload as the current cycle, which is the common case.
+        self.earlier_payload = earlier_payload
+        self.aggregations = 0
         self.policy_payload = policy_payload if policy_payload is not None else {}
         self.fail_path = fail_path
         self.calls: list[str] = []
@@ -104,6 +125,9 @@ class FakeClient:
         if path == USAGE_PATH:
             return self.period_payload
         if path == AGGREGATED_PATH:
+            self.aggregations += 1
+            if self.aggregations > 1 and self.earlier_payload is not None:
+                return self.earlier_payload
             return self.aggregated_payload
         if path == POLICY_PATH:
             return self.policy_payload
@@ -230,12 +254,32 @@ class CrossCheckTest(CursorCase):
         self.assertIn("cost_unit", kinds)
 
     def test_an_implausible_sum_against_the_plan_is_flagged(self):
-        # A plan limit of 2000 with 0% used, while the rows sum far above it:
-        # the two figures cannot be the same unit, and that must be visible.
-        client = FakeClient(period_payload=period(limit=2000, percent=0))
+        # A plan limit of 2000 with 0% used while the rows sum far above it: the
+        # two figures cannot be the same unit, and that must be visible.
+        client = FakeClient(
+            aggregated_payload=cents(5000.0),
+            period_payload=period(limit=2000, percent=0),
+        )
         self.harvester(client).harvest(self.con)
         flagged = [row for row in self.checks() if row[0] == "cost_unit"]
         self.assertEqual(flagged[0][2], 0)
+
+    def test_the_previous_cycle_is_not_summed_into_this_one(self):
+        # A first harvest asks for the window before this cycle too. Those rows
+        # are history: folding them into the comparison against this cycle's
+        # total is what produced a ~30x "unit" mismatch that did not exist.
+        client = FakeClient(
+            aggregated_payload=cents(100.0),
+            earlier_payload=cents(4000.0),
+            period_payload=period(limit=2000, percent=0),
+        )
+        self.harvester(client).harvest(self.con)
+        flagged = [row for row in self.checks() if row[0] == "cost_unit"]
+        self.assertEqual(flagged[0][2], 1)
+        # The detail has to name this cycle's sum, not the history's.
+        self.assertIn("rows sum to 100.00 cents", flagged[0][1])
+        # ...while both cycles are still written to the ledger.
+        self.assertEqual(len(self.per_model()), 2)
 
     def test_a_plan_left_untouched_does_not_flag_a_small_sum(self):
         payload = aggregated(
