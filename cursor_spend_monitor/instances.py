@@ -8,10 +8,11 @@ any particular tool.
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 PROC = Path("/proc")
 _CLOCK_TICKS = os.sysconf("SC_CLK_TCK")
@@ -83,9 +84,7 @@ class InstanceReport:
         # Panel shows the count and (when known) the focused project name.
         # The detail screen lists one row per session. Full paths are included
         # for focus matching in the Shell extension and are not rendered.
-        sessions = [
-            _session_dict(i, paused=False) for i in self.active
-        ] + [
+        sessions = [_session_dict(i, paused=False) for i in self.active] + [
             _session_dict(i, paused=True) for i in self.suspended
         ]
         return {
@@ -132,12 +131,17 @@ def _unique(values: list[str]) -> list[str]:
 
 
 def _boot_time(proc: Path = PROC) -> float:
+    """Seconds since boot, or 0.0 when there is no procfs to ask (a container)."""
     try:
-        for line in (proc / "stat").read_text().splitlines():
-            if line.startswith("btime "):
-                return float(line.split()[1])
+        text = (proc / "stat").read_text()
     except OSError:
-        pass
+        return 0.0
+    for line in text.splitlines():
+        if line.startswith("btime "):
+            try:
+                return float(line.split()[1])
+            except (ValueError, IndexError):
+                return 0.0
     return 0.0
 
 
@@ -228,9 +232,10 @@ def scan(
 
     for entry in proc_root.iterdir():
         pid_text = entry.name
-        if not pid_text.isdigit():
-            continue
-        pid = int(pid_text)
+        try:
+            pid = int(pid_text)
+        except ValueError:
+            continue  # /proc holds more than processes
         if pid in ignore:
             continue
 
@@ -262,7 +267,9 @@ def scan(
         matched[pid] = hit
         details[pid] = (state, start_ticks, tty_nr)
 
-    raw_by_provider: dict[str, list[Instance]] = {provider_id: [] for provider_id in specs}
+    raw_by_provider: dict[str, list[Instance]] = {
+        provider_id: [] for provider_id in specs
+    }
     for pid, (provider_id, spec) in matched.items():
         if _has_matching_ancestor(pid, provider_id, parents, matched):
             continue  # a helper the session spawned, not a session of its own
@@ -310,7 +317,10 @@ def _backend_of(spec: ProcessSpec, directory: str):
 
 
 def _has_matching_ancestor(
-    pid: int, provider_id: str, parents: dict[int, int], matched: dict[int, tuple[str, ProcessSpec]]
+    pid: int,
+    provider_id: str,
+    parents: dict[int, int],
+    matched: dict[int, tuple[str, ProcessSpec]],
 ) -> bool:
     """True when an ancestor belongs to the same provider.
 

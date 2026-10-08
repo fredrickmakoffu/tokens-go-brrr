@@ -14,6 +14,7 @@ from __future__ import annotations
 import os
 import sqlite3
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -57,6 +58,27 @@ ROLLOVER_DROP = 0.5
 MAX_GAP_SECONDS = 3600
 
 
+def _epoch(moment: datetime | None = None) -> int:
+    """Epoch seconds, never raising.
+
+    `time.time()` is the net for a date so extreme that `.timestamp()` refuses;
+    it cannot itself fail, and returning 0 here would be worse than useless in
+    `prune`, where a zero cutoff means "delete everything".
+    """
+    try:
+        return int((moment or datetime.now(timezone.utc)).timestamp())
+    except (OSError, OverflowError, ValueError):
+        return int(time.time())
+
+
+def _as_float(value: Any) -> float:
+    """A meter's percentage is whatever the provider returned; treat junk as 0."""
+    try:
+        return float(value)
+    except (TypeError, ValueError, OverflowError):
+        return 0.0
+
+
 def _window_key(resets_at: datetime | None) -> str:
     """The reset a sample was counting towards, stored for reference.
 
@@ -79,27 +101,29 @@ def record(
     copy of another account's numbers, so storing it too would write every
     sample of that subscription twice and double-weight it in any later fit.
     """
-    stamp = int((at or datetime.now(timezone.utc)).timestamp())
-    rows = []
-    for snap in snapshots:
-        if snap.status != "ok" or snap.borrowed_from is not None:
-            continue
-        for meter in snap.metrics:
-            if meter.key == "—":
-                continue
-            rows.append(
-                (stamp, snap.provider_id, meter.key, float(meter.percent),
-                 _window_key(meter.resets_at))
-            )
-    if not rows:
-        return 0
+    stamp = _epoch(at)
+    # The batch is built inline: every argument to the statement is a value,
+    # never a query composed at runtime.
+    before = con.total_changes
     con.executemany(
         "INSERT INTO samples (ts, provider, metric, percent, resets_at)"
         " VALUES (?, ?, ?, ?, ?)",
-        rows,
+        [
+            (
+                stamp,
+                snap.provider_id,
+                meter.key,
+                _as_float(meter.percent),
+                _window_key(meter.resets_at),
+            )
+            for snap in snapshots
+            if snap.status == "ok" and snap.borrowed_from is None
+            for meter in snap.metrics
+            if meter.key != "—"
+        ],
     )
     con.commit()
-    return len(rows)
+    return con.total_changes - before
 
 
 def window_samples(
@@ -124,7 +148,7 @@ def window_samples(
         " ORDER BY ts DESC LIMIT ?",
         (provider, metric, limit),
     )
-    newest_first = [(float(ts), float(pct)) for ts, pct in cur.fetchall()]
+    newest_first = [(_as_float(ts), _as_float(pct)) for ts, pct in cur.fetchall()]
 
     kept: list[tuple[float, float]] = []
     for sample in newest_first:
@@ -142,7 +166,7 @@ def prune(con: sqlite3.Connection, *, keep_days: int = 90) -> int:
     """Drop samples past the retention window. Returns rows removed."""
     if keep_days <= 0:
         return 0
-    cutoff = int(datetime.now(timezone.utc).timestamp()) - keep_days * 86400
+    cutoff = _epoch() - keep_days * 86400
     cur = con.execute("DELETE FROM samples WHERE ts < ?", (cutoff,))
     con.commit()
     return cur.rowcount or 0
@@ -177,19 +201,23 @@ class Recorder:
         self._con = None
 
     def record(self, snapshots: list[Any], *, at: datetime | None = None) -> int:
-        if not self.active:
+        # Narrow once here: `active` proves the connection exists, but only a
+        # local check tells the type checker so.
+        con = self._con if self.active else None
+        if con is None:
             return 0
         try:
-            return record(self._con, snapshots, at=at)
+            return record(con, snapshots, at=at)
         except sqlite3.Error as exc:
             self._disable(f"Could not record usage history: {exc}")
             return 0
 
     def window_samples(self, provider: str, metric: str) -> list[tuple[float, float]]:
-        if not self.active:
+        con = self._con if self.active else None
+        if con is None:
             return []
         try:
-            return window_samples(self._con, provider, metric)
+            return window_samples(con, provider, metric)
         except sqlite3.Error as exc:
             self._disable(f"Could not read usage history: {exc}")
             return []

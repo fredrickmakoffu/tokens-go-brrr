@@ -2,24 +2,51 @@ from __future__ import annotations
 
 import os
 import signal
+import sqlite3
 import sys
 import threading
+from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any
 
-from gi.repository import GLib
+from gi.repository import GLib  # type: ignore  # gi has no stubs
 
-from dataclasses import replace
-
-from . import __version__, burn, history
+from . import (
+    __version__,
+    burn,
+    harvesters,
+    history,
+    ledger,
+    notify_engine,
+)
+from . import llm_composer as llm
 from .config import MonitorConfig, write_state
 from .dbus_service import UsageService
 from .instances import InstanceReport, scan, signature
-from .notify import AlertManager
-from .providers import build_providers
-from .providers import pi_backend
+from .notify import AlertManager, send
+from .providers import build_providers, pi_backend
 from .providers.base import Provider, ProviderSnapshot
 from .state import build_payload
+
+# How often the notification clock is consulted. The schedule it serves is
+# hourly at most, so this only decides how late a digest can be, not how often
+# one is sent.
+NOTIFY_CHECK_SECONDS = 300
+
+
+def _as_int(value: Any, default: int = 0) -> int:
+    """A config value as an int; a typo is not worth taking the daemon down."""
+    try:
+        return int(value)
+    except (TypeError, ValueError, OverflowError):
+        return default
+
+
+def _now_ts() -> int:
+    try:
+        return int(datetime.now(timezone.utc).timestamp())
+    except (OSError, OverflowError, ValueError):
+        return 0
 
 
 # Shortest gap between two rounds of provider requests. Matches the floor the
@@ -36,6 +63,17 @@ class UsageDaemon:
         self.providers: list[Provider] = build_providers(config.enabled_providers)
         self.alerts = AlertManager(config)
         self.history = history.Recorder(keep_days=config.history_days)
+        # The ledger is the long-term store; history is the sample series the
+        # burn-rate fit needs. They fail independently and neither stops the
+        # other, or the panel.
+        self.ledger = ledger.LedgerRecorder(keep_days=config.ledger_days)
+        self._harvesting = False
+        # The first harvest of a run may backfill (Cursor's previous cycle);
+        # later ones are strictly incremental.
+        self._harvest_full = True
+        self._last_slot: dict[str, str] = {}
+        self._billboard: dict[str, Any] | None = None
+        self._latest_message: dict[str, Any] | None = None
         self.snapshots: list[ProviderSnapshot] = []
         self.last_error: str | None = None
         self.last_fetch: datetime | None = None
@@ -56,6 +94,7 @@ class UsageDaemon:
             get_state=self.state_payload,
             on_refresh=self.poll,
             on_set_primary=self.set_primary,
+            on_acknowledge=self.acknowledge,
             on_quit=self.quit,
             on_name_lost=self._name_lost,
         )
@@ -67,8 +106,22 @@ class UsageDaemon:
         GLib.timeout_add_seconds(
             max(1, self.config.instance_poll_seconds), self._scan_instances
         )
+        # The ledger fills itself, on its own slow clock: a harvest reads
+        # databases and transcripts that quota polling has no business touching.
+        GLib.timeout_add_seconds(
+            max(60, self.config.harvest_deep_seconds), self._harvest_tick
+        )
+        if self.config.notify_enabled:
+            GLib.timeout_add_seconds(NOTIFY_CHECK_SECONDS, self._notify_tick)
+        # The first runs happen at idle, but each must fire exactly once.
+        # `GLib.idle_add` re-schedules a callback that returns True, and the
+        # timer functions return True to keep their own timers alive — handing
+        # them over directly spins the main loop at idle priority forever and
+        # pegs a CPU core. `poll` returns False, so it is already one-shot; the
+        # other two go through wrappers that remove the source.
         GLib.idle_add(self.poll)
-        GLib.idle_add(self._scan_instances)
+        GLib.idle_add(self._startup_scan)
+        GLib.idle_add(self._startup_harvest)
         for sig in (signal.SIGINT, signal.SIGTERM):
             GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, sig, self._on_signal)
 
@@ -78,6 +131,7 @@ class UsageDaemon:
         self.loop.run()
         self.service.close()
         self.history.close()
+        self.ledger.close()
         return 0
 
     def quit(self, *_args) -> bool:
@@ -89,7 +143,11 @@ class UsageDaemon:
         return False
 
     def _name_lost(self) -> None:
-        print("Another AI usage daemon owns the bus name; exiting.", file=sys.stderr, flush=True)
+        print(
+            "Another AI usage daemon owns the bus name; exiting.",
+            file=sys.stderr,
+            flush=True,
+        )
         self.quit()
 
     # -- polling -------------------------------------------------------------
@@ -120,6 +178,11 @@ class UsageDaemon:
         the provider is least able to answer. force is for the scheduled tick,
         which is already spaced by the poll interval.
         """
+        # An out-of-band message -- the `quote` command writes straight to the
+        # ledger from another process, and the scheduler ticks on its own clock --
+        # should reach the panel on the next open rather than at the next slow
+        # timer. Two indexed reads, and a republish only when something changed.
+        self._publish_billboard_change()
         if self._polling:
             return False
         if not force and self.last_fetch is not None:
@@ -127,7 +190,9 @@ class UsageDaemon:
             if age < REFRESH_COOLDOWN_SECONDS:
                 return False
         self._polling = True
-        threading.Thread(target=self._poll_worker, name="ai-usage-poll", daemon=True).start()
+        threading.Thread(
+            target=self._poll_worker, name="ai-usage-poll", daemon=True
+        ).start()
         return False
 
     def _poll_worker(self) -> None:
@@ -146,6 +211,16 @@ class UsageDaemon:
         GLib.idle_add(self._apply_snapshots, snapshots)
 
     # -- sessions -------------------------------------------------------------
+
+    def _startup_scan(self) -> bool:
+        """One initial scan, then remove the idle source.
+
+        `_scan_instances` is written to be driven by a timer, so it returns
+        True to stay scheduled. As an idle callback that same True would
+        re-queue it immediately.
+        """
+        self._scan_instances()
+        return GLib.SOURCE_REMOVE
 
     def _scan_instances(self, *_args) -> bool:
         try:
@@ -197,9 +272,7 @@ class UsageDaemon:
             if not self._is_harness(snap.provider_id):
                 continue
 
-            backends = [
-                i.backend for i in snap.instances.all if i.backend is not None
-            ]
+            backends = [i.backend for i in snap.instances.all if i.backend is not None]
             backend = pi_backend.dominant(backends)
             snap.backend = backend
             snap.borrowed_from = None
@@ -258,11 +331,335 @@ class UsageDaemon:
         self.history.record(applied, at=self.last_fetch)
         self._attach_forecasts()
         self.last_error = (
-            "; ".join(errors) if errors and not any(s.status == "ok" for s in applied) else None
+            "; ".join(errors)
+            if errors and not any(s.status == "ok" for s in applied)
+            else None
         )
         self._attach_instances()
+        self._notify_events()
         self._publish()
         return False
+
+    # -- ledger --------------------------------------------------------------
+
+    def _startup_harvest(self) -> bool:
+        """One initial harvest, then remove the idle source. See `_startup_scan`."""
+        self._harvest_tick()
+        return GLib.SOURCE_REMOVE
+
+    def _harvest_tick(self) -> bool:
+        """Re-read the tools' own stores into the ledger, off the main loop."""
+        if not self.ledger.active or self._harvesting:
+            return True
+        self._harvesting = True
+        threading.Thread(
+            target=self._harvest_worker, name="ai-usage-harvest", daemon=True
+        ).start()
+        return True
+
+    def _harvest_worker(self) -> None:
+        try:
+            # A worker thread needs its own connection: the ledger's belongs to
+            # the main loop, and SQLite refuses to let another thread use it.
+            with self.ledger.worker() as con:
+                if con is None:
+                    return
+                for reader in harvesters.build():
+                    if not reader.available():
+                        continue
+                    reader.harvest(con, full=self._harvest_full)
+                ledger.prune(con, keep_days=self.config.ledger_days)
+            # Back to the main loop before touching D-Bus: this runs on a
+            # worker thread, and the state signal is GLib's to emit.
+            GLib.idle_add(self._publish_billboard_change)
+        except Exception as exc:  # noqa: BLE001 - a reader must not stop the daemon
+            print(f"Ledger harvest failed: {exc}", file=sys.stderr, flush=True)
+        finally:
+            self._harvest_full = False
+            self._harvesting = False
+
+    # -- notifications -------------------------------------------------------
+
+    def _quiet_now(self) -> bool:
+        """True during the configured quiet hours, in local time."""
+        hours = self.config.notify_silent_hours
+        if not hours or len(hours) != 2:
+            return False
+        start, end = _as_int(hours[0], 22), _as_int(hours[1], 7)
+        if start == end:
+            return False
+        hour = datetime.now().hour
+        if start < end:
+            return start <= hour < end
+        return hour >= start or hour < end
+
+    def _due_slot(self) -> str | None:
+        """The scheduled digest that is due now, if any.
+
+        At most one slot fires per check, most specific first, so a monthly
+        digest on the 1st does not also drag the daily one out on the same tick.
+        """
+        local = datetime.now()
+        if local.hour < max(0, min(23, self.config.notify_daily_hour)):
+            return None
+        day = local.date().isoformat()
+        iso = local.isocalendar()
+        week = f"{iso.year}-W{iso.week:02d}"
+        month = local.date().strftime("%Y-%m")
+        names = [
+            "monday",
+            "tuesday",
+            "wednesday",
+            "thursday",
+            "friday",
+            "saturday",
+            "sunday",
+        ]
+        wanted = self.config.notify_weekly_day.lower()
+        weekly = names.index(wanted) if wanted in names else 0
+        if local.day == 1 and self._last_slot.get("monthly") != month:
+            self._last_slot["monthly"] = month
+            return "monthly"
+        if local.weekday() == weekly and self._last_slot.get("weekly") != week:
+            self._last_slot["weekly"] = week
+            return "weekly"
+        if self._last_slot.get("daily") != day:
+            self._last_slot["daily"] = day
+            return "daily"
+        return None
+
+    def _notify_tick(self) -> bool:
+        """Send the scheduled digest when its clock comes round."""
+        if not self.config.notify_enabled or self._quiet_now():
+            return True
+        if self.ledger.connection is None:
+            return True
+        slot = self._due_slot()
+        if slot is None:
+            return True
+        # Composing can reach a network, so it never runs on the main loop.
+        threading.Thread(
+            target=self._digest_worker,
+            args=(slot,),
+            name="ai-usage-digest",
+            daemon=True,
+        ).start()
+        return True
+
+    def _digest_worker(self, slot: str) -> None:
+        try:
+            with self.ledger.worker() as con:
+                if con is None:
+                    # Nothing to read. The ledger explains itself once, but hand
+                    # the slot back so a ledger that recovers before the next
+                    # check still gets its digest out.
+                    self._last_slot.pop(slot, None)
+                    return
+                messages = self._compose(
+                    con, notify_engine.scheduled_messages(con, slot=slot)
+                )
+                fresh = notify_engine.keep(
+                    con,
+                    messages,
+                    cooldown_seconds=notify_engine.DEFAULT_COOLDOWN_SECONDS,
+                )
+        except sqlite3.Error as exc:
+            print(
+                f"Could not build the {slot} digest: {exc}", file=sys.stderr, flush=True
+            )
+            # A failure must not burn the slot. The digest of 2026-10-07 18:03
+            # died on a connection error, had already marked itself sent, and so
+            # never tried again: one exception cost a whole day of digests, and
+            # the only trace was a single line in the journal.
+            self._last_slot.pop(slot, None)
+            return
+        GLib.idle_add(self._deliver, fresh, False)
+
+    def _compose(
+        self, con: sqlite3.Connection, messages: list[Any], *, trigger: str = ""
+    ) -> list[Any]:
+        """The templates, reworded by a model when one has capacity to spare.
+
+        Every failure -- no generator with enough headroom, a missing
+        credential, a refusal -- leaves the template in place. The LLM is an
+        upgrade, and an upgrade that can break the notification path is not one.
+        """
+        if not (self.config.llm_notifications and messages):
+            return messages
+        generator = llm.choose(
+            self.snapshots,
+            trigger=trigger,
+            floor=self.config.llm_min_headroom,
+            model=self.config.llm_generator_model,
+            provider=self.config.llm_generator_provider,
+        )
+        if generator is None:
+            return messages
+        improved: list[Any] = []
+        for message in messages:
+            rewritten = llm.rewrite(
+                message,
+                generator=generator,
+                facts=self._facts_for(con, message),
+                max_tokens=self.config.llm_max_output_tokens,
+            )
+            improved.append(rewritten or message)
+        return improved
+
+    def _facts_for(self, con: sqlite3.Connection, message: Any) -> dict[str, Any]:
+        """The ranked providers the model may choose the featured AI from.
+
+        A trailing month, so the list is stable and always has ids in it; the
+        message keeps its own period's numbers, which are already in the draft.
+        """
+        start, end = notify_engine.day_range(30)
+        return {
+            "period": str((message.meta or {}).get("period") or "last 30 days"),
+            "ranked": ledger.period_totals(
+                con, start_day=start, end_day=end, group_by="provider"
+            ),
+        }
+
+    def _deliver(self, messages: list[Any], actionable: bool) -> bool:
+        """Send what was composed and republish, back on the main loop."""
+        for message in messages:
+            if not self._wanted(message.kind):
+                continue
+            if not actionable:
+                send("AI usage", message.body)
+                continue
+            # Urgency comes from the recorded percentage rather than from
+            # reading the sentence back, which would make prose load-bearing.
+            percent = (message.meta or {}).get("percent")
+            spent = (
+                isinstance(percent, (int, float)) and percent >= notify_engine.SPENT_AT
+            )
+            send("AI usage", message.body, urgency="critical" if spent else "normal")
+        con = self.ledger.connection
+        if messages and con is not None:
+            self._refresh_billboard(con)
+            self._publish()
+        return False
+
+    def _notify_events(self) -> None:
+        """Speak up when a meter is about to run out."""
+        if not self.config.notify_enabled or self._quiet_now():
+            return
+        if not self._wanted(notify_engine.ACTIONABLE):
+            return
+        if self.ledger.connection is None:
+            return
+        threading.Thread(
+            target=self._events_worker, name="ai-usage-event", daemon=True
+        ).start()
+
+    def _events_worker(self) -> None:
+        try:
+            with self.ledger.worker() as con:
+                if con is None:
+                    return
+                messages = notify_engine.event_messages(
+                    self.snapshots, wind_down_hours=self.config.wind_down_hours
+                )
+                trigger = messages[0].meta.get("trigger", "") if messages else ""
+                messages = self._compose(con, messages, trigger=trigger)
+                fresh = notify_engine.keep(
+                    con,
+                    messages,
+                    cooldown_seconds=notify_engine.DEFAULT_COOLDOWN_SECONDS,
+                )
+        except sqlite3.Error as exc:
+            print(
+                f"Could not build an actionable message: {exc}",
+                file=sys.stderr,
+                flush=True,
+            )
+            return
+        GLib.idle_add(self._deliver, fresh, True)
+
+    def _wanted(self, kind: str) -> bool:
+        return kind in (self.config.notify_types or [])
+
+    # -- the landing page ----------------------------------------------------
+
+    def acknowledge(self, message_id: int) -> None:
+        """The panel has shown a message; stop offering it.
+
+        Recorded in the database on purpose. The extension cannot remember a
+        dismissal across a reload or a login, and a message that keeps coming
+        back is worse than one that never appears.
+        """
+        con = self.ledger.connection
+        if con is None or not message_id:
+            return
+        try:
+            ledger.mark_message_seen(con, message_id)
+        except sqlite3.Error as exc:
+            print(
+                f"Could not acknowledge message {message_id}: {exc}",
+                file=sys.stderr,
+                flush=True,
+            )
+            return
+        self._refresh_billboard(con)
+        self._publish()
+
+    def _billboard_ids(self) -> tuple[Any, Any]:
+        return (
+            (self._billboard or {}).get("id"),
+            (self._latest_message or {}).get("id"),
+        )
+
+    def _publish_billboard_change(self) -> bool:
+        """Re-read the landing page, republishing only if it changed.
+
+        Messages reach the ledger from several places -- the scheduler, an event,
+        and the `quote` command in a different process -- so the billboard can
+        move without a poll having happened. Comparing ids first keeps the check
+        cheap enough to run on every open, which is what makes an out-of-band
+        message show up on the next click instead of minutes later.
+        """
+        con = self.ledger.connection
+        if con is None:
+            return False
+        before = self._billboard_ids()
+        self._refresh_billboard(con)
+        if self._billboard_ids() == before:
+            return False
+        self._publish()
+        return True
+
+    def _refresh_billboard(self, con: sqlite3.Connection) -> None:
+        """Choose the one message the panel should open on, if any.
+
+        The daemon decides, not the extension: acknowledgement has to outlive a
+        login, and priority and freshness are rules worth testing in Python. The
+        configured `billboard_freshness_hours` is a ceiling over the per-kind
+        windows; zero disables the ceiling.
+        """
+        if not self.config.billboard_enabled:
+            self._billboard = None
+            self._latest_message = None
+            return
+
+        pending = ledger.pending_messages(con)
+        ceiling = max(0, self.config.billboard_freshness_hours) * 3600
+        if ceiling:
+            now_ts = _now_ts()
+            pending = [
+                row
+                for row in pending
+                if not row.get("created_at")
+                or now_ts - _as_int(row.get("created_at")) <= ceiling
+            ]
+        self._billboard = notify_engine.choose_billboard(pending)
+
+        latest = ledger.latest_message(con)
+        # `latest_message` is deliberately unfiltered by acknowledgement or
+        # freshness: "show me the most recent one" should work months later.
+        self._latest_message = (
+            notify_engine.billboard_payload(latest) if latest else None
+        )
 
     def _attach_forecasts(self) -> None:
         """Give each meter a time-to-exhaustion from its recorded samples.
@@ -307,19 +704,29 @@ class UsageDaemon:
             return
         self.config.set_primary(provider_id, metric_key)
         self.snapshots = [
-            s.with_primary(metric_key) if s.provider_id == provider_id else s for s in self.snapshots
+            s.with_primary(metric_key) if s.provider_id == provider_id else s
+            for s in self.snapshots
         ]
         self._publish()
 
     # -- state ---------------------------------------------------------------
 
     def state_payload(self) -> dict[str, Any]:
-        return build_payload(
+        payload = build_payload(
             self.snapshots,
             version=__version__,
             updated_at=self.last_fetch,
             error=self.last_error,
         )
+        # Additive: both fields are new, an older extension ignores them, and
+        # nothing that already exists changes meaning, so the state schema
+        # version stays as it is. `billboard` is null far more often than not —
+        # that is what keeps the landing page from appearing on every open.
+        payload["billboard"] = dict(self._billboard) if self._billboard else None
+        payload["latestMessage"] = (
+            dict(self._latest_message) if self._latest_message else None
+        )
+        return payload
 
     def _publish(self) -> None:
         payload = self.state_payload()

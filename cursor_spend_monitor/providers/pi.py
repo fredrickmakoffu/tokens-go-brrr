@@ -27,13 +27,13 @@ class PiProvider:
 
     id = "pi"
     display_name = "Pi"
-    process_specs = [
+    process_specs = (
         ProcessSpec(
             names=frozenset({"pi"}),
             label="session",
             resolve_backend=pi_backend.BackendResolver(),
         ),
-    ]
+    )
 
     def available(self) -> bool:
         return pi_backend.installed()

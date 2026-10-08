@@ -25,6 +25,9 @@ const IFACE_XML = `
       <arg type="s" direction="in" name="provider"/>
       <arg type="s" direction="in" name="metric"/>
     </method>
+    <method name="Acknowledge">
+      <arg type="u" direction="in" name="id"/>
+    </method>
     <method name="Quit"/>
     <signal name="StateChanged"><arg type="s" name="json"/></signal>
   </interface>
@@ -248,7 +251,11 @@ function kindOfMetric(m) {
     const text = (m.label || "").toLowerCase();
     if (text.includes("week")) return "weekly";
     if (text.includes("month")) return "monthly";
-    if (text.includes("hour") || text.includes("rolling") || text.includes("daily"))
+    if (
+        text.includes("hour") ||
+        text.includes("rolling") ||
+        text.includes("daily")
+    )
         return "rolling";
     return "other";
 }
@@ -658,7 +665,7 @@ const Row = GObject.registerClass(
             });
         }
 
-        activate(event) {
+        activate(_event) {
             // Clicks on a badge belong to the badge (mockup: e.stopPropagation()).
             this.emit("navigate");
         }
@@ -696,6 +703,15 @@ const Row = GObject.registerClass(
     },
 );
 
+// What the featured AI's role means, in words the panel owns. The role itself
+// is decided by the daemon from the ledger, never here.
+const ROLE_COPY = {
+    suggested: "has room — worth moving to",
+    leading: "doing the heavy lifting",
+    value: "most tokens for the least spend",
+    featured: "worth a look",
+};
+
 const Indicator = GObject.registerClass(
     class AiUsageIndicator extends PanelMenu.Button {
         _init(ext) {
@@ -712,6 +728,16 @@ const Indicator = GObject.registerClass(
             this._probedMatch = null; // {toolId, project, title} from async pid probe
             this._probeTimeoutId = 0;
             this._probeSerial = 0;
+            // The landing page opens once per message per session. Closing it
+            // without pressing Continue must not make it nag on the next open,
+            // so the id is recorded when it is shown, not when it is dismissed.
+            this._landingShownId = null;
+            this._landingMode = "fresh"; // "fresh" (acknowledges) | "latest"
+            // At most one landing page per open. The daemon is asked for state
+            // when the popover opens, so a new message can arrive a moment
+            // later; without this, Continue would show the *next* message
+            // immediately instead of returning to the list.
+            this._landingShownThisOpen = false;
 
             this._dot = new St.Widget({
                 style_class: "ai-usage-dot",
@@ -755,8 +781,22 @@ const Indicator = GObject.registerClass(
             this.menu.connect("open-state-changed", (_menu, open) => {
                 if (open) {
                     this._ext.refresh();
-                    if (this._screen !== "list") this._navigate("list");
-                    else this._beginEntry();
+                    this._landingShownThisOpen = false;
+                    const billboard = this._state?.billboard;
+                    // The daemon decides whether anything is worth interrupting
+                    // for: `billboard` is set only while a message is
+                    // unacknowledged and still fresh. The once-per-session guard
+                    // here is the only routing the extension does.
+                    if (billboard && billboard.id !== this._landingShownId) {
+                        this._landingShownId = billboard.id;
+                        this._landingShownThisOpen = true;
+                        this._landingMode = "fresh";
+                        this._navigate("landing");
+                    } else if (this._screen === "list") {
+                        this._beginEntry();
+                    } else {
+                        this._navigate("list");
+                    }
                 } else if (this._entryId) {
                     GLib.source_remove(this._entryId);
                     this._entryId = 0;
@@ -959,6 +999,25 @@ const Indicator = GObject.registerClass(
             }
             this._updateDot();
             this._updateSessions();
+
+            // The daemon is asked for state on open, so the answer -- possibly
+            // carrying a message generated seconds ago -- lands after the
+            // popover has already rendered the list. Take the turn then, but
+            // only once per open and only from the list.
+            const billboard = state?.billboard;
+            if (
+                this.menu.isOpen &&
+                !this._landingShownThisOpen &&
+                this._screen === "list" &&
+                billboard &&
+                billboard.id !== this._landingShownId
+            ) {
+                this._landingShownId = billboard.id;
+                this._landingShownThisOpen = true;
+                this._landingMode = "fresh";
+                this._navigate("landing");
+                return;
+            }
             this._render(false);
         }
 
@@ -983,6 +1042,11 @@ const Indicator = GObject.registerClass(
             for (const cls of ["caution", "critical", "error"])
                 this._dot.remove_style_class_name(cls);
             if (level !== "ok") this._dot.add_style_class_name(level);
+            // A quiet hint that the popover has something to say, so the
+            // landing page is discoverable rather than a surprise.
+            if (this._state?.billboard)
+                this._dot.add_style_class_name("has-update");
+            else this._dot.remove_style_class_name("has-update");
         }
 
         // The percentage rides along only once a provider reaches caution. Below that
@@ -1088,6 +1152,7 @@ const Indicator = GObject.registerClass(
             });
             if (this._screen === "detail") this._renderDetail(screen);
             else if (this._screen === "sessions") this._renderSessions(screen);
+            else if (this._screen === "landing") this._renderLanding(screen);
             else if (this._screen === "guide") this._renderGuide(screen);
             else if (this._screen === "about") this._renderAbout(screen);
             else this._renderList(screen);
@@ -1171,6 +1236,13 @@ const Indicator = GObject.registerClass(
                 b.connect("clicked", cb);
                 header.add_child(b);
             };
+            // Not on the landing page itself: it would be offering what is
+            // already in front of you, one click from going nowhere.
+            if (this._state?.latestMessage && this._screen !== "landing")
+                add("Latest", () => {
+                    this._landingMode = "latest";
+                    this._navigate("landing");
+                });
             if (withSettings) add("Settings", () => this._openSettings());
             add("Guide", () => this._navigate("guide"));
             add("About", () => this._navigate("about"));
@@ -1566,6 +1638,136 @@ const Indicator = GObject.registerClass(
             return item;
         }
 
+        _landingBillboard() {
+            // Fresh for the routing case, the newest stored one for Latest.
+            return this._landingMode === "latest"
+                ? (this._state?.latestMessage ?? null)
+                : (this._state?.billboard ?? null);
+        }
+
+        _renderLanding(screen) {
+            const billboard = this._landingBillboard();
+            if (!billboard) {
+                this._screen = "list";
+                this._renderList(screen);
+                return;
+            }
+            screen.add_child(this._header("AI usage", false));
+
+            const body = new St.BoxLayout({
+                style_class: "ai-usage-landing",
+                orientation: Clutter.Orientation.VERTICAL,
+                x_expand: true,
+            });
+            // The marks sit beside the text rather than above it: on their own
+            // line their tall line boxes left a gap the height of the glyph. The
+            // closing one aligns to the bottom of the block, so the pair bookends
+            // the quote instead of both hanging at the top.
+            const quote = new St.BoxLayout({
+                style_class: "ai-usage-landing-quote-row",
+                x_expand: true,
+            });
+            quote.add_child(
+                label("\u201c", "ai-usage-landing-mark", {
+                    y_align: Clutter.ActorAlign.START,
+                }),
+            );
+            quote.add_child(
+                wrappedLabel(billboard.text ?? "", "ai-usage-landing-quote"),
+            );
+            quote.add_child(
+                label("\u201d", "ai-usage-landing-mark", {
+                    y_align: Clutter.ActorAlign.END,
+                }),
+            );
+            body.add_child(quote);
+            if (billboard.share)
+                body.add_child(
+                    wrappedLabel(billboard.share, "ai-usage-landing-share"),
+                );
+
+            const featured = billboard.featured;
+            if (featured?.name || featured?.providerId) {
+                const row = new St.BoxLayout({
+                    style_class: "ai-usage-landing-featured",
+                    x_expand: true,
+                });
+                row.add_child(
+                    new St.Icon({
+                        style_class: "ai-usage-landing-icon",
+                        gicon: this._icons.badge(
+                            featured.providerId ?? "cursor",
+                        ),
+                        icon_size: 22,
+                        y_align: Clutter.ActorAlign.CENTER,
+                    }),
+                );
+                const text = new St.BoxLayout({
+                    orientation: Clutter.Orientation.VERTICAL,
+                    x_expand: true,
+                });
+                text.add_child(
+                    label(
+                        featured.name ?? featured.providerId ?? "",
+                        "ai-usage-landing-name",
+                    ),
+                );
+                const role = ROLE_COPY[featured.role];
+                if (role) text.add_child(label(role, "ai-usage-landing-role"));
+                row.add_child(text);
+                body.add_child(row);
+            }
+            screen.add_child(body);
+
+            // Centred as a pair rather than stretched across the row: a button
+            // that fills the width reads as a form submit, not a way back.
+            const actions = new St.BoxLayout({
+                style_class: "ai-usage-landing-actions",
+                x_align: Clutter.ActorAlign.CENTER,
+            });
+            const cont = new St.Button({
+                style_class: "ai-usage-landing-continue",
+                label: "Continue",
+                can_focus: true,
+            });
+            cont.connect("clicked", () => this._leaveLanding());
+            actions.add_child(cont);
+            if (billboard.share) {
+                const copy = new St.Button({
+                    style_class: "ai-usage-landing-copy",
+                    label: "Copy",
+                    can_focus: true,
+                    y_align: Clutter.ActorAlign.CENTER,
+                });
+                copy.connect("clicked", () =>
+                    St.Clipboard.get_default().set_text(
+                        St.ClipboardType.CLIPBOARD,
+                        billboard.share,
+                    ),
+                );
+                actions.add_child(copy);
+            }
+            screen.add_child(actions);
+
+            if (this._landingMode === "latest")
+                screen.add_child(
+                    label("Earlier update", "ai-usage-landing-note"),
+                );
+        }
+
+        _leaveLanding() {
+            const billboard = this._landingBillboard();
+            // Leave first. Getting out of this screen must not depend on a
+            // D-Bus call succeeding: when the proxy's interface XML had no
+            // Acknowledge, the missing method threw and stranded the user here.
+            this._navigate("list");
+            if (billboard?.id === undefined || billboard?.id === null) return;
+            // Pressing Continue is the user saying they have seen it, so the
+            // daemon records that and never offers this one again. The same
+            // applies to reading it back through Latest.
+            this._ext.acknowledge(billboard.id);
+        }
+
         _renderGuide(screen) {
             screen.add_child(this._detailHeader("Status colors", null));
             const body = new St.BoxLayout({
@@ -1788,5 +1990,20 @@ export default class AiUsageExtension extends Extension {
     setPrimary(providerId, metricKey) {
         if (this._proxy?.g_name_owner)
             this._proxy.SetPrimaryRemote(providerId, metricKey, () => {});
+    }
+
+    acknowledge(messageId) {
+        // Durable by design: the daemon stores this, so a dismissal survives a
+        // reload or a logout and the message cannot come back. Defensive on
+        // purpose: the proxy only exposes AcknowledgeRemote if this file's
+        // interface XML declares it, and a method that is missing or refused
+        // must never break the caller.
+        if (!this._proxy?.g_name_owner) return;
+        if (typeof this._proxy.AcknowledgeRemote !== "function") return;
+        try {
+            this._proxy.AcknowledgeRemote(messageId, () => {});
+        } catch (e) {
+            console.error(`[ai-usage] acknowledge failed: ${e.message}`);
+        }
     }
 }

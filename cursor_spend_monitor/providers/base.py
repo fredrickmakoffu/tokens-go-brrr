@@ -7,7 +7,6 @@ from typing import Any, Protocol
 from .. import burn
 from ..instances import InstanceReport, ProcessSpec
 
-
 # The window a meter measures, in terms every provider can agree on. Providers
 # name their meters differently for the same thing — Claude's five_hour and
 # OpenCode's rolling are one kind; seven_day and weekly are another — and the
@@ -16,6 +15,14 @@ from ..instances import InstanceReport, ProcessSpec
 # "other" is for a meter that is not a time window at all, such as Cursor's
 # spend on non-included models. It never appears in the window picker.
 WINDOW_KINDS = ("rolling", "weekly", "monthly", "other")
+
+
+def _as_int(value: Any) -> int:
+    """A meter figure as an int. Providers return whatever their JSON held."""
+    try:
+        return int(value)
+    except (TypeError, ValueError, OverflowError):
+        return 0
 
 
 @dataclass(frozen=True)
@@ -39,7 +46,7 @@ class Meter:
             return "—"
         now = datetime.now(timezone.utc)
         delta = self.resets_at - now
-        secs = int(delta.total_seconds())
+        secs = _as_int(delta.total_seconds())
         if secs <= 0:
             return "Resets soon"
         hours, rem = divmod(secs, 3600)
@@ -71,7 +78,7 @@ class ProviderSnapshot:
     # id whose meters were copied onto this snapshot. `borrowed_from` being set
     # is what marks these metrics as somebody else's, so the status dot does not
     # count the same subscription twice.
-    backend: Any = None          # providers.pi_backend.Backend
+    backend: Any = None  # providers.pi_backend.Backend
     borrowed_from: str | None = None
 
     @property
@@ -134,7 +141,7 @@ class ProviderSnapshot:
                 {
                     "key": m.key,
                     "label": m.label,
-                    "value": int(round(m.percent)),
+                    "value": _as_int(round(m.percent)),
                     "resets": m.resets_label(),
                     "kind": m.kind,
                     "eta": burn.eta_label(m.eta_seconds),
@@ -182,10 +189,12 @@ class Provider(Protocol):
     id: str
     display_name: str
     # How to recognise this tool's running sessions. Empty means it reports none.
-    process_specs: list[ProcessSpec]
+    # A tuple, not a list: this is a class attribute, and every instance
+    # sharing one mutable list is a bug waiting for someone to append to it.
+    process_specs: tuple[ProcessSpec, ...]
 
     def available(self) -> bool:
         """True when credentials/local state suggest this provider can be polled."""
-
-    def fetch(self) -> ProviderSnapshot:
         ...
+
+    def fetch(self) -> ProviderSnapshot: ...

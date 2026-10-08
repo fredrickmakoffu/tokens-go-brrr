@@ -1,0 +1,4 @@
+{
+  "//": "The auto-formatter rewrites stylesheet.css to a one-space indent and reflows layout-smoke.sh, undoing hand-formatting on every edit -- repeatedly, and mid-edit, which is how a style pass once arrived inside an unrelated commit. Neither is a language this repo has a formatter for, and layout-smoke.sh is itself the strongest check on both files, so they are excluded from scanning rather than accepted in a shape nobody asked for. Everything else, Python included, is still formatted and linted.",
+  "ignore": ["**/*.css", "**/*.sh"]
+}
