@@ -188,7 +188,7 @@ CREATE TABLE IF NOT EXISTS messages (
     share      TEXT,
     meta       TEXT,
     seen_at    INTEGER,                    -- set when the panel has shown it
-    UNIQUE(kind, key, created_at)
+    UNIQUE(kind, key)                      -- one row per message, ever
 );
 
 -- Per-message transcript facts. Claude Code writes one API response as several
@@ -456,17 +456,79 @@ def connect(path: Path | None = None, *, prepare: bool = True) -> sqlite3.Connec
 
 
 def _migrate_messages(con: sqlite3.Connection) -> None:
-    """Add columns to `messages` that an older store predates.
+    """Bring an older `messages` table up to the current identity rules.
 
-    `CREATE TABLE IF NOT EXISTS` cannot alter a table that already exists, so an
-    additive change needs a step of its own. This is idempotent, and safe in
-    both directions: an older daemon never reads the column, and a newer one
-    upgrades the store in place rather than demanding a fresh database or a
+    Two changes have landed here: `seen_at` for durable acknowledgement, and the
+    uniqueness narrowed from `(kind, key, created_at)` to `(kind, key)`.
+
+    A `CREATE TABLE IF NOT EXISTS` cannot alter a table that already exists, so
+    each change needs a step of its own. This is idempotent, and safe in both
+    directions: an older daemon never reads the column, and a newer one upgrades
+    the store in place rather than demanding a fresh database or a
     `harvest --full`.
     """
     columns = {row[1] for row in con.execute("PRAGMA table_info(messages)")}
     if "seen_at" not in columns:
         con.execute("ALTER TABLE messages ADD COLUMN seen_at INTEGER")
+    if _messages_key_repeats(con):
+        _collapse_messages(con)
+
+
+def _messages_key_repeats(con: sqlite3.Connection) -> bool:
+    """True when `messages` still lets one key be stored more than once.
+
+    Read from the table's own DDL: a PRAGMA cannot be parameterised, and what has
+    to be spotted is the constraint, not an index name that could be looked up.
+    """
+    row = con.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'messages'"
+    ).fetchone()
+    if row is None:
+        return False
+    return "unique(kind,key,created_at)" in "".join((row[0] or "").lower().split())
+
+
+def _collapse_messages(con: sqlite3.Connection) -> None:
+    """Rebuild `messages` unique by `(kind, key)`, folding duplicates into one.
+
+    SQLite cannot drop a constraint in place, so this is the table-rebuild dance:
+    new table, copy, drop, rename. A timestamp used to be part of the identity, so
+    the same logical message generated twice -- which `quote --generate` does on
+    every run -- became two rows; and since a dismissal is recorded per row,
+    acknowledging the one on screen left the others to be offered again under a
+    fresh id.
+
+    The survivor keeps its own id, the newest wording, and is acknowledged if
+    *any* of the duplicates was: a dismissal is a statement about the message.
+    """
+    con.execute("DROP TABLE IF EXISTS messages_rebuilt")
+    con.execute(
+        "CREATE TABLE messages_rebuilt ("
+        " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        " kind TEXT NOT NULL,"
+        " key TEXT NOT NULL,"
+        " created_at INTEGER NOT NULL,"
+        " provider TEXT,"
+        " body TEXT NOT NULL,"
+        " share TEXT,"
+        " meta TEXT,"
+        " seen_at INTEGER,"
+        " UNIQUE(kind, key)"
+        ")"
+    )
+    con.execute(
+        "INSERT INTO messages_rebuilt"
+        " (id, kind, key, created_at, provider, body, share, meta, seen_at)"
+        " SELECT m.id, m.kind, m.key, m.created_at, m.provider, m.body, m.share,"
+        "        m.meta, g.acked_at"
+        "   FROM messages m"
+        "   JOIN (SELECT kind, key, MAX(created_at) AS newest,"
+        "                MAX(seen_at) AS acked_at"
+        "           FROM messages GROUP BY kind, key) g"
+        "     ON g.kind = m.kind AND g.key = m.key AND g.newest = m.created_at"
+    )
+    con.execute("DROP TABLE messages")
+    con.execute("ALTER TABLE messages_rebuilt RENAME TO messages")
 
 
 def _stamp_format(con: sqlite3.Connection) -> None:
@@ -1354,19 +1416,32 @@ def store_message(
     meta: dict[str, Any] | None = None,
     at: datetime | None = None,
 ) -> int:
-    """Cache a generated message and return its id."""
+    """Cache a generated message and return its id.
+
+    One row per `(kind, key)`, so re-stating a message updates it in place. It
+    used to insert a second row whenever the same message was generated in a
+    different second, and because acknowledgement is recorded per row, dismissing
+    the one on screen left the rest for the panel to offer again.
+
+    `seen_at` is deliberately not in the update: an acknowledgement is a
+    statement about the message, not about that moment's wording.
+    """
     stamp = _stamp(at)
-    cur = con.execute(
-        "INSERT OR IGNORE INTO messages (kind, key, created_at, provider, body,"
-        " share, meta) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    con.execute(
+        "INSERT INTO messages (kind, key, created_at, provider, body, share, meta)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?)"
+        " ON CONFLICT(kind, key) DO UPDATE SET"
+        " created_at = excluded.created_at,"
+        " provider = excluded.provider,"
+        " body = excluded.body,"
+        " share = excluded.share,"
+        " meta = excluded.meta",
         (kind, key, stamp, provider, body, share, _as_json(meta)),
     )
     con.commit()
-    if cur.lastrowid:
-        return _as_int(cur.lastrowid)
     row = con.execute(
-        "SELECT id FROM messages WHERE kind = ? AND key = ? AND created_at = ?",
-        (kind, key, stamp),
+        "SELECT id FROM messages WHERE kind = ? AND key = ?",
+        (kind, key),
     ).fetchone()
     return _as_int(row[0]) if row is not None else 0
 

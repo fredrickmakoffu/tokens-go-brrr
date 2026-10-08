@@ -558,6 +558,73 @@ class MessageTest(LedgerCase):
             ledger.last_message_age(self.con, kind="weekly", key="2026-W41")
         )
 
+    def test_the_same_message_is_one_row(self):
+        # A timestamp used to be part of the identity, so generating the same
+        # message again in a different second made a second row -- and a
+        # dismissal is stored per row, so the panel could offer an identical
+        # message again under a new id.
+        first = ledger.store_message(
+            self.con, kind="daily", key="2026-10-08", body="first"
+        )
+        again = ledger.store_message(
+            self.con,
+            kind="daily",
+            key="2026-10-08",
+            body="second",
+            at=datetime.now(timezone.utc) + timedelta(seconds=5),
+        )
+        self.assertEqual(self.count("messages"), 1)
+        self.assertEqual(first, again)
+        found = ledger.latest_message(self.con)
+        assert found is not None
+        self.assertEqual(found["body"], "second")
+
+    def test_restating_a_message_keeps_it_acknowledged(self):
+        mid = ledger.store_message(self.con, kind="daily", key="k", body="body")
+        self.assertEqual(ledger.mark_message_seen(self.con, mid), 1)
+        ledger.store_message(self.con, kind="daily", key="k", body="reworded")
+        found = ledger.latest_message(self.con)
+        assert found is not None
+        self.assertEqual(found["body"], "reworded")
+        self.assertIsNotNone(found["seen_at"])
+
+    def test_an_old_store_folds_its_duplicates(self):
+        # The shape 0.5.0 wrote: two rows for one logical message, one of them
+        # acknowledged. The survivor has to carry the newest wording and the
+        # dismissal, or upgrading silently resurrects a message the user read.
+        path = Path(self._dir.name) / "old.db"
+        old = sqlite3.connect(path)
+        old.executescript(
+            "CREATE TABLE messages ("
+            " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            " kind TEXT NOT NULL,"
+            " key TEXT NOT NULL,"
+            " created_at INTEGER NOT NULL,"
+            " provider TEXT,"
+            " body TEXT NOT NULL,"
+            " share TEXT,"
+            " meta TEXT,"
+            " seen_at INTEGER,"
+            " UNIQUE(kind, key, created_at));"
+            "INSERT INTO messages (kind, key, created_at, body, seen_at)"
+            " VALUES ('daily', 'k', 100, 'oldest', 555);"
+            "INSERT INTO messages (kind, key, created_at, body, seen_at)"
+            " VALUES ('daily', 'k', 200, 'newest', NULL);"
+            "INSERT INTO messages (kind, key, created_at, body)"
+            " VALUES ('daily', 'other', 150, 'other');"
+        )
+        old.commit()
+        old.close()
+
+        migrated = ledger.connect(path)
+        self.addCleanup(migrated.close)
+        rows = list(
+            migrated.execute("SELECT key, body, seen_at FROM messages ORDER BY key")
+        )
+        self.assertEqual([row[0] for row in rows], ["k", "other"])
+        self.assertEqual(rows[0][1], "newest")
+        self.assertEqual(rows[0][2], 555)
+
     def test_messages_expire_with_retention(self):
         now = datetime.now(timezone.utc)
         ledger.store_message(
