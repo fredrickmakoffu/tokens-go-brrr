@@ -374,6 +374,30 @@ class DaemonBillboardTest(unittest.TestCase):
         self.assertIsNone(stub._billboard)
         self.assertIsNone(stub._latest_message)
 
+    def test_a_failed_digest_does_not_burn_the_slot(self):
+        # The digest of 2026-10-07 18:03 died on a worker-thread connection
+        # error, having already marked itself sent, so it never tried again: one
+        # exception cost a whole day of digests and left a single journal line.
+        from cursor_spend_monitor.daemon import UsageDaemon
+
+        stub = self.daemon()
+        stub._last_slot = {"daily": "2026-10-08"}
+        stub.ledger.worker = mock.Mock(side_effect=sqlite3.Error("no connection"))
+        with mock.patch("sys.stderr"):
+            UsageDaemon._digest_worker(stub, "daily")
+        self.assertNotIn("daily", stub._last_slot)
+
+    def test_an_inactive_ledger_does_not_burn_the_slot(self):
+        from cursor_spend_monitor.daemon import UsageDaemon
+
+        stub = self.daemon()
+        stub._last_slot = {"daily": "2026-10-08"}
+        worker = mock.MagicMock()
+        worker.return_value.__enter__.return_value = None
+        stub.ledger.worker = worker
+        UsageDaemon._digest_worker(stub, "daily")
+        self.assertNotIn("daily", stub._last_slot)
+
     def test_the_freshness_ceiling_caps_what_lands(self):
         # A fun fact is fresh for 12h by kind; the configured ceiling is 1h.
         ledger.store_message(

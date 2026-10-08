@@ -450,6 +450,10 @@ class UsageDaemon:
         try:
             with self.ledger.worker() as con:
                 if con is None:
+                    # Nothing to read. The ledger explains itself once, but hand
+                    # the slot back so a ledger that recovers before the next
+                    # check still gets its digest out.
+                    self._last_slot.pop(slot, None)
                     return
                 messages = self._compose(
                     con, notify_engine.scheduled_messages(con, slot=slot)
@@ -463,6 +467,11 @@ class UsageDaemon:
             print(
                 f"Could not build the {slot} digest: {exc}", file=sys.stderr, flush=True
             )
+            # A failure must not burn the slot. The digest of 2026-10-07 18:03
+            # died on a connection error, had already marked itself sent, and so
+            # never tried again: one exception cost a whole day of digests, and
+            # the only trace was a single line in the journal.
+            self._last_slot.pop(slot, None)
             return
         GLib.idle_add(self._deliver, fresh, False)
 
