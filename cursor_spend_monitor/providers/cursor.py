@@ -13,7 +13,7 @@ DASHBOARD_URL = "https://cursor.com/dashboard/spending"
 class CursorProvider:
     id = "cursor"
     display_name = "Cursor"
-    process_specs = [
+    process_specs = (
         # The terminal agent: launched through a shell wrapper, so argv[0] is the
         # node entry point and the distinguishing part is the install path.
         # worker-server is an internal helper; --print is non-interactive (Task /
@@ -31,7 +31,7 @@ class CursorProvider:
             exclude_args=("--type=",),
             label="editor",
         ),
-    ]
+    )
 
     def __init__(self) -> None:
         self._client = CursorUsageClient()

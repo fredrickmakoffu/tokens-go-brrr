@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import time
-import urllib.error
-import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -12,7 +11,22 @@ from typing import Any
 from ..instances import ProcessSpec
 from .base import Meter, ProviderSnapshot
 
-USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
+# A host and a path rather than a URL: the fetch below uses `HTTPSConnection`,
+# where https is a property of the code and there is no scheme to get wrong.
+USAGE_HOST = "api.anthropic.com"
+USAGE_PATH = "/api/oauth/usage"
+
+
+def _as_float(value: Any) -> float | None:
+    """The number the API sent, or None.
+
+    A `Meter` is a claim about how much of a limit is used, so a reading that
+    will not parse drops the window instead of becoming a zero we invented.
+    """
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 DASHBOARD_URL = "https://claude.ai/settings/usage"
 OAUTH_BETA = "oauth-2025-04-20"
 CREDENTIALS_FILE = Path.home() / ".claude" / ".credentials.json"
@@ -51,14 +65,14 @@ class ClaudeProvider:
 
     id = "claude"
     display_name = "Claude Code"
-    process_specs = [
+    process_specs = (
         # --chrome-native-host is the browser integration, not a coding session.
         ProcessSpec(
             names=frozenset({"claude", "claude.exe"}),
             exclude_args=("--chrome-native-host",),
             label="session",
         ),
-    ]
+    )
 
     def _read_oauth(self) -> dict[str, Any]:
         path = Path(os.environ.get("CLAUDE_CREDENTIALS_FILE", CREDENTIALS_FILE))
@@ -100,12 +114,12 @@ class ClaudeProvider:
             window = usage.get(key)
             if not isinstance(window, dict):
                 continue
-            utilization = window.get("utilization")
+            utilization = _as_float(window.get("utilization"))
             if utilization is None:
                 continue
             metrics.append(
                 Meter(
-                    key, label, float(utilization),
+                    key, label, utilization,
                     resets_at=_parse_iso(window.get("resets_at")), kind=kind,
                 )
             )
@@ -144,20 +158,36 @@ class ClaudeProvider:
         )
 
     def _get_usage(self, access_token: str) -> dict[str, Any]:
-        request = urllib.request.Request(
-            USAGE_URL,
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json",
-                "anthropic-beta": OAUTH_BETA,
-                "User-Agent": "cursor-spend-monitor",
-            },
-        )
+        """Read the usage endpoint, mapping its failures onto ours."""
+        # `HTTPSConnection` rather than `urlopen`: TLS is a property of the code,
+        # with no URL to open and no scheme to get wrong. `api.py` does the same,
+        # for the same reason. Constructed outside the `try` so the `finally`
+        # always has one to close -- it does not connect here, so it cannot fail.
+        connection = http.client.HTTPSConnection(USAGE_HOST, timeout=30)
         try:
-            with urllib.request.urlopen(request, timeout=30) as response:
-                return json.loads(response.read().decode())
-        except urllib.error.HTTPError as exc:
-            if exc.code in {401, 403}:
-                raise PermissionError("Claude login rejected — run claude to refresh") from exc
-            detail = exc.read().decode("utf-8", errors="replace")[:200]
-            raise RuntimeError(f"HTTP {exc.code} from Claude usage: {detail}") from exc
+            connection.request(
+                "GET",
+                USAGE_PATH,
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                    "anthropic-beta": OAUTH_BETA,
+                    "User-Agent": "cursor-spend-monitor",
+                },
+            )
+            response = connection.getresponse()
+            status = int(response.status)
+            detail = response.read().decode("utf-8", errors="replace")
+        except OSError as exc:
+            raise RuntimeError(f"Claude usage unreachable: {exc}") from exc
+        finally:
+            connection.close()
+
+        if status in {401, 403}:
+            raise PermissionError("Claude login rejected — run claude to refresh")
+        if status >= 400:
+            raise RuntimeError(f"HTTP {status} from Claude usage: {detail[:200]}")
+        try:
+            return json.loads(detail)
+        except ValueError as exc:
+            raise RuntimeError("Claude usage returned invalid JSON") from exc
