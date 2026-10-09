@@ -32,19 +32,19 @@ tools = [
         "instances": {
             "active": 2,
             "suspended": 1,
-            "projects": ["maarifa-project", "optimus"],
+            "projects": ["web-app", "api-server"],
             "suspendedProjects": ["cursor-folder"],
             "sessions": [
                 {
-                    "project": "maarifa-project",
-                    "directory": "/home/u/maarifa-project",
+                    "project": "web-app",
+                    "directory": "/home/u/web-app",
                     "paused": False,
                     "kind": "agent",
                     "tty": "pts/2",
                 },
                 {
-                    "project": "optimus",
-                    "directory": "/home/u/optimus",
+                    "project": "api-server",
+                    "directory": "/home/u/api-server",
                     "paused": False,
                     "kind": "agent",
                     "tty": "pts/3",
@@ -159,12 +159,12 @@ tools = [
         "instances": {
             "active": 2,
             "suspended": 0,
-            "projects": ["optimus", "sundeskv2"],
+            "projects": ["api-server", "mobile-app"],
             "suspendedProjects": [],
             "sessions": [
                 {
-                    "project": "optimus",
-                    "directory": "/home/u/optimus",
+                    "project": "api-server",
+                    "directory": "/home/u/api-server",
                     "paused": False,
                     "kind": "session",
                     "tty": "pts/5",
@@ -177,8 +177,8 @@ tools = [
                     },
                 },
                 {
-                    "project": "sundeskv2",
-                    "directory": "/home/u/sundeskv2",
+                    "project": "mobile-app",
+                    "directory": "/home/u/mobile-app",
                     "paused": False,
                     "kind": "session",
                     "tty": "pts/6",
