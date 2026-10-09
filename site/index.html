@@ -3,88 +3,45 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AI Usage — Downloads</title>
-<meta name="description" content="A status dot for your AI coding limits. Download AI Usage for Fedora, Debian, Windows and macOS.">
+<title>Tokens go brrr — AI Usage for GNOME Shell</title>
+<meta name="description" content="A status dot in your top bar for your AI coding limits: Cursor, Claude Code, OpenCode, Pi and Codex. Download AI Usage for Fedora and Debian/Ubuntu.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="ds_bundle.js"></script>
+<script>window.__AIU_KIT__ = true;</script>
 <style>
-:root{--bg:#2b2b2d;--surface:#363638;--line:#4b4b4e;--text:#f5f5f8;--muted:#b7b7ba;--dim:#98989b;--accent:#94bce3;--accent-ink:#1f2a36;--warn:#f0ba59}
-@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){--bg:#f5f5f8;--surface:#fff;--line:#d6d6da;--text:#2b2b2d;--muted:#5d5d61;--dim:#7a7a7d;--accent:#3f6c99;--accent-ink:#fff;--warn:#9a6a00}}
-:root[data-theme="light"]{--bg:#f5f5f8;--surface:#fff;--line:#d6d6da;--text:#2b2b2d;--muted:#5d5d61;--dim:#7a7a7d;--accent:#3f6c99;--accent-ink:#fff;--warn:#9a6a00}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:400 16px/1.5 Barlow,system-ui,sans-serif}
-.wrap{max-width:880px;margin:0 auto;padding:0 16px}
-header{padding:56px 0 32px}
-.dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--accent);margin-right:10px}
-h1{font:700 44px/1.1 "Barlow Condensed",Barlow,sans-serif;letter-spacing:.01em;margin:0 0 12px;text-transform:uppercase}
-.lede{color:var(--muted);max-width:56ch;margin:0}
-.ver{margin-top:20px;color:var(--dim);font-size:14px}
-main{padding-bottom:64px}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:10px}
-.card.mine{border-color:var(--accent)}
-.card h2{font:600 22px "Barlow Condensed",Barlow,sans-serif;margin:0;letter-spacing:.02em;text-transform:uppercase}
-.tag{font-size:12px;color:var(--accent);font-weight:600;letter-spacing:.06em;text-transform:uppercase}
-.meta{color:var(--dim);font-size:13px}
-.btn{display:inline-block;background:var(--accent);color:var(--accent-ink);font-weight:600;text-decoration:none;padding:10px 16px;border-radius:8px;text-align:center}
-.btn:focus-visible,a:focus-visible{outline:2px solid var(--text);outline-offset:2px}
-.btn[aria-disabled=true]{background:transparent;border:1px dashed var(--line);color:var(--dim);cursor:default}
-code,pre{font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
-pre{white-space:pre-wrap;word-break:break-all;margin:0;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;overflow-x:auto}
-details{font-size:13px;color:var(--muted)}
-summary{cursor:pointer}
-.sha{word-break:break-all}
-footer{border-top:1px solid var(--line);padding:24px 0 48px;color:var(--dim);font-size:13px}
+html{scroll-behavior:auto}body{margin:0;background:#2b2b2d}
+a{color:var(--color-accent)}a:hover{color:var(--color-text)}
+@keyframes tgb-shake{0%,100%{transform:translate(0,0)}25%{transform:translate(-1px,1px)}50%{transform:translate(1px,-1px)}75%{transform:translate(-1px,0)}}
+@keyframes tgb-flick{0%,100%{opacity:1}50%{opacity:.55}}
+.tgb-shake{animation:tgb-shake 90ms linear infinite}.tgb-brrr{animation:tgb-flick 180ms steps(2) infinite}
+@media (prefers-reduced-motion:reduce){.tgb-shake,.tgb-brrr{animation:none}}
 </style>
 </head>
-<body>
-<div class="wrap">
-  <header>
-    <h1><span class="dot"></span>AI Usage</h1>
-    <p class="lede">A status dot in your top bar for your AI coding limits: Cursor, Claude Code, OpenCode and more. Pick your platform.</p>
-    <div class="ver" id="ver" aria-live="polite">Loading latest release…</div>
-  </header>
-  <main>
-    <div class="grid" id="grid"></div>
-  </main>
-  <footer>
-    Always verify a download against its SHA-256 before installing. After installing on GNOME, log out and back in, then run <code>cursor-spend-monitor setup</code>.
-  </footer>
-</div>
-<script>
-const BASE = "https://github.com/fredrickmakoffu/cursor-spend-monitor-releases/releases/download/";
-const PLATFORMS = [
-  {key:"fedora", label:"Fedora", sub:"RPM · GNOME", install:f=>`sudo dnf install ./${f}`},
-  {key:"debian", label:"Debian / Ubuntu", sub:"DEB · GNOME", install:f=>`sudo apt install ./${f}`},
-  {key:"windows", label:"Windows", sub:"Installer"},
-  {key:"macos", label:"macOS", sub:"Disk image"},
-];
-const ua = navigator.userAgent;
-const mine = /Windows/i.test(ua) ? "windows" : /Mac/i.test(ua) ? "macos"
-  : /Fedora|Red Hat/i.test(ua) ? "fedora" : /Debian|Ubuntu/i.test(ua) ? "debian" : "";
-const fmt = n => n > 1e6 ? (n/1e6).toFixed(1)+" MB" : Math.max(1,Math.round(n/1e3))+" KB";
-const el = (t, p={}, kids=[]) => { const e=Object.assign(document.createElement(t),p); kids.forEach(k=>e.append(k)); return e; };
-
-function render(m){
-  const grid = document.getElementById("grid");
-  document.getElementById("ver").textContent = m ? `Latest: v${m.version} · ${m.released}` : "No release published yet.";
-  PLATFORMS.forEach(p=>{
-    const a = m && m.artifacts.find(x=>x.platform===p.key);
-    const card = el("section",{className:"card"+(p.key===mine?" mine":"")});
-    if (p.key===mine) card.append(el("div",{className:"tag",textContent:"Your system"}));
-    card.append(el("h2",{textContent:p.label}), el("div",{className:"meta",textContent:p.sub+(a?` · ${fmt(a.size)}`:"")}));
-    if (a){
-      card.append(el("a",{className:"btn",href:`${BASE}v${m.version}/${a.file}`,textContent:`Download ${a.file.split(".").pop()}`}));
-      if (p.install) card.append(el("pre",{},[el("code",{textContent:p.install(a.file)})]));
-      card.append(el("details",{},[el("summary",{textContent:"SHA-256"}), el("code",{className:"sha",textContent:a.sha256})]));
-    } else {
-      const soon = el("span",{className:"btn",textContent:"Coming soon"}); soon.setAttribute("aria-disabled","true"); card.append(soon);
-    }
-    grid.append(card);
-  });
+<body><div id="site"></div>
+<noscript><p style="color:#f5f5f8;padding:24px;font:16px sans-serif">Tokens go brrr needs JavaScript. Releases: <a href="https://github.com/fredrickmakoffu/cursor-spend-monitor-releases/releases">github.com/fredrickmakoffu/cursor-spend-monitor-releases/releases</a></p></noscript>
+<script type="text/babel" src="data.jsx"></script>
+<script type="text/babel" src="Screens.jsx"></script>
+<script type="text/babel" src="burn.jsx"></script>
+<script type="text/babel" src="Shared.jsx"></script>
+<script type="text/babel" src="releases.jsx"></script>
+<script type="text/babel" src="Directions.jsx"></script>
+<script type="text/babel">
+function Site() {
+  const b = useBurn(1);
+  const [dismissed, setDismissed] = React.useState(false);
+  React.useEffect(() => { if (!b.limited) setDismissed(false); }, [b.limited]);
+  return (<>
+    <DirB b={b} />
+    {b.limited && !dismissed && <LimitModal b={b} dark onDismiss={() => setDismissed(true)} />}
+  </>);
 }
-fetch("manifest.json",{cache:"no-cache"}).then(r=>r.ok?r.json():null).catch(()=>null).then(render);
+ReactDOM.createRoot(document.getElementById("site")).render(<Site />);
 </script>
 </body>
 </html>

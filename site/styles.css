@@ -1,0 +1,73 @@
+/* Tokens, base and component states, lifted from the design system. */
+:root {
+  --color-neutral-100: #f5f5f8; --color-neutral-200: #e7e7ea; --color-neutral-300: #d4d4d7; --color-neutral-400: #b7b7ba;
+  --color-neutral-500: #98989b; --color-neutral-600: #7a7a7d; --color-neutral-700: #5d5d60; --color-neutral-800: #424244; --color-neutral-900: #2b2b2d;
+  --color-accent-100: #eef6ff; --color-accent-200: #d6ebff; --color-accent-300: #b5d9fd; --color-accent-400: #94bce3; --color-accent-500: #749dc4;
+  --color-accent-600: #597ea3; --color-accent-700: #416180; --color-accent-800: #2c455d; --color-accent-900: #1d2d3d;
+  --paper: #f2f2f3; --paper-2: #e9e9ea; --ink: #1d1f20; --steel: #5980a6; --steel-light: #94bce3; --graphite: #2b2b2d; --graphite-2: #424244; --snow: #f5f5f8;
+  --signal-warn-light: oklch(0.64 0.14 65); --signal-crit-light: oklch(0.57 0.19 30);
+  --signal-warn-dark: oklch(0.82 0.13 80); --signal-crit-dark: oklch(0.72 0.17 30);
+  --topbar-bg: var(--color-neutral-900); --topbar-fg: var(--color-neutral-100);
+  --indicator-dot: oklch(0.75 0.15 65); --indicator-glyph: #b7b7ba; --brand-claude: #D97757;
+  --color-bg: var(--paper); --color-surface: var(--paper-2); --color-text: var(--ink); --color-accent: var(--steel);
+  --color-divider: color-mix(in srgb, #1d1f20 16%, transparent);
+  --muted: #5d5d60; --st-ok: #5980a6; --st-warn: #2c455d; --st-crit: #1d1f20;
+  --surface-popover: var(--color-bg); --surface-canvas: var(--color-neutral-300);
+  --text-body: var(--color-text); --text-muted: var(--muted); --border-hairline: var(--color-divider);
+  --track: color-mix(in srgb, var(--color-text) 11%, transparent);
+  --hover-row: color-mix(in srgb, var(--color-text) 5%, transparent);
+  --corner-mark: color-mix(in srgb, var(--color-text) 55%, transparent);
+  --font-heading: "Barlow Condensed", system-ui, sans-serif; --font-heading-weight: 600; --font-body: "Barlow", system-ui, sans-serif;
+  --type-display: 44px; --type-section: 22px; --type-title: 26px; --type-stat: 28px; --type-pct: 22px; --type-row: 14px;
+  --type-body: 13px; --type-meta: 12px; --type-btn: 15px;
+  --tracking-kicker: 0.12em; --tracking-tag: 0.08em; --tracking-list-kicker: 0.1em;
+  --space-1: 3.4px; --space-2: 6.8px; --space-3: 10.2px; --space-4: 13.6px; --space-6: 20.4px; --space-8: 27.2px;
+  --gutter: 18px; --popover-width: 380px;
+  --radius-none: 0; --radius-sm: 2px; --radius-md: 4px; --radius-lg: 7px; --meter-height: 4px; --pace-tick: 1px;
+  --shadow-sm: 0 1px 2px color-mix(in srgb, #2b2b2d 14%, transparent);
+  --shadow-md: 0 3px 10px color-mix(in srgb, #2b2b2d 16%, transparent);
+  --shadow-lg: 0 12px 32px color-mix(in srgb, #2b2b2d 22%, transparent);
+}
+[data-theme="dark"] {
+  --color-bg: #2b2b2d; --color-surface: #424244; --color-text: #f5f5f8;
+  --color-divider: color-mix(in srgb, #f5f5f8 16%, transparent);
+  --color-accent: #94bce3; --muted: #b7b7ba; --st-ok: #94bce3; --st-warn: #d6ebff; --st-crit: #f5f5f8;
+}
+[data-status="signal"] { --st-warn: var(--signal-warn-light); --st-crit: var(--signal-crit-light); }
+[data-theme="dark"][data-status="signal"] { --st-warn: var(--signal-warn-dark); --st-crit: var(--signal-crit-dark); }
+
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; background: var(--color-bg); color: var(--color-text); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+a { color: var(--color-accent-700); text-underline-offset: 3px; }
+a:hover { color: var(--color-accent-800); }
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+.blueprint { position: relative; border: 1px solid var(--color-divider); border-radius: 0; }
+.blueprint > .corner { position: absolute; width: 11px; height: 11px; color: color-mix(in srgb, var(--color-text) 55%, transparent); }
+.blueprint > .corner::before, .blueprint > .corner::after { content: ""; position: absolute; background: currentColor; }
+.blueprint > .corner::before { left: 5px; top: 0; width: 1px; height: 100%; }
+.blueprint > .corner::after { top: 5px; left: 0; width: 100%; height: 1px; }
+.blueprint > .corner.tl { top: -6px; left: -6px; }
+.blueprint > .corner.tr { top: -6px; right: -6px; }
+.blueprint > .corner.bl { bottom: -6px; left: -6px; }
+.blueprint > .corner.br { bottom: -6px; right: -6px; }
+
+.ext-btn { width: 100%; display: flex; align-items: center; justify-content: center; font-family: var(--font-heading); font-weight: 600; cursor: pointer; padding: 0; }
+.ext-btn-primary { position: relative; border: 1px solid var(--color-accent); background: var(--color-accent); color: var(--color-bg); }
+.ext-btn-primary:hover { background: color-mix(in srgb, var(--color-accent) 82%, var(--color-text)); }
+.ext-btn-primary:active { background: color-mix(in srgb, var(--color-accent) 65%, var(--color-text)); }
+.ext-btn-secondary { border: 1px solid var(--color-divider); background: transparent; color: var(--color-text); }
+.ext-btn-secondary:hover { background: color-mix(in srgb, var(--color-accent) 16%, transparent); border-color: var(--color-accent); }
+.ext-btn-secondary:active { background: color-mix(in srgb, var(--color-accent) 26%, transparent); }
+.ext-btn-ghost { border: 1px solid transparent; background: transparent; color: var(--color-text); }
+.ext-btn-ghost:hover { background: color-mix(in srgb, var(--color-text) 8%, transparent); }
+.ext-btn-ghost:active { background: color-mix(in srgb, var(--color-text) 14%, transparent); }
+.ext-row-hover { cursor: pointer; }
+.ext-row-hover:hover { background: color-mix(in srgb, var(--color-text) 5%, transparent); }
+.ext-icon-btn { display: flex; align-items: center; justify-content: center; border: 0; background: transparent; cursor: pointer; padding: 0; }
+.ext-icon-btn:hover { background: color-mix(in srgb, var(--color-text) 10%, transparent); }
+.ext-settings-btn { display: flex; padding: 6px; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.ext-settings-btn:hover { background: color-mix(in srgb, var(--color-text) 8%, transparent); color: var(--color-text); }
+.ext-window-btn:hover { background: color-mix(in srgb, var(--color-text) 5%, transparent); color: var(--color-text) !important; }
+.ext-chip:hover { background: color-mix(in srgb, var(--color-text) 7%, transparent); color: var(--color-text) !important; }
