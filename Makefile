@@ -1,4 +1,4 @@
-.PHONY: test check-version rpm deb packages checksums clean
+.PHONY: smoke test check-version rpm deb packages checksums clean
 
 test:
 	python3 -m unittest discover -s tests
@@ -12,7 +12,11 @@ rpm:
 deb:
 	packaging/build.sh deb
 
-packages: rpm deb checksums
+smoke:
+	packaging/smoke.sh rpm
+	packaging/smoke.sh deb
+
+packages: rpm deb smoke checksums
 
 checksums:
 	scripts/make_manifest.py dist

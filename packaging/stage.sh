@@ -20,11 +20,13 @@ cp -r "$EXT_SRC/." "$DEST/usr/share/gnome-shell/extensions/$UUID/"
 # Fonts are installed system-wide instead (below); don't ship them twice.
 rm -rf "$DEST/usr/share/gnome-shell/extensions/$UUID/fonts"
 
+# Always present (possibly empty) so the RPM file list is never empty.
+install -d "$DEST/usr/share/licenses/cursor-spend-monitor"
+
 # Barlow, the design system's typeface (SIL OFL).
 if compgen -G "$EXT_SRC/fonts/*.ttf" >/dev/null; then
   install -d "$DEST/usr/share/fonts/ai-usage"
   install -m 0644 "$EXT_SRC"/fonts/*.ttf "$DEST/usr/share/fonts/ai-usage/"
-  install -d "$DEST/usr/share/licenses/cursor-spend-monitor"
   [ -f "$EXT_SRC/fonts/OFL.txt" ] && install -m 0644 "$EXT_SRC/fonts/OFL.txt" "$DEST/usr/share/licenses/cursor-spend-monitor/OFL.txt"
 fi
 

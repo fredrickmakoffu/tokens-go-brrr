@@ -29,18 +29,21 @@ extension, then run `cursor-spend-monitor setup`.
 
 %install
 packaging/stage.sh %{buildroot}
+# Fonts and their licence are only staged when the source tree has them.
+: > extra.files
+for d in %{_datadir}/fonts/ai-usage %{_datadir}/licenses/cursor-spend-monitor; do
+  [ -d "%{buildroot}$d" ] && echo "$d" >> extra.files
+done
 
 %post
 fc-cache -f /usr/share/fonts/ai-usage >/dev/null 2>&1 || :
 
-%files
+%files -f extra.files
 %{_bindir}/cursor-spend-monitor
 %{python3_sitelib}/cursor_spend_monitor
 %{python3_sitelib}/cursor_spend_monitor-*.dist-info
 %{_datadir}/gnome-shell/extensions/ai-usage@fredrickmakoffu.github.io
 %{_prefix}/lib/systemd/user/cursor-spend-monitor.service
-%{_datadir}/fonts/ai-usage
-%{_datadir}/licenses/cursor-spend-monitor
 
 %changelog
 * Fri Oct 09 2026 Fredrick Makoffu <42011427+fredrickmakoffu@users.noreply.github.com> - %{version}-1
