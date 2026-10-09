@@ -1,0 +1,13 @@
+Package: cursor-spend-monitor
+Version: @VERSION@
+Section: utils
+Priority: optional
+Architecture: all
+Depends: python3 (>= 3.11), python3-gi, gir1.2-notify-0.7, libnotify-bin, gnome-shell
+Maintainer: Fredrick Makoffu <fredrickmakoffu@gmail.com>
+Homepage: https://github.com/fredrickmakoffu/cursor-spend-monitor
+Description: AI coding usage limits in the GNOME top bar
+ A daemon that tracks usage limits for AI coding tools (Cursor, Claude Code,
+ OpenCode) and a GNOME Shell extension that shows them as a status dot in the
+ top bar. Log out and back in after installing so GNOME Shell loads the
+ extension, then run `cursor-spend-monitor setup`.
