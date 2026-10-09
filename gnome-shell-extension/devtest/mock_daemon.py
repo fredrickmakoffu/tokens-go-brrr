@@ -32,12 +32,12 @@ tools = [
         "instances": {
             "active": 2,
             "suspended": 1,
-            "projects": ["mobile-app", "api-server"],
+            "projects": ["web-app", "api-server"],
             "suspendedProjects": ["cursor-folder"],
             "sessions": [
                 {
-                    "project": "mobile-app",
-                    "directory": "/home/u/mobile-app",
+                    "project": "web-app",
+                    "directory": "/home/u/web-app",
                     "paused": False,
                     "kind": "agent",
                     "tty": "pts/2",
@@ -159,7 +159,7 @@ tools = [
         "instances": {
             "active": 2,
             "suspended": 0,
-            "projects": ["api-server", "web-app"],
+            "projects": ["api-server", "mobile-app"],
             "suspendedProjects": [],
             "sessions": [
                 {
@@ -177,8 +177,8 @@ tools = [
                     },
                 },
                 {
-                    "project": "web-app",
-                    "directory": "/home/u/web-app",
+                    "project": "mobile-app",
+                    "directory": "/home/u/mobile-app",
                     "paused": False,
                     "kind": "session",
                     "tty": "pts/6",
