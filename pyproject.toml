@@ -1,6 +1,6 @@
 [project]
 name = "cursor-spend-monitor"
-version = "0.6.0"
+version = "0.6.1"
 description = "GNOME Shell indicator + daemon for AI usage limits"
 readme = "README.md"
 requires-python = ">=3.11"
