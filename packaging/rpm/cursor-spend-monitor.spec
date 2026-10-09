@@ -43,5 +43,5 @@ fc-cache -f /usr/share/fonts/ai-usage >/dev/null 2>&1 || :
 %{_datadir}/licenses/cursor-spend-monitor
 
 %changelog
-* Fri Oct 09 2026 Fredrick Makoffu <fredrickmakoffu@gmail.com> - %{version}-1
+* Fri Oct 09 2026 Fredrick Makoffu <42011427+fredrickmakoffu@users.noreply.github.com> - %{version}-1
 - Packaged build; see the GitHub release notes for changes.

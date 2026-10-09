@@ -4,7 +4,7 @@ Section: utils
 Priority: optional
 Architecture: all
 Depends: python3 (>= 3.11), python3-gi, gir1.2-notify-0.7, libnotify-bin, gnome-shell
-Maintainer: Fredrick Makoffu <fredrickmakoffu@gmail.com>
+Maintainer: Fredrick Makoffu <42011427+fredrickmakoffu@users.noreply.github.com>
 Homepage: https://github.com/fredrickmakoffu/cursor-spend-monitor
 Description: AI coding usage limits in the GNOME top bar
  A daemon that tracks usage limits for AI coding tools (Cursor, Claude Code,
