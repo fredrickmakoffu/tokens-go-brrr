@@ -1,0 +1,52 @@
+name: Publish to the public releases repo
+
+# Publishing the draft release in this (private) repo is the audit sign-off.
+# That event copies the packages to the public releases repo and redeploys the
+# download site (GitHub Pages, branch gh-pages of the public repo).
+#
+# Needs the secret RELEASES_TOKEN: a fine-grained token limited to the public
+# repo with Contents (read/write) and Pages (read/write).
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+env:
+  PUBLIC_REPO: fredrickmakoffu/cursor-spend-monitor-releases
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download the audited assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "${{ github.event.release.tag_name }}" --dir assets
+      - name: Create the public release
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: |
+          gh release create "${{ github.event.release.tag_name }}" assets/* \
+            --repo "$PUBLIC_REPO" --title "${{ github.event.release.tag_name }}" \
+            --notes "Installers for AI Usage. Verify with SHA256SUMS."
+      - name: Build and push the site
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: |
+          mkdir out && cp site/* out/ && cp assets/manifest.json out/
+          touch out/.nojekyll
+          cd out
+          git init -q -b gh-pages
+          git config user.name "release-bot"; git config user.email "release-bot@users.noreply.github.com"
+          git add -A && git commit -qm "site for ${{ github.event.release.tag_name }}"
+          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${PUBLIC_REPO}.git" gh-pages
+      - name: Make sure Pages serves gh-pages
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: |
+          gh api -X POST "repos/$PUBLIC_REPO/pages" -f 'source[branch]=gh-pages' -f 'source[path]=/' 2>/dev/null \
+            || echo "Pages already configured (or enable it in the public repo settings)"
