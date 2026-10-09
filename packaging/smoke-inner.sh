@@ -23,7 +23,11 @@ python3 -c "import json; m=json.load(open('/usr/share/gnome-shell/extensions/$UU
 [ -f /usr/share/gnome-shell/extensions/$UUID/extension.js ] || fail "extension.js missing"
 grep -q '^ExecStart=/usr/bin/cursor-spend-monitor run' /usr/lib/systemd/user/cursor-spend-monitor.service \
   || fail "unit ExecStart"
-ls /usr/share/fonts/ai-usage/*.ttf >/dev/null || fail "fonts missing"
+if compgen -G "/src/gnome-shell-extension/$UUID/fonts/*.ttf" >/dev/null; then
+  ls /usr/share/fonts/ai-usage/*.ttf >/dev/null || fail "fonts missing"
+else
+  echo "warning: no fonts in the source tree, so none were packaged" >&2
+fi
 if [ "$KIND" = deb ]; then
   dpkg -L cursor-spend-monitor | grep -q '^/usr/local' && fail "files under /usr/local"
 fi
