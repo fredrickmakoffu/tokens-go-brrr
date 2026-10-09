@@ -1,0 +1,34 @@
+name: Sync main into develop
+
+# Hotfixes land on main directly. Open a PR carrying them back to develop so
+# the next release does not silently revert them. Needs Settings > Actions >
+# "Allow GitHub Actions to create and approve pull requests".
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  back-merge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Open PR if develop is behind main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git rev-parse --verify -q origin/develop >/dev/null || exit 0
+          if git merge-base --is-ancestor origin/main origin/develop; then
+            echo "develop already contains main"; exit 0
+          fi
+          if [ -n "$(gh pr list --base develop --head main --json number -q '.[0].number')" ]; then
+            echo "back-merge PR already open"; exit 0
+          fi
+          gh pr create --base develop --head main \
+            --title "chore: sync main into develop" \
+            --body "Carries hotfixes and the release commit back to develop. Merge with a merge commit, not squash."
