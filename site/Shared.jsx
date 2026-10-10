@@ -61,11 +61,11 @@ function SectionHead({ id, n, kicker, title, b }) {
 }
 
 const GALLERY = [
-  { value: "landing", label: "Insight", nav: { screen: "landing", ins: "act", fromEarlier: false }, cap: "Two or three times a day the popover opens on one written insight. The daemon decides whether anything is worth interrupting for." },
-  { value: "list", label: "Agents", nav: { screen: "list" }, cap: "Every provider with its limit meter. The tick marks even pace, and the window picker sets 5-hour, weekly or monthly for every row." },
-  { value: "detail", label: "Provider", nav: { screen: "detail", prov: "claude" }, cap: "Each window with its reset, and the terminal sessions running against it. Focus raises the terminal." },
-  { value: "sessions", label: "Sessions", nav: { screen: "sessions", prov: "cursor", filter: "active" }, cap: "Running and paused sessions. A session suspended with Ctrl+Z spends nothing, so it is counted apart." },
-  { value: "guide", label: "Guide", nav: { screen: "guide" }, cap: "Healthy under 70%, caution to 89%, critical from 90%. The percentage is always written beside the bar." },
+  { value: "landing", label: "Insight", nav: { screen: "landing", ins: "act", fromEarlier: false }, cap: "One sentence on where to spend next, only when there is something worth saying." },
+  { value: "list", label: "Agents", nav: { screen: "list" }, cap: "Every tool and its limit. The tick marks even pace: a bar past the tick is spending too fast." },
+  { value: "detail", label: "Provider", nav: { screen: "detail", prov: "claude" }, cap: "One tool's limits, when each resets, and the terminal sessions using it." },
+  { value: "sessions", label: "Sessions", nav: { screen: "sessions", prov: "cursor", filter: "active" }, cap: "Running and paused sessions. A session paused with Ctrl+Z spends nothing, so it is counted separately." },
+  { value: "guide", label: "Guide", nav: { screen: "guide" }, cap: "Healthy under 70%, caution to 89%, critical from 90%. The number is always written beside the bar." },
 ];
 function Gallery({ dark }) {
   const [nav, setNav] = React.useState(GALLERY[0].nav);
@@ -79,7 +79,7 @@ function Gallery({ dark }) {
       <div style={{ flex: "1 1 240px", minWidth: 0, display: "flex", flexDirection: "column", gap: 16 }}>
         <ExtFilterChips options={GALLERY.map((g) => ({ value: g.value, label: g.label }))} value={tab} onChange={(v) => setNav(GALLERY.find((g) => g.value === v).nav)} />
         <p style={{ margin: 0, fontSize: 16, maxWidth: 420, textWrap: "pretty" }}>{cur.cap}</p>
-        <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>The popover is live. Rows, Back and Focus work.</p>
+        <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>This popover is live. Click around.</p>
       </div>
       <div style={{ flex: "0 0 auto", padding: 6 }}>
         <ExtPopover dark={dark} signal>
@@ -129,7 +129,7 @@ function Faq() {
 function SiteFooter() {
   return (
     <footer style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 16, padding: "20px 0 40px", borderTop: "1px solid var(--color-divider)", fontSize: 13, color: "var(--muted)" }}>
-      <span>Tokens go brrr · the AI usage extension for GNOME Shell · <a href={REL_URL} target="_blank">Releases</a></span>
+      <span>Tokens go brrr · a usage meter for GNOME Shell · <a href={REL_URL} target="_blank">Releases</a></span>
       <span>Provider names and marks belong to their owners and are used only to identify each service.</span>
     </footer>
   );
@@ -139,11 +139,10 @@ function LimitModal({ b, dark, onDismiss }) {
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 100, background: "color-mix(in srgb, #1d1f20 55%, transparent)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <ExtPopover dark={dark} signal>
-        <ExtHeader kicker="429 · Rate limited" meta={"Resets in " + fmtDur(b.resetIn)} title="This page is out of tokens." sub="It spent its 5-minute window on scrolling, clicking and copying. Your real tools are probably fine. The extension can tell you which." />
-        <ExtStats items={[{ value: "200k", label: "tokens spent" }, { value: String(b.w.clicks), label: "clicks" }, { value: fmtDur(b.resetIn), label: "until reset" }]} />
+        <ExtHeader kicker="429 · Rate limited" meta={"Resets in " + fmtDur(b.resetIn)} title="This page is out of tokens." sub="Your real tools are probably fine. The extension can tell you which." />
         <div style={{ display: "flex", gap: 8, padding: "16px 18px 18px" }}>
           <ExtButton variant="primary" block label="Download the extension" onClick={() => { onDismiss(); setTimeout(() => goTo("download"), 50); }} />
-          <ExtButton variant="secondary" label="Reset window" onClick={b.reset} />
+          <ExtButton variant="secondary" label="Reset" onClick={b.reset} />
         </div>
       </ExtPopover>
     </div>

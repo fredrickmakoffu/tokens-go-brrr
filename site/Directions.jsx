@@ -3,35 +3,35 @@ function Sections({ b, dark }) {
   const rel = useReleases();
   return (<>
     <section id="download" style={sec} data-screen-label="Download">
-      <SectionHead n="01" kicker="Download" title={"Pick your platform. " + rel.latest.tag + " is the latest."} b={b} />
+      <SectionHead n="01" kicker="Download" title={"Get " + rel.latest.tag + " for Linux."} b={b} />
       <Downloads b={b} rel={rel} />
     </section>
     <section id="screens" style={sec} data-screen-label="What it does">
-      <SectionHead n="02" kicker="What it does" title="One indicator, one sentence, then the detail." b={b} />
+      <SectionHead n="02" kicker="What it does" title="See which limit runs out first." b={b} />
       <Facts />
       <Gallery dark={dark} />
     </section>
     <section id="local" style={sec} data-screen-label="Local only">
-      <SectionHead n="03" kicker="Local only" title="It reuses logins already on disk and keeps its history at home." b={b} />
+      <SectionHead n="03" kicker="Privacy" title="It only talks to your AI providers." b={b} />
       <Privacy />
     </section>
     <section id="faq" style={sec} data-screen-label="FAQ">
-      <SectionHead n="04" kicker="FAQ" title="Questions before installing." b={b} />
+      <SectionHead n="04" kicker="FAQ" title="Before you install." b={b} />
       <Faq />
     </section>
     <section id="releases" style={{ ...sec, paddingBottom: 72 }} data-screen-label="Releases">
-      <SectionHead n="05" kicker="Releases" title="Every build, with its files." b={b} />
+      <SectionHead n="05" kicker="Releases" title="Every release." b={b} />
       <Releases rel={rel} b={b} />
     </section>
     <SiteFooter />
   </>);
 }
 
-const HERO_SUB = "A status dot in your top bar for your AI coding limits. It reads what Cursor, Claude Code, OpenCode, Pi and Codex have used, and says in one sentence which runs out first.";
+const HERO_SUB = "See which of your AI coding limits runs out first, from your top bar. Works with Cursor, Claude Code, OpenCode, Pi and Codex.";
 const HeroButtons = () => (
   <div style={{ display: "flex", flexWrap: "wrap", gap: 12, padding: 6 }}>
     <ExtButton variant="primary" label="Download for Linux" onClick={() => goTo("download")} style={{ minWidth: 200 }} />
-    <ExtButton variant="secondary" label="What it does" onClick={() => goTo("screens")} />
+    <ExtButton variant="secondary" label="See how it works" onClick={() => goTo("screens")} />
   </div>
 );
 
@@ -75,12 +75,12 @@ function DirB({ b }) {
       <div style={{ marginLeft: 76, position: "relative", zIndex: 1 }}>
         <div style={{ maxWidth: 980, padding: "0 clamp(20px, 5vw, 64px)" }}>
           <section data-screen-label="Hero" style={{ padding: "clamp(48px, 8vw, 96px) 0 24px", display: "flex", flexDirection: "column", gap: 32 }}>
-            <span style={KICK}>{"GNOME Shell extension · Fedora and Debian/Ubuntu" + " · " + b.title}</span>
+            <span style={KICK}>For GNOME Shell on Linux</span>
             <h1 style={{ ...HEAD, fontSize: "clamp(80px, 14vw, 220px)", lineHeight: 0.82, margin: 0, letterSpacing: "-0.015em" }}>Tokens<br />go <span style={{ color: stColor(b.status), transition: "color 300ms" }}>brrr.</span></h1>
             <Readout b={b} />
             <p style={{ margin: 0, fontSize: 20, lineHeight: 1.45, maxWidth: 600, textWrap: "pretty" }}>{HERO_SUB}</p>
             <HeroButtons />
-            <p style={{ margin: 0, fontSize: 14, color: "var(--muted)", maxWidth: 600 }}>The rail on the left is this page's meter: 200,000 tokens per 5-minute window, spent by scrolling, clicking and copying. The tick marks even pace.</p>
+            <p style={{ margin: 0, fontSize: 14, color: "var(--muted)", maxWidth: 600 }}>The meter on the left is this page's own. Scrolling, clicking and copying spend it.</p>
           </section>
           <Sections b={b} dark />
         </div>
