@@ -4,9 +4,9 @@ const BURN_KEY = "tgb-burn-v1";
 const CLICK_COST = 1200;
 const COPY_COST = 4000;
 
-const fmtTok = (n) => n >= 1000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1) + "k" : String(Math.round(n));
-const fmtFull = (n) => Math.round(n).toLocaleString("en-US");
-const fmtDur = (s) => { s = Math.max(0, Math.round(s)); if (s < 60) return s + "s"; const m = Math.floor(s / 60), r = s % 60; return r ? m + "m " + r + "s" : m + "m"; };
+const fmtTok = (n) => n >= 1000 ? I18N.num(n / 1000, { minimumFractionDigits: n >= 100000 ? 0 : 1, maximumFractionDigits: n >= 100000 ? 0 : 1 }) + "k" : String(Math.round(n));
+const fmtFull = (n) => I18N.num(Math.round(n));
+const fmtDur = (s) => { s = Math.max(0, Math.round(s)); if (s < 60) return t("dur.s", { s }); const m = Math.floor(s / 60), r = s % 60; return r ? t("dur.ms", { m, s: r }) : t("dur.m", { m }); };
 const statusOf = (pct) => pct >= 90 ? "crit" : pct >= 70 ? "warn" : "ok";
 
 function freshWindow() { return { start: Date.now(), scroll: 0, click: 0, copy: 0, clicks: 0, copies: 0 }; }
@@ -49,8 +49,8 @@ function useBurn(mult = 1) {
     addEventListener("scroll", onScroll, { passive: true });
     addEventListener("click", onClick, true);
     const tick = setInterval(() => {
-      const t = Date.now(); setNow(t);
-      if (t - wRef.current.start >= WINDOW_S * 1000) { samples.current = []; setW(freshWindow()); }
+      const ts = Date.now(); setNow(ts);
+      if (ts - wRef.current.start >= WINDOW_S * 1000) { samples.current = []; setW(freshWindow()); }
     }, 500);
     return () => { removeEventListener("scroll", onScroll); removeEventListener("click", onClick, true); clearInterval(tick); ro.disconnect(); };
   }, []);
@@ -69,18 +69,18 @@ function useBurn(mult = 1) {
   const limited = tokens >= LIMIT - 1;
 
   let title;
-  if (limited) title = "This page is out of tokens.";
-  else if (status === "crit") title = eta ? "This page runs out in ~" + fmtDur(eta) + "." : "This page is at " + pct + "%.";
-  else if (status === "warn") title = pct > elapsedPct ? "This page is ahead of pace." : "This page is getting close.";
-  else if (pct < 8) title = "This page has plenty of room.";
-  else title = pct > elapsedPct ? "This page is ahead of pace." : "This page is under pace.";
-  const sub = fmtFull(tokens) + " of 200,000 tokens · resets in " + fmtDur(resetIn);
+  if (limited) title = t("burn.limited");
+  else if (status === "crit") title = eta ? t("burn.critEta", { dur: fmtDur(eta) }) : t("burn.critPct", { pct });
+  else if (status === "warn") title = pct > elapsedPct ? t("burn.ahead") : t("burn.close");
+  else if (pct < 8) title = t("burn.room");
+  else title = pct > elapsedPct ? t("burn.ahead") : t("burn.under");
+  const sub = t("burn.sub", { tokens: fmtFull(tokens), max: fmtFull(LIMIT), dur: fmtDur(resetIn) });
 
   const pctOf = (n) => Math.round(n / LIMIT * 100);
   const parts = [
-    { key: "scroll", label: "Scrolling", value: pctOf(w.scroll), sub: fmtTok(w.scroll) + " tokens · scrolling back up is not refunded" },
-    { key: "click", label: "Clicks", value: pctOf(w.click), sub: w.clicks + (w.clicks === 1 ? " click" : " clicks") + " · " + fmtTok(CLICK_COST) + " each" },
-    { key: "copy", label: "Copying", value: pctOf(w.copy), sub: w.copies + (w.copies === 1 ? " command" : " commands") + " · " + fmtTok(COPY_COST) + " each" },
+    { key: "scroll", label: t("burn.scroll"), value: pctOf(w.scroll), sub: t("burn.scroll.sub", { tokens: fmtTok(w.scroll) }) },
+    { key: "click", label: t("burn.clicks"), value: pctOf(w.click), sub: t("burn.clicks.sub", { n: w.clicks, cost: fmtTok(CLICK_COST) }) },
+    { key: "copy", label: t("burn.copy"), value: pctOf(w.copy), sub: t("burn.copy.sub", { n: w.copies, cost: fmtTok(COPY_COST) }) },
   ];
 
   return {
@@ -91,22 +91,4 @@ function useBurn(mult = 1) {
   };
 }
 
-const SITE = {
-  privacy: [
-    ["Your logins, read-only", "It reuses logins your tools already keep on disk and never writes to them, so it cannot sign you out."],
-    ["The extension holds nothing", "No credentials and no network calls. It reads state from the local daemon."],
-    ["History stays on your machine", "Usage history is kept in ~/.local/share/cursor-spend-monitor for 90 days. Set history_days to 0 to stop recording."],
-    ["No prompts leave", "Insights are written from templates. If you turn on llm_notifications, a model rewrites them from token counts, never prompts, transcripts or file contents."],
-  ],
-  faq: [
-    ["Which tools does it track?", "Cursor, Claude Code, OpenCode and Codex report their own limits. Pi borrows the limits of whichever account its sessions bill to."],
-    ["Why does a row sometimes have no bar?", "xAI publishes no usage endpoint and Cline reports a credit balance, not a limit. A bar at 0% would read as plenty left, so those rows show sessions and no percentage."],
-    ["Does a paused session count?", "No. A session paused with Ctrl+Z spends nothing, so it is left out of the top-bar count and shown as paused."],
-    ["How often does it poll?", "At most once a minute. Opening the popover asks for a refresh, and the daemon skips it if it polled in the last 60 seconds."],
-    ["Can I use it in a script?", "Yes. status prints the current state in about 0.1s with no network call. check exits non-zero when quota is low, and best names the provider with the most left."],
-    ["Which GNOME versions?", "GNOME Shell 45 or newer."],
-    ["Windows or macOS?", "Not yet. Fedora and Debian/Ubuntu packages are out now. Windows and macOS are planned."],
-  ],
-};
-
-Object.assign(window, { LIMIT, WINDOW_S, CLICK_COST, COPY_COST, fmtTok, fmtFull, fmtDur, statusOf, useBurn, SITE });
+Object.assign(window, { LIMIT, WINDOW_S, CLICK_COST, COPY_COST, fmtTok, fmtFull, fmtDur, statusOf, useBurn });
