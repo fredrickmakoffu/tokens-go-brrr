@@ -153,7 +153,7 @@ const en = {
     "earlier.empty": "Nothing saved yet",
 
     // message templates (see notify_engine; params come from the daemon)
-    "tpl.digest.head.daily": "Today",
+    "tpl.digest.head.daily": "Last 24h",
     "tpl.digest.head.weekly": "Last week",
     "tpl.digest.head.monthly": "This month",
     "tpl.digest.main_one": "{head}: {n} session, {tokens} tokens",
@@ -318,7 +318,7 @@ const fr = {
     "earlier.sub": "Écrites quelques fois par jour à partir de vos données de tokens.",
     "earlier.empty": "Rien d’enregistré pour l’instant",
 
-    "tpl.digest.head.daily": "Aujourd’hui",
+    "tpl.digest.head.daily": "Dernières 24 h",
     "tpl.digest.head.weekly": "La semaine dernière",
     "tpl.digest.head.monthly": "Ce mois-ci",
     "tpl.digest.main_one": "{head} : {n} session, {tokens} tokens",
@@ -482,7 +482,7 @@ const pt = {
     "earlier.sub": "Escritos algumas vezes por dia a partir dos seus dados de tokens.",
     "earlier.empty": "Nada salvo ainda",
 
-    "tpl.digest.head.daily": "Hoje",
+    "tpl.digest.head.daily": "Últimas 24 h",
     "tpl.digest.head.weekly": "Semana passada",
     "tpl.digest.head.monthly": "Este mês",
     "tpl.digest.main_one": "{head}: {n} sessão, {tokens} tokens",

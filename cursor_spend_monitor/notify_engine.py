@@ -25,6 +25,7 @@ The rules this module will not break:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from dataclasses import dataclass, field
@@ -52,6 +53,24 @@ DEFAULT_COOLDOWN_SECONDS = 6 * 3600
 # outranks a curiosity, and a stale digest stops nagging on its own.
 PRIORITY = {ACTIONABLE: 3, INFORMATIVE: 2, SHAREABLE: 1, FUN: 0}
 FRESHNESS_HOURS = {ACTIONABLE: 6, INFORMATIVE: 24, SHAREABLE: 24, FUN: 12}
+
+# The temperatures of the live-notes design (design/LIVE_NOTES_AND_LLM_LOG.md).
+# A cold note is a precomputed trend or digest, a warm one describes the last
+# hour or two and a hot one is the warm note served again. Only the cold tier
+# exists so far; the others are named here so provenance and expiry already
+# speak the vocabulary the later steps will fill in.
+COLD = "cold"
+WARM = "warm"
+HOT = "hot"
+
+# How long a note stays worth showing, counted from when its facts were read
+# (`as_of`), not from when it was stored. A warm note describes "now", so it
+# stops being true quickly; a cold one is a trend and ages slowly.
+TIER_FRESHNESS_HOURS = {COLD: 24, WARM: 2, HOT: 2}
+
+# Where a note's wording came from.
+SOURCE_TEMPLATE = "template"
+SOURCE_LLM = "llm"
 
 # A cheaper provider is only the story if it is doing real work. Without a
 # floor, one cheap session would outrank a month of heavy use.
@@ -137,10 +156,53 @@ def _featured_meta(featured: dict[str, str] | None, **extra: Any) -> dict[str, A
     return meta
 
 
-def expires_at_for(kind: str, created_at: int) -> int | None:
-    """When a message stops being worth interrupting for, or None."""
+def expires_at_for(
+    kind: str,
+    created_at: int,
+    *,
+    tier: str | None = None,
+    as_of: int | None = None,
+) -> int | None:
+    """When a message stops being worth interrupting for, or None.
+
+    The kind sets one limit (an actionable warning goes stale in hours, a digest
+    in a day). A message that knows its tier has a second, counted from when its
+    facts were read rather than when it was stored, and the sooner of the two
+    wins: a warm note about "the last hour" must not outlive the hour because it
+    happens to be an informative one.
+    """
+    limits: list[int] = []
     hours = FRESHNESS_HOURS.get(kind)
-    return created_at + _as_int(hours * 3600) if hours else None
+    if hours:
+        limits.append(created_at + _as_int(hours * 3600))
+    tier_hours = TIER_FRESHNESS_HOURS.get(tier or "")
+    if tier_hours:
+        limits.append((as_of if as_of else created_at) + _as_int(tier_hours * 3600))
+    return min(limits) if limits else None
+
+
+def provenance(
+    *, tier: str, as_of: int, fingerprint: str = "", source: str = SOURCE_TEMPLATE
+) -> dict[str, Any]:
+    """Where a note came from, for its `meta`.
+
+    `as_of` is when the facts were read, so the panel can say "as of 12 min ago"
+    and expiry can count from it. `fingerprint` identifies those facts: a later
+    refresh that hashes to the same value has nothing new to say. `source` is
+    whether a template or a model wrote the wording.
+    """
+    return {
+        "tier": tier,
+        "asOf": as_of,
+        "fingerprint": fingerprint,
+        "source": source,
+    }
+
+
+def fingerprint_of(*parts: Any) -> str:
+    """A short, stable hash of the figures a note was built from."""
+    encoded = json.dumps(parts, sort_keys=True, default=str, separators=(",", ":"))
+    return hashlib.sha1(encoded.encode("utf-8")).hexdigest()[:12]
 
 
 @dataclass
@@ -183,6 +245,16 @@ def month_range(now: datetime | None = None, *, offset: int = 0) -> tuple[str, s
     if offset == 0:
         last = today
     return first.isoformat(), last.isoformat()
+
+
+def rolling_range(hours: int, *, now: datetime | None = None) -> tuple[int, int]:
+    """The last `hours` hours as inclusive epoch seconds, ending now.
+
+    The calendar-day ranges above answer "this UTC day"; this answers "the last
+    24 hours", which is what a person means by recent.
+    """
+    until = _epoch(now)
+    return until - max(1, _as_int(hours)) * 3600, until
 
 
 # -- facts -------------------------------------------------------------------
@@ -229,6 +301,68 @@ def digest_facts(
         "shape": ledger.session_shape(con, start_day=start, end_day=end),
         "estimate_note": _estimate_note(con, start, end),
     }
+
+
+def rolling_facts(
+    con: sqlite3.Connection,
+    *,
+    hours: int,
+    period: str,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """`digest_facts` for the last `hours` hours instead of a day range.
+
+    The totals, ranking, top project and model, cache share and estimate note
+    come from the rolling window. Records, shape and streaks are about days, so
+    they keep reading the UTC days that cover the window.
+    """
+    since, until = rolling_range(hours, now=now)
+    start, end = day_range(hours // 24 + 2, now=now)
+    facts = digest_facts(con, start=start, end=end, period=period, now=now)
+    totals = ledger.rolling_totals(con, since=since, until=until)
+
+    def top(group_by: str) -> dict | None:
+        rows = ledger.rolling_period_totals(
+            con, since=since, until=until, group_by=group_by, limit=1
+        )
+        return rows[0] if rows else None
+
+    facts.update(
+        {
+            "since": since,
+            "until": until,
+            "totals": totals,
+            "ranked": ledger.rolling_period_totals(
+                con, since=since, until=until, group_by="provider"
+            ),
+            "top_project": top("project"),
+            "top_model": top("model"),
+            "cache": {
+                "tokens": totals["tokens"],
+                "cache_read_tokens": totals["cache_read_tokens"],
+                "share": (
+                    totals["cache_read_tokens"] / totals["tokens"]
+                    if totals["tokens"]
+                    else 0.0
+                ),
+            },
+            "estimate_note": (
+                " (includes an estimate)" if totals["estimated_sessions"] else ""
+            ),
+        }
+    )
+    return facts
+
+
+def digest_fingerprint(facts: dict[str, Any]) -> str:
+    """The figures a digest was built from, hashed."""
+    totals = facts["totals"]
+    return fingerprint_of(
+        facts["period"],
+        totals["sessions"],
+        totals["tokens"],
+        [(r["provider"], r["tokens"]) for r in facts["ranked"]],
+    )
 
 
 # -- wording -----------------------------------------------------------------
@@ -443,14 +577,19 @@ def render_actionable(
 def daily_digest(
     con: sqlite3.Connection, *, now: datetime | None = None
 ) -> Message | None:
-    start, end = day_range(1, now=now)
-    facts = digest_facts(con, start=start, end=end, period="today", now=now)
+    """The last 24 hours, not the calendar day.
+
+    A calendar day made work done at 17:00 "yesterday" by the next morning, so
+    the note read as old news; a rolling window keeps it true until it ages out.
+    """
+    facts = rolling_facts(con, hours=24, period="last 24 hours", now=now)
     if not facts["totals"]["sessions"]:
         return None
+    today = day_range(1, now=now)[0]
     return Message(
         kind=INFORMATIVE,
-        key=f"daily:{start}",
-        body=render_digest(facts, headline="Today"),
+        key=f"daily:{today}",
+        body=render_digest(facts, headline="Last 24h"),
         provider=featured["providerId"]
         if (featured := featured_provider(facts))
         else "",
@@ -458,6 +597,11 @@ def daily_digest(
             featured,
             period="daily",
             tpl=_tpl("digest", **digest_params(facts, period="daily")),
+            **provenance(
+                tier=COLD,
+                as_of=_epoch(now),
+                fingerprint=digest_fingerprint(facts),
+            ),
         ),
     )
 
@@ -480,6 +624,11 @@ def weekly_digest(
             featured,
             period="weekly",
             tpl=_tpl("digest", **digest_params(facts, period="weekly")),
+            **provenance(
+                tier=COLD,
+                as_of=_epoch(now),
+                fingerprint=digest_fingerprint(facts),
+            ),
         ),
     )
 
@@ -518,6 +667,11 @@ def monthly_digest(
                 **digest_params(
                     facts, period="monthly", vs_last_month=vs_last_month
                 ),
+            ),
+            **provenance(
+                tier=COLD,
+                as_of=_epoch(now),
+                fingerprint=digest_fingerprint(facts),
             ),
         ),
     )
@@ -696,6 +850,17 @@ def _template_of(meta: dict[str, Any]) -> dict[str, Any] | None:
     return {"id": str(tpl["id"]), "params": dict(tpl.get("p") or {})}
 
 
+def _expires_of(row: dict[str, Any]) -> int | None:
+    """When a stored message stops being worth showing, from its own meta."""
+    meta = _meta_of(row)
+    return expires_at_for(
+        str(row.get("kind") or ""),
+        _as_int(row.get("created_at")),
+        tier=str(meta.get("tier") or "") or None,
+        as_of=_as_int(meta.get("asOf")) or None,
+    )
+
+
 def billboard_payload(row: dict[str, Any]) -> dict[str, Any]:
     """The state shape the panel renders for one stored message."""
     meta = _meta_of(row)
@@ -719,7 +884,10 @@ def billboard_payload(row: dict[str, Any]) -> dict[str, Any]:
         "share": str(row.get("share") or ""),
         "featured": featured,
         "createdAt": created,
-        "expiresAt": expires_at_for(kind, created),
+        "expiresAt": _expires_of(row),
+        "tier": str(meta.get("tier") or ""),
+        "asOf": _as_int(meta.get("asOf")) or created,
+        "source": str(meta.get("source") or SOURCE_TEMPLATE),
         "reason": str(meta.get("reason") or ""),
         # What the panel renders in the user's language. Absent once a model has
         # reworded the message: its prose is the message, and there is nothing
@@ -741,7 +909,7 @@ def choose_billboard(
     candidates: list[tuple[int, int, dict[str, Any]]] = []
     for row in rows:
         created = _as_int(row.get("created_at"))
-        expires = expires_at_for(str(row.get("kind") or ""), created)
+        expires = _expires_of(row)
         if expires is not None and expires <= now_ts:
             continue
         candidates.append((PRIORITY.get(str(row.get("kind")), 0), created, row))
