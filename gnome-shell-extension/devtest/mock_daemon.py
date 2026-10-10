@@ -19,6 +19,7 @@ tools = [
                 "label": "Monthly limit",
                 "value": 74,
                 "resets": "Resets in 12 days",
+                "elapsed": 60,
                 "kind": "monthly",
             },
             {
@@ -26,6 +27,7 @@ tools = [
                 "label": "Other models",
                 "value": 31,
                 "resets": "Resets in 12 days",
+                "elapsed": 60,
                 "kind": "other",
             },
         ],
@@ -72,6 +74,7 @@ tools = [
                 "label": "5-hour limit",
                 "value": 42,
                 "resets": "Resets in 2h 15m",
+                "elapsed": 55,
                 "kind": "rolling",
             },
             {
@@ -79,6 +82,7 @@ tools = [
                 "label": "Weekly",
                 "value": 81,
                 "resets": "Resets in 4 days",
+                "elapsed": 43,
                 "kind": "weekly",
             },
         ],
@@ -96,6 +100,7 @@ tools = [
                 "label": "Rolling limit",
                 "value": 15,
                 "resets": "Resets in 4h 50m",
+                "elapsed": 3,
                 "kind": "rolling",
             },
             {
@@ -103,6 +108,7 @@ tools = [
                 "label": "Weekly",
                 "value": 33,
                 "resets": "Resets in 6 days",
+                "elapsed": 71,
                 "kind": "weekly",
             },
             {
@@ -110,6 +116,7 @@ tools = [
                 "label": "Monthly",
                 "value": 23,
                 "resets": "Resets in 20 days",
+                "elapsed": 33,
                 "kind": "monthly",
             },
         ],
@@ -139,6 +146,7 @@ tools = [
                 "label": "Rolling limit",
                 "value": 15,
                 "resets": "Resets in 4h 50m",
+                "elapsed": 3,
                 "kind": "rolling",
             },
             {
@@ -146,6 +154,7 @@ tools = [
                 "label": "Weekly",
                 "value": 33,
                 "resets": "Resets in 6 days",
+                "elapsed": 71,
                 "kind": "weekly",
             },
             {
@@ -153,6 +162,7 @@ tools = [
                 "label": "Monthly",
                 "value": 23,
                 "resets": "Resets in 20 days",
+                "elapsed": 33,
                 "kind": "monthly",
             },
         ],
@@ -258,6 +268,7 @@ def state():
         "tools": tools,
         "billboard": BILLBOARDS[_shown] if _shown < len(BILLBOARDS) else None,
         "latestMessage": BILLBOARDS[-1],
+        "recentMessages": list(reversed(BILLBOARDS)),
     }
 
 

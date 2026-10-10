@@ -35,10 +35,11 @@ const IFACE_XML = `
 const UsageProxy = Gio.DBusProxy.makeProxyWrapper(IFACE_XML);
 
 const COLOR = {
-    ok: "#3ddc84",
-    wait: "#e8930f",
-    crit: "#ff5c5c",
-    error: "#6c6d70",
+    ok: "#94bce3",
+    wait: "#f0ba59",
+    crit: "#fd7562",
+    error: "#7a7a7d",
+    muted: "#5d5d60",
 };
 const BADGE_FILES = {
     cursor: "cursor.png",
@@ -66,6 +67,31 @@ function colorFor(pct) {
     if (pct >= CRITICAL_AT) return COLOR.crit;
     if (pct >= CAUTION_AT) return COLOR.wait;
     return COLOR.ok;
+}
+
+// The number is the headline of a meter, so it takes the status colour only
+// once the meter is worth attention; a healthy figure stays in plain text, as
+// in the design, where colour is kept for the rows that need it.
+function statusTextColor(pct, muted = false) {
+    if (muted) return "#98989b";
+    return pct >= CAUTION_AT ? colorFor(pct) : "#f5f5f8";
+}
+
+// "5-hour limit" -> "5-hour": the tag sits beside the name, where "limit" is
+// already understood.
+function tagText(text) {
+    return (text ?? "\u2014").replace(/\s+limits?$/i, "");
+}
+
+// "Out in ~40m · resets in 2h 15m", the line under every meter.
+function meterSub(m) {
+    if (!m) return "";
+    const resets = (m.resets ?? "").replace(/^Resets/, "resets");
+    const parts = [];
+    if (m.eta && clampPct(m.value) >= CAUTION_AT) parts.push(`Out in ~${m.eta}`);
+    if (resets && resets !== "—") parts.push(resets);
+    const text = parts.join(" · ");
+    return text ? text.charAt(0).toUpperCase() + text.slice(1) : "";
 }
 
 // Window names shortened for the list screen, where every row carries one chip
@@ -319,7 +345,12 @@ function relativeTime(iso) {
 }
 
 function label(text, styleClass, extra = {}) {
-    return new St.Label({ text, style_class: styleClass, ...extra });
+    const l = new St.Label({ text, style_class: styleClass, ...extra });
+    // St measures a label without its letter-spacing, so a tracked kicker comes
+    // out a few pixels short of its own text and gets an ellipsis it does not
+    // need. These are short and never wrap, so they are never truncated.
+    l.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
+    return l;
 }
 
 function wrappedLabel(text, styleClass, extra = {}) {
@@ -333,10 +364,21 @@ function wrappedLabel(text, styleClass, extra = {}) {
 // Thin progress bar: .bar / .bar-fill in the mockup.
 const Bar = GObject.registerClass(
     class AiUsageBar extends St.Widget {
-        _init(pct, color) {
+        _init(pct, color, elapsed = null) {
             super._init({ style_class: "ai-usage-bar", x_expand: true });
             this._fill = new St.Widget({ style_class: "ai-usage-bar-fill" });
             this.add_child(this._fill);
+            // The pace tick marks how far through its window the meter is: a
+            // fill past the tick is spending faster than time is passing. Too
+            // close to the left edge it says nothing, so it is left out.
+            this._elapsed =
+                Number.isFinite(elapsed) && elapsed > 8
+                    ? Math.min(elapsed, 100)
+                    : null;
+            if (this._elapsed !== null) {
+                this._tick = new St.Widget({ style_class: "ai-usage-bar-tick" });
+                this.add_child(this._tick);
+            }
             this.setValue(pct, color);
         }
 
@@ -387,6 +429,19 @@ const Bar = GObject.registerClass(
                 y2: content.y2,
             });
             this._fill.allocate(childBox);
+            if (this._tick) {
+                const x = Math.round(
+                    content.x1 + ((content.x2 - content.x1) * this._elapsed) / 100,
+                );
+                this._tick.allocate(
+                    new Clutter.ActorBox({
+                        x1: x - 1,
+                        y1: content.y1 - 3,
+                        x2: x,
+                        y2: content.y2 + 3,
+                    }),
+                );
+            }
         }
     },
 );
@@ -514,26 +569,28 @@ const Row = GObject.registerClass(
 
             const primary = primaryOf(tool);
             const pct = clampPct(primary?.value ?? 0);
-            const color = colorFor(pct);
             const via = viaOf(tool);
+            // A borrowed meter belongs to another account, so it is drawn
+            // quiet: the number is real, but it is not this tool's to spend.
+            const muted = !!via?.borrowed;
+            const color = muted ? COLOR.muted : colorFor(pct);
             // A harness with no reachable limit is fine, not broken: it keeps its
             // row and its session count, and simply shows no bar and no number.
             const metered = ok && hasMeters(tool);
 
-            const badge = new St.Bin({
-                style_class: via
-                    ? "ai-usage-badge ai-usage-badge-via"
-                    : "ai-usage-badge",
-                y_align: Clutter.ActorAlign.CENTER,
-                child: new St.Icon({
-                    style_class: "ai-usage-badge-icon",
-                    gicon: icons.badge(tool.icon),
-                    icon_size: 15,
-                    x_align: Clutter.ActorAlign.CENTER,
-                    y_align: Clutter.ActorAlign.CENTER,
+            this.add_child(
+                new St.Bin({
+                    style_class: "ai-usage-badge",
+                    y_align: Clutter.ActorAlign.START,
+                    child: new St.Icon({
+                        style_class: "ai-usage-badge-icon",
+                        gicon: icons.badge(tool.icon),
+                        icon_size: 15,
+                        x_align: Clutter.ActorAlign.CENTER,
+                        y_align: Clutter.ActorAlign.CENTER,
+                    }),
                 }),
-            });
-            this.add_child(badge);
+            );
 
             const info = new St.BoxLayout({
                 style_class: "ai-usage-info",
@@ -545,76 +602,73 @@ const Row = GObject.registerClass(
                 style_class: "ai-usage-name-row",
                 x_expand: true,
             });
-            nameRow.add_child(label(tool.name, "ai-usage-name"));
-            if (via) {
+            nameRow.add_child(
+                label(tool.name, "ai-usage-name", {
+                    y_align: Clutter.ActorAlign.CENTER,
+                }),
+            );
+            const tag = via
+                ? `via ${via.name}`
+                : metered
+                  ? tagText(primary?.label)
+                  : "";
+            if (tag) {
                 nameRow.add_child(
-                    label(`via ${via.name}`, "ai-usage-via", {
+                    label(tag.toUpperCase(), "ai-usage-tag", {
                         y_align: Clutter.ActorAlign.CENTER,
                     }),
                 );
             }
-            const running = ok ? activeSessions(tool) : 0;
-            if (running) {
-                nameRow.add_child(
-                    label(`${running} running`, "ai-usage-running", {
-                        y_align: Clutter.ActorAlign.CENTER,
-                    }),
-                );
+            nameRow.add_child(new St.Widget({ x_expand: true }));
+            if (metered) {
+                // Only a metered row has a number to show; an unmetered one
+                // still opens, because its detail screen lists the sessions.
+                this._value = label(`${Math.round(pct)}%`, "ai-usage-value", {
+                    style: `color: ${statusTextColor(pct, muted)};`,
+                    y_align: Clutter.ActorAlign.CENTER,
+                });
+                nameRow.add_child(this._value);
             }
             info.add_child(nameRow);
 
-            const meta = new BadgeFlow();
             if (metered) {
-                // The picker at the foot of the menu names the window every row
-                // is showing, so a row that matches it says nothing — that is
-                // the space this layout buys. A row only speaks up when it
-                // cannot honour the choice: Cursor publishes no weekly and
-                // Claude no monthly, so somebody is always the exception, and
-                // an exception that stayed silent would read as though the
-                // picker applied to it.
-                const honoured = !selectedKind || kindOf(tool) === selectedKind;
-                if (!honoured)
-                    meta.add_child(
-                        label(shortLabel(primary?.label), "ai-usage-limit", {
-                            y_align: Clutter.ActorAlign.CENTER,
-                        }),
-                    );
-            } else {
-                meta.add_child(
-                    label(
-                        tool.error || tool.status || "No limits",
-                        "ai-usage-limit",
+                this._bar = new Bar(pct, color, primary?.elapsed);
+                info.add_child(this._bar);
+            }
+
+            const running = ok ? activeSessions(tool) : 0;
+            const sub = ok
+                ? metered
+                    ? via?.borrowed
+                        ? `Shares ${via.name} limits`
+                        : meterSub(primary)
+                    : tool.error || tool.status || "No limits"
+                : tool.error || tool.status || "No limits";
+            const subText = [sub, running ? `${running} running` : ""]
+                .filter(Boolean)
+                .join(" · ");
+            if (subText) {
+                info.add_child(
+                    wrappedLabel(
+                        subText,
+                        pct >= CRITICAL_AT && metered && !muted
+                            ? "ai-usage-sub crit"
+                            : "ai-usage-sub",
+                        pct >= CRITICAL_AT && metered && !muted
+                            ? { style: `color: ${color};` }
+                            : {},
                     ),
                 );
-            }
-            info.add_child(meta);
-
-            if (metered) {
-                this._bar = new Bar(pct, color);
-                info.add_child(this._bar);
             }
             this.add_child(info);
 
             if (ok) {
-                // Only a metered row has a number to show; an unmetered one still
-                // opens, because its detail screen lists the sessions.
-                if (metered) {
-                    this._value = label(
-                        `${Math.round(pct)}%`,
-                        "ai-usage-value",
-                        {
-                            style: `color: ${color};`,
-                            y_align: Clutter.ActorAlign.CENTER,
-                        },
-                    );
-                    this.add_child(this._value);
-                }
                 this.add_child(
                     new St.Icon({
                         style_class: "ai-usage-chevron",
                         gicon: icons.chevronRight,
                         icon_size: 14,
-                        y_align: Clutter.ActorAlign.CENTER,
+                        y_align: Clutter.ActorAlign.START,
                     }),
                 );
                 if (metered && bump) this._bump();
@@ -705,6 +759,35 @@ const Row = GObject.registerClass(
 
 // What the featured AI's role means, in words the panel owns. The role itself
 // is decided by the daemon from the ledger, never here.
+const KIND_COPY = {
+    actionable: "Actionable",
+    informative: "Recap",
+    shareable: "Shareable",
+    fun: "Fun fact",
+};
+
+// The first sentence of an insight is its title, the rest its sub line. The
+// daemon writes one block of prose; the design sets it as a headline and a body.
+function splitInsight(text) {
+    const body = (text ?? "").trim();
+    const m = body.match(/^(.+?[.!?])(\s+|$)/s);
+    if (!m) return { title: body, sub: "" };
+    return { title: m[1], sub: body.slice(m[0].length).trim() };
+}
+
+// "Today 14:00", "Yesterday 21:00", then the weekday and date.
+function insightWhen(epoch) {
+    if (!epoch) return "";
+    const at = GLib.DateTime.new_from_unix_local(epoch);
+    const now = GLib.DateTime.new_now_local();
+    const time = at.format("%H:%M");
+    const sameDay = at.format("%F") === now.format("%F");
+    if (sameDay) return `Today ${time}`;
+    const yesterday = now.add_days(-1);
+    if (at.format("%F") === yesterday.format("%F")) return `Yesterday ${time}`;
+    return `${at.format("%a %e %b")} ${time}`;
+}
+
 const ROLE_COPY = {
     suggested: "has room — worth moving to",
     leading: "doing the heavy lifting",
@@ -714,6 +797,14 @@ const ROLE_COPY = {
 
 const Indicator = GObject.registerClass(
     class AiUsageIndicator extends PanelMenu.Button {
+        destroy() {
+            if (this._noteId) {
+                GLib.source_remove(this._noteId);
+                this._noteId = 0;
+            }
+            super.destroy();
+        }
+
         _init(ext) {
             super._init(0.5, "AI usage", false);
             this.add_style_class_name("ai-usage-panel-button");
@@ -732,7 +823,10 @@ const Indicator = GObject.registerClass(
             // without pressing Continue must not make it nag on the next open,
             // so the id is recorded when it is shown, not when it is dismissed.
             this._landingShownId = null;
-            this._landingMode = "fresh"; // "fresh" (acknowledges) | "latest"
+            this._landingMode = "fresh"; // "fresh" | "latest" | "message" (picked from Earlier)
+            this._pickedMessage = null;
+            this._footerNote = null;
+            this._noteId = 0;
             // At most one landing page per open. The daemon is asked for state
             // when the popover opens, so a new message can arrive a moment
             // later; without this, Continue would show the *next* message
@@ -1153,6 +1247,7 @@ const Indicator = GObject.registerClass(
             if (this._screen === "detail") this._renderDetail(screen);
             else if (this._screen === "sessions") this._renderSessions(screen);
             else if (this._screen === "landing") this._renderLanding(screen);
+            else if (this._screen === "earlier") this._renderEarlier(screen);
             else if (this._screen === "guide") this._renderGuide(screen);
             else if (this._screen === "about") this._renderAbout(screen);
             else this._renderList(screen);
@@ -1211,89 +1306,275 @@ const Indicator = GObject.registerClass(
             for (const bar of bars) bar.grow();
         }
 
-        _header(title, withSettings = false) {
-            const header = new St.BoxLayout({
-                style_class: "ai-usage-header",
+        // -- shared screen parts, after the design system's Ext components ----
+
+        // ExtHeader: kicker and meta on one line, then a sentence title and a
+        // sub line. The back arrow, when there is one, leads the kicker.
+        _screenHeader({ kicker, meta = "", title, sub = "", back = null }) {
+            const box = new St.BoxLayout({
+                style_class: "ai-usage-hdr",
+                orientation: Clutter.Orientation.VERTICAL,
                 x_expand: true,
             });
-            header.add_child(
-                label(title, "ai-usage-header-title", {
+            const top = new St.BoxLayout({
+                style_class: "ai-usage-hdr-top",
+                x_expand: true,
+            });
+            if (back) {
+                const button = new St.Button({
+                    style_class: "ai-usage-back",
+                    can_focus: true,
+                    accessible_name: "Back",
+                    y_align: Clutter.ActorAlign.CENTER,
+                    child: new St.Icon({
+                        style_class: "ai-usage-back-icon",
+                        gicon: this._icons.chevronLeft,
+                        icon_size: 16,
+                    }),
+                });
+                button.connect("clicked", back);
+                top.add_child(button);
+            }
+            top.add_child(
+                label(kicker.toUpperCase(), "ai-usage-kicker", {
                     x_expand: true,
                     y_align: Clutter.ActorAlign.CENTER,
                 }),
             );
-            // Settings, Guide and About used to own the foot of the menu, which
-            // is the most reachable row there is and was being spent on three
-            // things you press once. They move up here into space the title was
-            // not using, and the window picker takes the row instead.
-            const add = (text, cb) => {
+            if (meta)
+                top.add_child(
+                    label(meta.toUpperCase(), "ai-usage-kicker", {
+                        y_align: Clutter.ActorAlign.CENTER,
+                    }),
+                );
+            box.add_child(top);
+            box.add_child(wrappedLabel(title, "ai-usage-title"));
+            if (sub) box.add_child(wrappedLabel(sub, "ai-usage-hdr-sub"));
+            return box;
+        }
+
+        // ExtSection: a group of rows under a top rule, with an optional label.
+        _section(text = "") {
+            const box = new St.BoxLayout({
+                style_class: "ai-usage-section",
+                orientation: Clutter.Orientation.VERTICAL,
+                x_expand: true,
+            });
+            if (text) box.add_child(label(text.toUpperCase(), "ai-usage-section-label"));
+            return box;
+        }
+
+        // ExtFooter: status text on the left, ghost actions, then Settings.
+        _footer(text, actions = [], withSettings = false) {
+            const bar = new St.BoxLayout({
+                style_class: "ai-usage-footer",
+                x_expand: true,
+            });
+            bar.add_child(
+                label(text, "ai-usage-footer-text", {
+                    x_expand: true,
+                    y_align: Clutter.ActorAlign.CENTER,
+                }),
+            );
+            const add = (text_, cb) => {
                 const b = new St.Button({
-                    style_class: "ai-usage-header-btn",
-                    label: text,
+                    style_class: "ai-usage-ghost-btn",
+                    label: text_,
                     can_focus: true,
                     y_align: Clutter.ActorAlign.CENTER,
                 });
                 b.connect("clicked", cb);
-                header.add_child(b);
+                bar.add_child(b);
             };
-            // Not on the landing page itself: it would be offering what is
-            // already in front of you, one click from going nowhere.
-            if (this._state?.latestMessage && this._screen !== "landing")
-                add("Latest", () => {
-                    this._landingMode = "latest";
-                    this._navigate("landing");
-                });
+            for (const { label: text_, cb } of actions) add(text_, cb);
             if (withSettings) add("Settings", () => this._openSettings());
-            add("Guide", () => this._navigate("guide"));
-            add("About", () => this._navigate("about"));
-            return header;
+            return bar;
         }
 
-        _detailHeader(title, icon, backScreen = "list") {
-            const header = new St.BoxLayout({
-                style_class: "ai-usage-detail-header",
+        // ExtListRow: kicker, title and meta, with a chevron. For drill-downs
+        // that are not meters.
+        _listRow(kicker, title, meta, cb) {
+            const row = new St.Button({
+                style_class: "ai-usage-list-row",
+                can_focus: true,
                 x_expand: true,
             });
-            const back = new St.Button({
-                style_class: "ai-usage-back",
-                can_focus: true,
-                accessible_name: "Back",
-                y_align: Clutter.ActorAlign.CENTER,
-                child: new St.Icon({
-                    style_class: "ai-usage-back-icon",
-                    gicon: this._icons.chevronLeft,
-                    icon_size: 16,
-                }),
+            const box = new St.BoxLayout({ x_expand: true });
+            const text = new St.BoxLayout({
+                orientation: Clutter.Orientation.VERTICAL,
+                x_expand: true,
             });
-            back.connect("clicked", () => {
-                if (backScreen === "detail")
-                    this._navigate("detail", this._toolId);
-                else this._navigate(backScreen);
-            });
-            header.add_child(back);
-            if (icon) {
-                header.add_child(
-                    new St.Bin({
-                        style_class: "ai-usage-badge",
-                        y_align: Clutter.ActorAlign.CENTER,
-                        child: new St.Icon({
-                            style_class: "ai-usage-badge-icon",
-                            gicon: this._icons.badge(icon),
-                            icon_size: 15,
-                            x_align: Clutter.ActorAlign.CENTER,
-                            y_align: Clutter.ActorAlign.CENTER,
-                        }),
-                    }),
-                );
-            }
-            header.add_child(
-                label(title, "ai-usage-detail-title", {
+            text.add_child(label(kicker.toUpperCase(), "ai-usage-kicker"));
+            text.add_child(wrappedLabel(title, "ai-usage-list-title"));
+            if (meta) text.add_child(wrappedLabel(meta, "ai-usage-sub"));
+            box.add_child(text);
+            box.add_child(
+                new St.Icon({
+                    style_class: "ai-usage-chevron",
+                    gicon: this._icons.chevronRight,
+                    icon_size: 14,
                     y_align: Clutter.ActorAlign.CENTER,
                 }),
             );
-            return header;
+            row.set_child(box);
+            row.connect("clicked", cb);
+            return row;
         }
 
+        // ExtGuideItem: a mark, a title and a description.
+        _guideItem(color, title, desc, mark = "square") {
+            const item = new St.BoxLayout({
+                style_class: "ai-usage-guide-item",
+                x_expand: true,
+            });
+            if (mark === "pace") {
+                item.add_child(
+                    new St.Widget({
+                        style_class: "ai-usage-guide-tick",
+                        y_align: Clutter.ActorAlign.START,
+                    }),
+                );
+            } else if (color) {
+                item.add_child(
+                    new St.Widget({
+                        style_class: "ai-usage-guide-dot",
+                        style: `background-color: ${color};`,
+                        y_align: Clutter.ActorAlign.START,
+                        y_expand: false,
+                    }),
+                );
+            }
+            const text = new St.BoxLayout({
+                style_class: "ai-usage-guide-text",
+                orientation: Clutter.Orientation.VERTICAL,
+                x_expand: true,
+            });
+            text.add_child(label(title, "ai-usage-guide-title"));
+            text.add_child(wrappedLabel(desc, "ai-usage-guide-desc"));
+            item.add_child(text);
+            return item;
+        }
+
+        _clock() {
+            return GLib.DateTime.new_now_local().format("%H:%M");
+        }
+
+        _updatedText() {
+            return `Updated ${relativeTime(this._state?.updated_at)}`;
+        }
+
+        // The tightest meter across providers that own their numbers, with the
+        // sentence the list and the detail screens open on.
+        _tightest(tools) {
+            let found = null;
+            for (const tool of tools) {
+                if (!ownsMeters(tool) || (tool.status && tool.status !== "ok"))
+                    continue;
+                for (const m of tool.metrics) {
+                    const pct = clampPct(m.value);
+                    if (!found || pct > found.pct) found = { tool, m, pct };
+                }
+            }
+            return found;
+        }
+
+        _tightestMetric(tool) {
+            return [...(tool.metrics ?? [])].sort((a, b) => b.value - a.value)[0] ?? null;
+        }
+
+        _meterSentence(tool, metric = null) {
+            const via = viaOf(tool);
+            if (via?.borrowed) {
+                return {
+                    title: `${tool.name} spends ${via.name}.`,
+                    sub: `Its sessions meter against ${via.name}’s limits.`,
+                };
+            }
+            const primary = metric ?? this._tightestMetric(tool);
+            if (!hasMeters(tool) || !primary) {
+                return {
+                    title: `${tool.name} has no limits to show.`,
+                    sub: tool.error || "Nothing is metered for this tool.",
+                };
+            }
+            const pct = Math.round(clampPct(primary.value));
+            const resets = (primary.resets ?? "").replace(/^Resets/, "resets");
+            const others = tool.metrics
+                .filter((m) => m.key !== primary.key)
+                .sort((a, b) => b.value - a.value)[0];
+            const tail = others
+                ? ` ${others.label} is at ${Math.round(clampPct(others.value))}%.`
+                : "";
+            const window = `${primary.label} is at ${pct}%${
+                resets && resets !== "—" ? ` and ${resets}` : ""
+            }.`;
+            if (primary.eta && pct >= CAUTION_AT)
+                return {
+                    title: `${tool.name} runs out in ~${primary.eta}.`,
+                    sub: `${window}${tail}`,
+                };
+            if (pct >= CRITICAL_AT)
+                return { title: `${tool.name} is at ${pct}%.`, sub: `${window}${tail}` };
+            if (pct >= CAUTION_AT)
+                return {
+                    title: `${tool.name} is getting close.`,
+                    sub: `${window}${tail}`,
+                };
+            return {
+                title: `${tool.name} has plenty of room.`,
+                sub: `${window}${tail}`,
+            };
+        }
+
+        _note(text) {
+            // A short confirmation in the footer, then back to the status line.
+            this._footerNote = text;
+            if (this._noteId) GLib.source_remove(this._noteId);
+            this._noteId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 2200, () => {
+                this._noteId = 0;
+                this._footerNote = null;
+                if (this._screen === "detail" || this._screen === "sessions")
+                    this._render(false);
+                return GLib.SOURCE_REMOVE;
+            });
+            this._render(false);
+        }
+
+        // Raise the terminal a session runs in. Windows are matched by their
+        // title mentioning the project, the same way the top bar finds the
+        // focused one; a session with no matching window says so.
+        _focusSession(session) {
+            const project = session?.project;
+            const actors = project ? global.get_window_actors() : [];
+            const win = actors
+                .map((a) => a.meta_window)
+                .find(
+                    (w) =>
+                        w &&
+                        !w.is_skip_taskbar() &&
+                        titleMentionsProject(w.get_title() ?? "", project),
+                );
+            if (!win) {
+                this._note(`No window found for ${project ?? "this session"}`);
+                return;
+            }
+            this.menu.close();
+            Main.activateWindow(win);
+        }
+
+        _sessionMeta(session) {
+            return [
+                session.backend?.model
+                    ? `${session.backend.model}${session.backend.name ? ` via ${session.backend.name}` : ""}`
+                    : null,
+                session.tty || null,
+                session.paused ? "paused" : null,
+            ]
+                .filter(Boolean)
+                .join(" · ");
+        }
+
+        // ExtSessionRow: a status mark, the project, its facts, and Focus.
         _sessionRow(session) {
             const row = new St.BoxLayout({
                 style_class: "ai-usage-session-row",
@@ -1304,51 +1585,74 @@ const Indicator = GObject.registerClass(
                     style_class: session.paused
                         ? "ai-usage-session-mark paused"
                         : "ai-usage-session-mark",
-                    y_align: Clutter.ActorAlign.CENTER,
+                    y_align: Clutter.ActorAlign.START,
                 }),
             );
-            row.add_child(
-                label(sessionLabel(session), "ai-usage-session-name", {
-                    x_expand: true,
+            const text = new St.BoxLayout({
+                orientation: Clutter.Orientation.VERTICAL,
+                x_expand: true,
+            });
+            text.add_child(label(sessionLabel(session), "ai-usage-session-name"));
+            const meta = this._sessionMeta(session);
+            if (meta) text.add_child(label(meta, "ai-usage-sub"));
+            row.add_child(text);
+            if (!session.paused && session.project) {
+                const focus = new St.Button({
+                    style_class: "ai-usage-focus-btn",
+                    label: "Focus",
+                    can_focus: true,
                     y_align: Clutter.ActorAlign.CENTER,
-                }),
-            );
-            // Sessions of one harness can sit on different accounts at once, so each
-            // row names its own rather than inheriting the provider's headline.
-            if (session.backend?.model) {
-                row.add_child(
-                    label(session.backend.model, "ai-usage-session-model", {
-                        y_align: Clutter.ActorAlign.CENTER,
-                    }),
-                );
+                });
+                focus.connect("clicked", () => this._focusSession(session));
+                row.add_child(focus);
             }
-            row.add_child(
-                label(
-                    session.paused ? "paused" : "running",
-                    session.paused
-                        ? "ai-usage-session-state paused"
-                        : "ai-usage-session-state",
-                    { y_align: Clutter.ActorAlign.CENTER },
-                ),
-            );
             return row;
         }
 
+        // -- screens -----------------------------------------------------------
+
         _renderList(screen) {
-            screen.add_child(this._header("AI usage", true));
             const tools = this.tools;
+            const tight = this._tightest(tools);
+            const running = tools.reduce((n, t) => n + activeSessions(t), 0);
+            const projects = new Set(
+                tools.flatMap((t) => t.instances?.projects ?? []),
+            ).size;
+            let title = "AI usage";
+            let sub = this._updatedText();
+            if (tight) {
+                const s = this._meterSentence(tight.tool, tight.m);
+                title = s.title;
+                const others = tools.filter(
+                    (t) => t !== tight.tool && ownsMeters(t) && hasMeters(t),
+                );
+                const roomy = others
+                    .map((t) => ({ t, p: clampPct(primaryOf(t)?.value ?? 100) }))
+                    .sort((a, b) => a.p - b.p)[0];
+                sub = [
+                    roomy && roomy.p < CAUTION_AT ? `${roomy.t.name} has room.` : "",
+                    running
+                        ? `${running} ${running === 1 ? "agent" : "agents"} running${
+                              projects ? ` across ${projects} ${projects === 1 ? "project" : "projects"}` : ""
+                          }.`
+                        : "",
+                ]
+                    .filter(Boolean)
+                    .join(" ");
+                if (!sub) sub = s.sub;
+            }
+            screen.add_child(
+                this._screenHeader({ kicker: "AI usage", meta: this._clock(), title, sub }),
+            );
             if (!tools.length) {
                 const text = this._state
                     ? "No providers yet.\nSign in to Cursor and refresh."
                     : "Daemon not running.\nStart it with:\nsystemctl --user start cursor-spend-monitor";
                 screen.add_child(wrappedLabel(text, "ai-usage-empty"));
+                screen.add_child(this._footer("", [], true));
                 return;
             }
-            const section = new St.BoxLayout({
-                style_class: "ai-usage-section",
-                orientation: Clutter.Orientation.VERTICAL,
-                x_expand: true,
-            });
+            const section = this._section();
             const selectedKind = selectedWindow(tools);
             const rows = [];
             for (const tool of tools) {
@@ -1358,9 +1662,7 @@ const Indicator = GObject.registerClass(
                     this._lastSwapped === tool.id,
                     selectedKind,
                 );
-                row.connect("navigate", () =>
-                    this._navigate("detail", tool.id),
-                );
+                row.connect("navigate", () => this._navigate("detail", tool.id));
                 row.connect("select", (_row, key) => this._select(tool, key));
                 section.add_child(row);
                 rows.push(row);
@@ -1370,6 +1672,392 @@ const Indicator = GObject.registerClass(
             screen.add_child(section);
             const picker = this._windowPicker(tools, selectedKind);
             if (picker) screen.add_child(picker);
+            const actions = [];
+            if (this._state?.latestMessage)
+                actions.push({
+                    label: "Latest",
+                    cb: () => {
+                        this._landingMode = "latest";
+                        this._navigate("landing");
+                    },
+                });
+            actions.push({ label: "Guide", cb: () => this._navigate("guide") });
+            actions.push({ label: "About", cb: () => this._navigate("about") });
+            screen.add_child(this._footer(this._updatedText(), actions, true));
+        }
+
+        _renderDetail(screen) {
+            const tool = this.tools.find((t) => t.id === this._toolId);
+            if (!tool) {
+                this._screen = "list";
+                this._renderList(screen);
+                return;
+            }
+            const { title, sub } = this._meterSentence(tool);
+            screen.add_child(
+                this._screenHeader({
+                    kicker: tool.name,
+                    meta: tool.plan ?? "",
+                    title,
+                    sub,
+                    back: () => this._navigate("list"),
+                }),
+            );
+
+            const via = viaOf(tool);
+            const muted = !!via?.borrowed;
+            const bars = [];
+            if (hasMeters(tool)) {
+                const limits = this._section(
+                    via?.borrowed ? `Limits · shared with ${via.name}` : "Limits",
+                );
+                for (const m of tool.metrics) {
+                    const pct = clampPct(m.value);
+                    const color = muted ? COLOR.muted : colorFor(pct);
+                    const block = new St.BoxLayout({
+                        style_class: "ai-usage-limit-row",
+                        orientation: Clutter.Orientation.VERTICAL,
+                        x_expand: true,
+                    });
+                    const top = new St.BoxLayout({
+                        style_class: "ai-usage-name-row",
+                        x_expand: true,
+                    });
+                    top.add_child(
+                        label(m.label, "ai-usage-name", {
+                            y_align: Clutter.ActorAlign.CENTER,
+                        }),
+                    );
+                    if (m === this._tightestMetric(tool) && tool.metrics.length > 1)
+                        top.add_child(
+                            label("TIGHTEST", "ai-usage-tag", {
+                                y_align: Clutter.ActorAlign.CENTER,
+                            }),
+                        );
+                    top.add_child(new St.Widget({ x_expand: true }));
+                    top.add_child(
+                        label(`${Math.round(pct)}%`, "ai-usage-value", {
+                            style: `color: ${statusTextColor(pct, muted)};`,
+                            y_align: Clutter.ActorAlign.CENTER,
+                        }),
+                    );
+                    block.add_child(top);
+                    const bar = new Bar(pct, color, m.elapsed);
+                    bars.push(bar);
+                    block.add_child(bar);
+                    const text = meterSub(m);
+                    if (text) {
+                        const crit = pct >= CRITICAL_AT && !muted;
+                        block.add_child(
+                            wrappedLabel(text, crit ? "ai-usage-sub crit" : "ai-usage-sub", {
+                                style: crit ? `color: ${color};` : "",
+                            }),
+                        );
+                    }
+                    limits.add_child(block);
+                }
+                screen.add_child(limits);
+            } else if (via) {
+                const note = new St.BoxLayout({
+                    style_class: "ai-usage-limit-row",
+                    x_expand: true,
+                });
+                note.add_child(
+                    wrappedLabel(
+                        `${via.name}${via.model ? ` · ${via.model}` : ""} — ${tool.error || "no limits available"}`,
+                        "ai-usage-sub",
+                    ),
+                );
+                screen.add_child(note);
+            }
+            this._entryBars = bars;
+
+            const sessions = sessionRows(tool);
+            if (sessions.length) {
+                const active = sessions.filter((s) => !s.paused);
+                const block = this._section(`Sessions · ${active.length} running`);
+                for (const session of active)
+                    block.add_child(this._sessionRow(session));
+                block.add_child(
+                    this._listRow(
+                        "Sessions",
+                        "View all sessions",
+                        `${active.length} active · ${sessions.length - active.length} paused`,
+                        () => this._navigate("sessions", tool.id),
+                    ),
+                );
+                screen.add_child(block);
+            }
+            screen.add_child(
+                this._footer(
+                    this._footerNote ?? this._updatedText(),
+                    [
+                        {
+                            label: "Open dashboard",
+                            cb: () =>
+                                this._openUri(
+                                    tool.dashboardUrl ||
+                                        "https://cursor.com/dashboard",
+                                ),
+                        },
+                    ],
+                    false,
+                ),
+            );
+        }
+
+        _renderSessions(screen) {
+            const tool = this.tools.find((t) => t.id === this._toolId);
+            if (!tool) {
+                this._screen = "list";
+                this._renderList(screen);
+                return;
+            }
+            const sessions = sessionRows(tool);
+            const active = sessions.filter((s) => !s.paused);
+            const paused = sessions.filter((s) => s.paused);
+            screen.add_child(
+                this._screenHeader({
+                    kicker: tool.name,
+                    meta: "Sessions",
+                    title: `${tool.name} has ${active.length} ${active.length === 1 ? "agent" : "agents"} running.`,
+                    sub: `${active.length} active · ${paused.length} paused · ${sessions.length} total`,
+                    back: () => this._navigate("detail", tool.id),
+                }),
+            );
+
+            // ExtFilterChips: square chips with counts.
+            const filters = new St.BoxLayout({
+                style_class: "ai-usage-sessions-filters",
+                x_expand: true,
+            });
+            for (const [key, text] of [
+                ["active", "Active"],
+                ["paused", "Paused"],
+            ]) {
+                const selected = this._sessionsFilter === key;
+                const count = key === "active" ? active.length : paused.length;
+                const btn = new St.Button({
+                    style_class: selected
+                        ? "ai-usage-filter-chip active"
+                        : "ai-usage-filter-chip",
+                    label: `${text} ${count}`,
+                    can_focus: true,
+                    y_align: Clutter.ActorAlign.CENTER,
+                });
+                btn.connect("clicked", () => {
+                    if (this._sessionsFilter === key) return;
+                    this._sessionsFilter = key;
+                    this._render(false);
+                });
+                filters.add_child(btn);
+            }
+            screen.add_child(filters);
+
+            const list = this._section();
+            const shown = this._sessionsFilter === "paused" ? paused : active;
+            if (shown.length) {
+                for (const session of shown)
+                    list.add_child(this._sessionRow(session));
+            } else {
+                list.add_child(
+                    label(
+                        this._sessionsFilter === "paused"
+                            ? "No paused sessions"
+                            : "No active sessions",
+                        "ai-usage-sessions-empty",
+                    ),
+                );
+            }
+            screen.add_child(list);
+            screen.add_child(
+                this._footer(this._footerNote ?? this._updatedText(), [], false),
+            );
+        }
+
+        _renderGuide(screen) {
+            screen.add_child(
+                this._screenHeader({
+                    kicker: "Guide",
+                    title: "Status colors",
+                    sub: "Every meter writes its percentage beside it. The colour says how close it is.",
+                    back: () => this._navigate("list"),
+                }),
+            );
+            const status = this._section("Status");
+            status.add_child(
+                this._guideItem(COLOR.ok, "Healthy", "Plenty of headroom — under 70% used."),
+            );
+            status.add_child(
+                this._guideItem(COLOR.wait, "Caution", "Getting close — 70 to 89% used."),
+            );
+            status.add_child(
+                this._guideItem(COLOR.crit, "Critical", "At or near your limit — 90% and up."),
+            );
+            screen.add_child(status);
+            const meter = this._section("Meter");
+            meter.add_child(
+                this._guideItem(null, "Pace tick", "The tick on each bar marks even pace.", "pace"),
+            );
+            screen.add_child(meter);
+            screen.add_child(this._footer(this._updatedText(), [], false));
+        }
+
+        _renderAbout(screen) {
+            screen.add_child(
+                this._screenHeader({
+                    kicker: "About",
+                    title: "AI usage",
+                    sub: "Local GNOME Shell indicator for AI coding limits.",
+                    back: () => this._navigate("list"),
+                }),
+            );
+            const daemon = this._state
+                ? `Daemon v${this._state.version ?? "?"} · updated ${relativeTime(this._state.updated_at)}`
+                : "Daemon not running";
+            const section = this._section();
+            section.add_child(
+                this._guideItem(
+                    null,
+                    `Extension v${this._ext.metadata.version}`,
+                    this._state?.error ? `${daemon}\n${this._state.error}` : daemon,
+                ),
+            );
+            screen.add_child(section);
+            const refresh = new St.Button({
+                style_class: "ai-usage-secondary-btn ai-usage-about-refresh",
+                label: "Refresh now",
+                can_focus: true,
+                x_expand: true,
+            });
+            refresh.connect("clicked", () => this._ext.refresh());
+            screen.add_child(refresh);
+        }
+
+        // -- the landing page and the insights behind it -----------------------
+
+        _landingBillboard() {
+            // Fresh for the routing case, the newest stored one for Latest, and
+            // the one picked from the list for Earlier.
+            if (this._landingMode === "message") return this._pickedMessage ?? null;
+            return this._landingMode === "latest"
+                ? (this._state?.latestMessage ?? null)
+                : (this._state?.billboard ?? null);
+        }
+
+        _renderLanding(screen) {
+            const billboard = this._landingBillboard();
+            if (!billboard) {
+                this._screen = "list";
+                this._renderList(screen);
+                return;
+            }
+            const { title, sub } = splitInsight(billboard.text ?? "");
+            const fromEarlier = this._landingMode === "message";
+            screen.add_child(
+                this._screenHeader({
+                    kicker: `Insight · ${KIND_COPY[billboard.kind] ?? "Update"}`,
+                    meta: insightWhen(billboard.createdAt),
+                    title,
+                    sub,
+                    back: fromEarlier ? () => this._navigate("earlier") : null,
+                }),
+            );
+
+            const featured = billboard.featured;
+            if (featured?.name || featured?.providerId) {
+                const row = new St.BoxLayout({
+                    style_class: "ai-usage-landing-featured",
+                    x_expand: true,
+                });
+                row.add_child(
+                    new St.Icon({
+                        style_class: "ai-usage-landing-icon",
+                        gicon: this._icons.badge(featured.providerId ?? "cursor"),
+                        icon_size: 16,
+                        y_align: Clutter.ActorAlign.CENTER,
+                    }),
+                );
+                const role = ROLE_COPY[featured.role];
+                row.add_child(
+                    label(
+                        `${featured.name ?? featured.providerId ?? ""}${role ? ` · ${role}` : ""}`,
+                        "ai-usage-sub",
+                        { y_align: Clutter.ActorAlign.CENTER },
+                    ),
+                );
+                screen.add_child(row);
+            }
+
+            const actions = new St.BoxLayout({
+                style_class: "ai-usage-landing-actions",
+                x_expand: true,
+            });
+            const cont = new St.Button({
+                style_class: "ai-usage-primary-btn",
+                label: "Continue to agents",
+                can_focus: true,
+                x_expand: true,
+            });
+            cont.connect("clicked", () => this._leaveLanding());
+            actions.add_child(cont);
+            if ((this._state?.recentMessages ?? []).length > 1) {
+                const earlier = new St.Button({
+                    style_class: "ai-usage-secondary-btn",
+                    label: "Earlier",
+                    can_focus: true,
+                });
+                earlier.connect("clicked", () => this._navigate("earlier"));
+                actions.add_child(earlier);
+            }
+            if (billboard.share) {
+                const copy = new St.Button({
+                    style_class: "ai-usage-ghost-btn",
+                    label: "Copy",
+                    can_focus: true,
+                    y_align: Clutter.ActorAlign.CENTER,
+                });
+                copy.connect("clicked", () =>
+                    St.Clipboard.get_default().set_text(
+                        St.ClipboardType.CLIPBOARD,
+                        billboard.share,
+                    ),
+                );
+                actions.add_child(copy);
+            }
+            screen.add_child(actions);
+        }
+
+        _renderEarlier(screen) {
+            const messages = this._state?.recentMessages ?? [];
+            screen.add_child(
+                this._screenHeader({
+                    kicker: "Insights",
+                    meta: `${messages.length} saved`,
+                    title: "Earlier insights",
+                    sub: "Written a few times a day from your token data.",
+                    back: () => this._navigate("list"),
+                }),
+            );
+            const section = this._section();
+            if (!messages.length)
+                section.add_child(label("Nothing saved yet", "ai-usage-sessions-empty"));
+            for (const m of messages) {
+                section.add_child(
+                    this._listRow(
+                        `${KIND_COPY[m.kind] ?? "Update"} · ${insightWhen(m.createdAt)}`,
+                        splitInsight(m.text).title,
+                        "",
+                        () => {
+                            this._pickedMessage = m;
+                            this._landingMode = "message";
+                            this._navigate("landing");
+                        },
+                    ),
+                );
+            }
+            screen.add_child(section);
+            screen.add_child(this._footer(this._updatedText(), [], false));
         }
 
         _windowPicker(tools, selectedKind) {
@@ -1417,344 +2105,6 @@ const Indicator = GObject.registerClass(
             }
         }
 
-        _renderDetail(screen) {
-            const tool = this.tools.find((t) => t.id === this._toolId);
-            if (!tool) {
-                this._screen = "list";
-                this._renderList(screen);
-                return;
-            }
-            screen.add_child(this._detailHeader(tool.name, tool.icon));
-
-            const body = new St.BoxLayout({
-                style_class: "ai-usage-detail-body",
-                orientation: Clutter.Orientation.VERTICAL,
-                x_expand: true,
-            });
-            const via = viaOf(tool);
-            if (via) {
-                // These meters are not this tool's own, so the screen says so before
-                // showing them. Without this the numbers look like Pi's own quota.
-                const note = via.borrowed
-                    ? `Spending against ${via.name}${via.model ? ` · ${via.model}` : ""}`
-                    : `${via.name}${via.model ? ` · ${via.model}` : ""} — ${tool.error || "no limits available"}`;
-                body.add_child(wrappedLabel(note, "ai-usage-via-note"));
-            }
-            const bars = [];
-            for (const m of tool.metrics ?? []) {
-                const pct = clampPct(m.value);
-                const color = colorFor(pct);
-                const block = new St.BoxLayout({
-                    orientation: Clutter.Orientation.VERTICAL,
-                    x_expand: true,
-                });
-                const top = new St.BoxLayout({
-                    style_class: "ai-usage-metric-top",
-                    x_expand: true,
-                });
-                top.add_child(label(m.label, null, { x_expand: true }));
-                top.add_child(
-                    label(`${Math.round(pct)}%`, "ai-usage-detail-value", {
-                        style: `color: ${color};`,
-                    }),
-                );
-                block.add_child(top);
-                const bar = new Bar(pct, color);
-                bars.push(bar);
-                block.add_child(bar);
-                block.add_child(label(m.resets ?? "", "ai-usage-detail-reset"));
-                body.add_child(block);
-            }
-            this._entryBars = bars;
-
-            const sessions = sessionRows(tool);
-            if (sessions.length) {
-                const active = sessions.filter((s) => !s.paused);
-                const block = new St.BoxLayout({
-                    style_class: "ai-usage-sessions-block",
-                    orientation: Clutter.Orientation.VERTICAL,
-                    x_expand: true,
-                });
-                block.add_child(label("Sessions", "ai-usage-sessions-heading"));
-                if (active.length) {
-                    for (const session of active)
-                        block.add_child(this._sessionRow(session));
-                } else {
-                    block.add_child(
-                        label("No active sessions", "ai-usage-sessions-empty"),
-                    );
-                }
-
-                const viewAll = new St.Button({
-                    style_class: "ai-usage-view-all",
-                    can_focus: true,
-                    x_expand: true,
-                    child: (() => {
-                        const row = new St.BoxLayout({
-                            style_class: "ai-usage-view-all-row",
-                            x_expand: true,
-                        });
-                        row.add_child(
-                            label(
-                                "View all sessions",
-                                "ai-usage-view-all-label",
-                                {
-                                    x_expand: true,
-                                    y_align: Clutter.ActorAlign.CENTER,
-                                },
-                            ),
-                        );
-                        row.add_child(
-                            new St.Icon({
-                                style_class: "ai-usage-chevron",
-                                gicon: this._icons.chevronRight,
-                                icon_size: 14,
-                                y_align: Clutter.ActorAlign.CENTER,
-                            }),
-                        );
-                        return row;
-                    })(),
-                });
-                viewAll.connect("clicked", () =>
-                    this._navigate("sessions", tool.id),
-                );
-                block.add_child(viewAll);
-                body.add_child(block);
-            }
-            screen.add_child(body);
-
-            const dash = new St.Button({
-                style_class: "ai-usage-dash-btn",
-                label: "Open dashboard",
-                can_focus: true,
-                x_expand: true,
-            });
-            dash.connect("clicked", () =>
-                this._openUri(
-                    tool.dashboardUrl || "https://cursor.com/dashboard",
-                ),
-            );
-            screen.add_child(dash);
-        }
-
-        _renderSessions(screen) {
-            const tool = this.tools.find((t) => t.id === this._toolId);
-            if (!tool) {
-                this._screen = "list";
-                this._renderList(screen);
-                return;
-            }
-            screen.add_child(
-                this._detailHeader("Sessions", tool.icon, "detail"),
-            );
-
-            const sessions = sessionRows(tool);
-            const active = sessions.filter((s) => !s.paused);
-            const paused = sessions.filter((s) => s.paused);
-            const body = new St.BoxLayout({
-                style_class: "ai-usage-sessions-screen",
-                orientation: Clutter.Orientation.VERTICAL,
-                x_expand: true,
-            });
-
-            body.add_child(
-                label(
-                    `${active.length} active · ${paused.length} paused · ${sessions.length} total`,
-                    "ai-usage-sessions-stats",
-                ),
-            );
-
-            const filters = new St.BoxLayout({
-                style_class: "ai-usage-sessions-filters",
-                x_expand: true,
-            });
-            for (const [key, text] of [
-                ["active", "Active"],
-                ["paused", "Paused"],
-            ]) {
-                const selected = this._sessionsFilter === key;
-                const count = key === "active" ? active.length : paused.length;
-                const btn = new St.Button({
-                    style_class: selected
-                        ? "ai-usage-filter-chip active"
-                        : "ai-usage-filter-chip",
-                    label: `${text} ${count}`,
-                    can_focus: true,
-                    y_align: Clutter.ActorAlign.CENTER,
-                });
-                btn.connect("clicked", () => {
-                    if (this._sessionsFilter === key) return;
-                    this._sessionsFilter = key;
-                    this._render(false);
-                });
-                filters.add_child(btn);
-            }
-            body.add_child(filters);
-
-            const list = new St.BoxLayout({
-                style_class: "ai-usage-sessions-list",
-                orientation: Clutter.Orientation.VERTICAL,
-                x_expand: true,
-            });
-            const shown = this._sessionsFilter === "paused" ? paused : active;
-            if (shown.length) {
-                for (const session of shown)
-                    list.add_child(this._sessionRow(session));
-            } else {
-                list.add_child(
-                    label(
-                        this._sessionsFilter === "paused"
-                            ? "No paused sessions"
-                            : "No active sessions",
-                        "ai-usage-sessions-empty",
-                    ),
-                );
-            }
-            body.add_child(list);
-            screen.add_child(body);
-        }
-
-        _guideItem(color, title, desc) {
-            const item = new St.BoxLayout({
-                style_class: "ai-usage-guide-item",
-                x_expand: true,
-            });
-            item.add_child(
-                new St.Widget({
-                    style_class: "ai-usage-guide-dot",
-                    style: `background-color: ${color};`,
-                    y_align: Clutter.ActorAlign.START,
-                    y_expand: false,
-                }),
-            );
-            const text = new St.BoxLayout({
-                style_class: "ai-usage-guide-text",
-                orientation: Clutter.Orientation.VERTICAL,
-                x_expand: true,
-            });
-            text.add_child(label(title, "ai-usage-guide-title"));
-            text.add_child(wrappedLabel(desc, "ai-usage-guide-desc"));
-            item.add_child(text);
-            return item;
-        }
-
-        _landingBillboard() {
-            // Fresh for the routing case, the newest stored one for Latest.
-            return this._landingMode === "latest"
-                ? (this._state?.latestMessage ?? null)
-                : (this._state?.billboard ?? null);
-        }
-
-        _renderLanding(screen) {
-            const billboard = this._landingBillboard();
-            if (!billboard) {
-                this._screen = "list";
-                this._renderList(screen);
-                return;
-            }
-            screen.add_child(this._header("AI usage", false));
-
-            const body = new St.BoxLayout({
-                style_class: "ai-usage-landing",
-                orientation: Clutter.Orientation.VERTICAL,
-                x_expand: true,
-            });
-            // The marks sit beside the text rather than above it: on their own
-            // line their tall line boxes left a gap the height of the glyph. The
-            // closing one aligns to the bottom of the block, so the pair bookends
-            // the quote instead of both hanging at the top.
-            const quote = new St.BoxLayout({
-                style_class: "ai-usage-landing-quote-row",
-                x_expand: true,
-            });
-            quote.add_child(
-                label("\u201c", "ai-usage-landing-mark", {
-                    y_align: Clutter.ActorAlign.START,
-                }),
-            );
-            quote.add_child(
-                wrappedLabel(billboard.text ?? "", "ai-usage-landing-quote"),
-            );
-            quote.add_child(
-                label("\u201d", "ai-usage-landing-mark", {
-                    y_align: Clutter.ActorAlign.END,
-                }),
-            );
-            body.add_child(quote);
-            if (billboard.share)
-                body.add_child(
-                    wrappedLabel(billboard.share, "ai-usage-landing-share"),
-                );
-
-            const featured = billboard.featured;
-            if (featured?.name || featured?.providerId) {
-                const row = new St.BoxLayout({
-                    style_class: "ai-usage-landing-featured",
-                    x_expand: true,
-                });
-                row.add_child(
-                    new St.Icon({
-                        style_class: "ai-usage-landing-icon",
-                        gicon: this._icons.badge(
-                            featured.providerId ?? "cursor",
-                        ),
-                        icon_size: 22,
-                        y_align: Clutter.ActorAlign.CENTER,
-                    }),
-                );
-                const text = new St.BoxLayout({
-                    orientation: Clutter.Orientation.VERTICAL,
-                    x_expand: true,
-                });
-                text.add_child(
-                    label(
-                        featured.name ?? featured.providerId ?? "",
-                        "ai-usage-landing-name",
-                    ),
-                );
-                const role = ROLE_COPY[featured.role];
-                if (role) text.add_child(label(role, "ai-usage-landing-role"));
-                row.add_child(text);
-                body.add_child(row);
-            }
-            screen.add_child(body);
-
-            // Centred as a pair rather than stretched across the row: a button
-            // that fills the width reads as a form submit, not a way back.
-            const actions = new St.BoxLayout({
-                style_class: "ai-usage-landing-actions",
-                x_align: Clutter.ActorAlign.CENTER,
-            });
-            const cont = new St.Button({
-                style_class: "ai-usage-landing-continue",
-                label: "Continue",
-                can_focus: true,
-            });
-            cont.connect("clicked", () => this._leaveLanding());
-            actions.add_child(cont);
-            if (billboard.share) {
-                const copy = new St.Button({
-                    style_class: "ai-usage-landing-copy",
-                    label: "Copy",
-                    can_focus: true,
-                    y_align: Clutter.ActorAlign.CENTER,
-                });
-                copy.connect("clicked", () =>
-                    St.Clipboard.get_default().set_text(
-                        St.ClipboardType.CLIPBOARD,
-                        billboard.share,
-                    ),
-                );
-                actions.add_child(copy);
-            }
-            screen.add_child(actions);
-
-            if (this._landingMode === "latest")
-                screen.add_child(
-                    label("Earlier update", "ai-usage-landing-note"),
-                );
-        }
-
         _leaveLanding() {
             const billboard = this._landingBillboard();
             // Leave first. Getting out of this screen must not depend on a
@@ -1766,93 +2116,6 @@ const Indicator = GObject.registerClass(
             // daemon records that and never offers this one again. The same
             // applies to reading it back through Latest.
             this._ext.acknowledge(billboard.id);
-        }
-
-        _renderGuide(screen) {
-            screen.add_child(this._detailHeader("Status colors", null));
-            const body = new St.BoxLayout({
-                style_class: "ai-usage-guide-body",
-                orientation: Clutter.Orientation.VERTICAL,
-                x_expand: true,
-            });
-            body.add_child(
-                this._guideItem(
-                    COLOR.ok,
-                    "Healthy",
-                    "Plenty of headroom — under 70% used.",
-                ),
-            );
-            body.add_child(
-                this._guideItem(
-                    COLOR.wait,
-                    "Caution",
-                    "Getting close — 70 to 89% used.",
-                ),
-            );
-            body.add_child(
-                this._guideItem(
-                    COLOR.crit,
-                    "Critical",
-                    "At or near your limit — 90% and up.",
-                ),
-            );
-            screen.add_child(body);
-        }
-
-        _renderAbout(screen) {
-            screen.add_child(this._detailHeader("About", null));
-            const body = new St.BoxLayout({
-                style_class: "ai-usage-guide-body",
-                orientation: Clutter.Orientation.VERTICAL,
-                x_expand: true,
-            });
-            const intro = new St.BoxLayout({
-                style_class: "ai-usage-guide-text",
-                orientation: Clutter.Orientation.VERTICAL,
-                x_expand: true,
-            });
-            intro.add_child(label("AI usage", "ai-usage-guide-title"));
-            intro.add_child(
-                wrappedLabel(
-                    "Local GNOME Shell indicator for AI coding limits. Cursor is live; OpenCode and Claude Code are next.",
-                    "ai-usage-guide-desc",
-                ),
-            );
-            body.add_child(intro);
-
-            const daemon = this._state
-                ? `Daemon v${this._state.version ?? "?"} · updated ${relativeTime(this._state.updated_at)}`
-                : "Daemon not running";
-            const status = new St.BoxLayout({
-                style_class: "ai-usage-guide-text",
-                orientation: Clutter.Orientation.VERTICAL,
-                x_expand: true,
-            });
-            status.add_child(
-                label(
-                    `Extension v${this._ext.metadata.version}`,
-                    "ai-usage-guide-title",
-                ),
-            );
-            status.add_child(
-                wrappedLabel(
-                    this._state?.error
-                        ? `${daemon}\n${this._state.error}`
-                        : daemon,
-                    "ai-usage-guide-desc",
-                ),
-            );
-            body.add_child(status);
-            screen.add_child(body);
-
-            const refresh = new St.Button({
-                style_class: "ai-usage-dash-btn ai-usage-refresh-btn",
-                label: "Refresh now",
-                can_focus: true,
-                x_expand: true,
-            });
-            refresh.connect("clicked", () => this._ext.refresh());
-            screen.add_child(refresh);
         }
 
         _select(tool, key) {

@@ -1371,6 +1371,16 @@ def latest_message(con: sqlite3.Connection) -> dict[str, Any] | None:
     return dict(row) if row else None
 
 
+def recent_messages(con: sqlite3.Connection, *, limit: int = 8) -> list[dict[str, Any]]:
+    """The newest messages regardless of acknowledgement, for "Earlier insights"."""
+    rows = con.execute(
+        "SELECT id, kind, key, created_at, provider, body, share, meta, seen_at"
+        " FROM messages ORDER BY created_at DESC, id DESC LIMIT ?",
+        (_as_int(limit),),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def pending_messages(
     con: sqlite3.Connection, *, limit: int = 20
 ) -> list[dict[str, Any]]:

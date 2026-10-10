@@ -25,6 +25,11 @@ def _as_int(value: Any) -> int:
         return 0
 
 
+# Nominal window lengths, for pace. The monthly figure is a 30-day month, which
+# is close enough to place a tick and is never shown as a number.
+WINDOW_SECONDS = {"rolling": 5 * 3600, "weekly": 7 * 86400, "monthly": 30 * 86400}
+
+
 @dataclass(frozen=True)
 class Meter:
     key: str
@@ -40,6 +45,19 @@ class Meter:
     # when the history says nothing trustworthy. Filled in by the daemon, which
     # is the only part that holds the sample series.
     eta_seconds: float | None = None
+
+    def elapsed_percent(self) -> int | None:
+        """How far through its window this meter is, 0-100, or None if unknown.
+
+        Drawn as the pace tick: a bar whose fill is past the tick is spending
+        faster than the window is passing. Only the three window kinds have a
+        known length; "other" meters (Cursor's per-model pool) have none.
+        """
+        length = WINDOW_SECONDS.get(self.kind)
+        if length is None or self.resets_at is None:
+            return None
+        remaining = (self.resets_at - datetime.now(timezone.utc)).total_seconds()
+        return max(0, min(100, _as_int(round(100 * (1 - remaining / length)))))
 
     def resets_label(self) -> str:
         if self.resets_at is None:
@@ -146,6 +164,7 @@ class ProviderSnapshot:
                     "kind": m.kind,
                     "eta": burn.eta_label(m.eta_seconds),
                     "etaSeconds": m.eta_seconds,
+                    "elapsed": m.elapsed_percent(),
                 }
                 for m in self.metrics
             ],

@@ -143,5 +143,31 @@ class MeterReadingTest(unittest.TestCase):
         self.assertIsNone(opencode._as_float({"percent": 1}))
 
 
+class MeterElapsedTest(unittest.TestCase):
+    def _meter(self, kind, hours_left):
+        from datetime import datetime, timedelta, timezone
+
+        from cursor_spend_monitor.providers.base import Meter
+
+        return Meter(
+            "k",
+            "K",
+            10,
+            datetime.now(timezone.utc) + timedelta(hours=hours_left),
+            kind=kind,
+        )
+
+    def test_a_rolling_window_halfway_through_is_about_half_elapsed(self):
+        self.assertAlmostEqual(self._meter("rolling", 2.5).elapsed_percent(), 50, delta=1)
+
+    def test_a_window_of_unknown_length_has_no_pace(self):
+        self.assertIsNone(self._meter("other", 2).elapsed_percent())
+
+    def test_a_meter_without_a_reset_time_has_no_pace(self):
+        from cursor_spend_monitor.providers.base import Meter
+
+        self.assertIsNone(Meter("k", "K", 10, None, kind="weekly").elapsed_percent())
+
+
 if __name__ == "__main__":
     unittest.main()
