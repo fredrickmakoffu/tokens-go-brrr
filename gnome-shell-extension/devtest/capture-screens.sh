@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Headless Shell + mock daemon; drive each popover screen via Eval and screenshot it.
+# SCHEME=prefer-light ./capture-screens.sh <out-dir> captures the light theme.
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; REPO="$(cd "$HERE/../.." && pwd)"
 UUID="ai-usage@fredrickmakoffu.github.io"
@@ -15,7 +16,7 @@ disable-user-extensions=false
 welcome-dialog-last-shown-version='99.0'
 
 [org/gnome/desktop/interface]
-color-scheme='prefer-dark'
+color-scheme='${SCHEME:-prefer-dark}'
 KF
 export XDG_CONFIG_HOME="$RUNTIME/config" XDG_DATA_HOME="$RUNTIME/data" XDG_CACHE_HOME="$RUNTIME/cache" GSETTINGS_BACKEND=keyfile OUT
 cat > "$RUNTIME/inner.sh" <<'INNER'
