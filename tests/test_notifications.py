@@ -914,3 +914,267 @@ class LedgerHelpersTest(NotifyCase):
         self.assertEqual(len(counts), 7)
         self.assertEqual(sum(counts), 3)
         self.assertEqual(counts[_local(int(NOW.timestamp())).weekday()], 1)
+
+
+class HotTierTest(unittest.TestCase):
+    def test_a_recent_warm_note_makes_the_open_hot(self):
+        self.assertEqual(
+            notify.tier_for(1800, last_warm_age=60), notify.HOT
+        )
+
+    def test_an_older_warm_note_does_not(self):
+        self.assertEqual(
+            notify.tier_for(1800, last_warm_age=11 * 60), notify.WARM
+        )
+
+    def test_the_hot_window_is_configurable(self):
+        self.assertEqual(
+            notify.tier_for(1800, hot_minutes=30, last_warm_age=20 * 60), notify.HOT
+        )
+        self.assertEqual(
+            notify.tier_for(1800, hot_minutes=0, last_warm_age=0), notify.WARM
+        )
+
+    def test_a_long_absence_is_cold_even_after_a_recent_warm_note(self):
+        self.assertEqual(
+            notify.tier_for(5 * 3600, last_warm_age=60), notify.COLD
+        )
+
+    def test_no_warm_note_yet_is_just_warm(self):
+        self.assertEqual(notify.tier_for(1800, last_warm_age=None), notify.WARM)
+
+
+def meter_snap(
+    provider_id="claude",
+    name="Claude Code",
+    *,
+    percent=42.0,
+    kind="rolling",
+    key="five_hour",
+    status="ok",
+    borrowed=None,
+):
+    return ProviderSnapshot(
+        provider_id=provider_id,
+        display_name=name,
+        icon=provider_id,
+        plan=None,
+        metrics=[Meter(key, "5-hour limit", percent, kind=kind)],
+        primary_key=key,
+        status=status,
+        borrowed_from=borrowed,
+    )
+
+
+class WarmNoteTest(NotifyCase):
+    def recent(self, n=3, *, tokens=50_000, project="alpha", minutes_ago=30):
+        self.seed(
+            [
+                make(
+                    external_id=f"r{i}",
+                    project=project,
+                    started=NOW - timedelta(minutes=minutes_ago + i),
+                    duration_s=300,
+                    tin=tokens,
+                )
+                for i in range(n)
+            ]
+        )
+
+    def test_nothing_recent_and_no_meter_says_nothing(self):
+        self.assertIsNone(notify.warm_note(self.con, [], now=NOW))
+
+    def test_recent_work_with_a_meter_names_both(self):
+        self.recent()
+        message = notify.warm_note(self.con, [meter_snap()], now=NOW)
+        assert message is not None
+        self.assertIn("Last 2h: 3 sessions", message.body)
+        self.assertIn("mostly alpha", message.body)
+        self.assertIn("Claude Code 5-hour limit is at 42%", message.body)
+
+    def test_recent_work_alone_is_enough(self):
+        self.recent()
+        message = notify.warm_note(self.con, [], now=NOW)
+        assert message is not None
+        self.assertNotIn("is at", message.body)
+
+    def test_a_meter_alone_is_enough_and_says_there_was_no_work(self):
+        message = notify.warm_note(self.con, [meter_snap()], now=NOW)
+        assert message is not None
+        self.assertIn("No sessions in the last 2h.", message.body)
+        self.assertIn("is at 42%", message.body)
+
+    def test_work_older_than_the_window_is_not_counted(self):
+        self.recent(minutes_ago=200)
+        message = notify.warm_note(self.con, [meter_snap()], now=NOW)
+        assert message is not None
+        self.assertIn("No sessions in the last 2h.", message.body)
+
+    def test_it_is_a_warm_template_note_about_now(self):
+        self.recent()
+        message = notify.warm_note(self.con, [meter_snap()], now=NOW)
+        assert message is not None
+        self.assertEqual(message.kind, notify.INFORMATIVE)
+        self.assertEqual(message.meta["tier"], notify.WARM)
+        self.assertEqual(message.meta["source"], notify.SOURCE_TEMPLATE)
+        self.assertEqual(message.meta["asOf"], int(NOW.timestamp()))
+        self.assertEqual(message.meta["tpl"]["id"], "warm")
+        self.assertEqual(message.provider, "claude")
+        params = message.meta["tpl"]["p"]
+        self.assertEqual(params["sessions"], 3)
+        self.assertEqual(params["meter"]["pct"], 42)
+        self.assertEqual(message.key, f"warm:{message.meta['fingerprint']}")
+
+    def test_the_fullest_rolling_meter_wins(self):
+        message = notify.warm_note(
+            self.con,
+            [
+                meter_snap("claude", "Claude Code", percent=30),
+                meter_snap("opencode", "OpenCode", percent=77, key="rolling"),
+            ],
+            now=NOW,
+        )
+        assert message is not None
+        self.assertEqual(message.meta["tpl"]["p"]["meter"]["provider"], "OpenCode")
+
+    def test_only_rolling_meters_count(self):
+        self.assertIsNone(
+            notify.warm_note(
+                self.con, [meter_snap(kind="monthly", percent=99)], now=NOW
+            )
+        )
+
+    def test_a_broken_or_borrowed_provider_is_ignored(self):
+        self.assertIsNone(
+            notify.warm_note(
+                self.con,
+                [
+                    meter_snap(status="error", percent=95),
+                    meter_snap("pi", "Pi", percent=90, borrowed="claude"),
+                ],
+                now=NOW,
+            )
+        )
+
+    def test_the_tokens_are_not_invented(self):
+        self.recent(n=2, tokens=60_000)
+        message = notify.warm_note(self.con, [], now=NOW)
+        assert message is not None
+        total = ledger.rolling_totals(
+            self.con, since=int((NOW - timedelta(hours=2)).timestamp()),
+            until=int(NOW.timestamp()),
+        )["tokens"]
+        self.assertEqual(message.meta["tpl"]["p"]["tokens"], total)
+        self.assertIn(ledger.format_tokens(total), message.body)
+
+    # -- the fingerprint ------------------------------------------------------
+
+    def fingerprint(self, snaps=None):
+        message = notify.warm_note(self.con, snaps or [], now=NOW)
+        assert message is not None
+        return message.meta["fingerprint"]
+
+    def test_the_same_picture_has_the_same_fingerprint(self):
+        self.recent()
+        self.assertEqual(
+            self.fingerprint([meter_snap()]), self.fingerprint([meter_snap()])
+        )
+
+    def test_a_new_session_is_news(self):
+        self.recent(tokens=50_000)
+        before = self.fingerprint([meter_snap()])
+        self.seed(
+            [
+                make(
+                    external_id="fresh", started=NOW - timedelta(minutes=5),
+                    duration_s=60, tin=100,
+                )
+            ]
+        )
+        self.assertNotEqual(before, self.fingerprint([meter_snap()]))
+
+    def test_tokens_inside_one_bucket_do_not_change_it(self):
+        facts = {
+            "sessions": 3, "tokens": 150_100, "project": "a",
+            "meter": {"providerId": "claude", "key": "k", "pct": 40},
+        }
+        same = dict(facts, tokens=159_900)
+        other = dict(facts, tokens=160_000)
+        self.assertEqual(notify.warm_fingerprint(facts), notify.warm_fingerprint(same))
+        self.assertNotEqual(notify.warm_fingerprint(facts), notify.warm_fingerprint(other))
+
+    def test_a_meter_moving_a_point_is_news(self):
+        self.recent()
+        self.assertNotEqual(
+            self.fingerprint([meter_snap(percent=42)]),
+            self.fingerprint([meter_snap(percent=43)]),
+        )
+
+    def test_a_new_leading_project_is_news(self):
+        self.recent(project="alpha")
+        before = self.fingerprint()
+        self.seed(
+            [
+                make(
+                    external_id=f"b{i}", project="beta",
+                    started=NOW - timedelta(minutes=10 + i), tin=900_000,
+                )
+                for i in range(2)
+            ]
+        )
+        self.assertNotEqual(before, self.fingerprint())
+
+    # -- storing and showing --------------------------------------------------
+
+    def store(self, message, at):
+        return ledger.store_message(
+            self.con, kind=message.kind, key=message.key, body=message.body,
+            provider=message.provider, meta=message.meta, at=at,
+        )
+
+    def test_an_unchanged_picture_is_not_stored_twice(self):
+        self.recent()
+        first = notify.warm_note(self.con, [meter_snap()], now=NOW)
+        again = notify.warm_note(self.con, [meter_snap()], now=NOW + timedelta(minutes=20))
+        assert first and again
+        self.assertEqual(first.key, again.key)
+        kept = notify.keep(self.con, [first], cooldown_seconds=6 * 3600)
+        self.assertEqual(len(kept), 1)
+        kept_again = notify.keep(self.con, [again], cooldown_seconds=6 * 3600)
+        self.assertEqual(kept_again, [])
+
+    def test_a_warm_note_is_the_billboard_and_is_gone_after_two_hours(self):
+        self.recent()
+        message = notify.warm_note(self.con, [meter_snap()], now=NOW)
+        assert message is not None
+        self.store(message, NOW)
+        rows = ledger.pending_messages(self.con)
+        shown = notify.choose_billboard(rows, now=NOW + timedelta(minutes=30))
+        assert shown is not None
+        self.assertEqual(shown["tier"], notify.WARM)
+        self.assertEqual(shown["template"]["id"], "warm")
+        self.assertIsNone(notify.choose_billboard(rows, now=NOW + timedelta(hours=3)))
+
+    def test_a_newer_warm_note_outranks_an_unread_insight(self):
+        self.recent()
+        old = ledger.store_message(
+            self.con, kind=notify.INFORMATIVE, key="insight:cache:2026-10-05",
+            body="old insight", meta={"tier": notify.COLD, "asOf": int(NOW.timestamp()) - 600},
+            at=NOW - timedelta(minutes=10),
+        )
+        message = notify.warm_note(self.con, [meter_snap()], now=NOW)
+        assert message is not None
+        self.store(message, NOW)
+        shown = notify.choose_billboard(ledger.pending_messages(self.con), now=NOW)
+        assert shown is not None
+        self.assertNotEqual(shown["id"], old)
+        self.assertEqual(shown["tier"], notify.WARM)
+
+    def test_a_warm_note_does_not_count_as_a_pending_insight(self):
+        self.recent()
+        message = notify.warm_note(self.con, [meter_snap()], now=NOW)
+        assert message is not None
+        self.store(message, NOW)
+        self.assertFalse(
+            notify.has_pending_insight(ledger.pending_messages(self.con), now=NOW)
+        )

@@ -882,6 +882,24 @@ function templateText(template) {
                 });
             return text;
         }
+        case "warm": {
+            let text = p.sessions
+                ? tr("tpl.warm.main", {
+                      n: p.sessions,
+                      hours: p.hours,
+                      tokens: formatTokens(p.tokens),
+                  }) +
+                  (p.project ? tr("tpl.warm.project", { project: p.project }) : "") +
+                  "."
+                : tr("tpl.warm.none", { hours: p.hours });
+            if (p.meter)
+                text += tr("tpl.warm.meter", {
+                    provider: p.meter.provider,
+                    label: metricLabel(p.meter.label),
+                    pct: p.meter.pct,
+                });
+            return text;
+        }
         case "insight.cache":
             return tr(p.high ? "tpl.insight.cache.high" : "tpl.insight.cache.low", {
                 pct: p.pct,
@@ -1866,6 +1884,11 @@ const Indicator = GObject.registerClass(
             screen.add_child(
                 this._screenHeader({ kicker: tr("brand"), meta: this._clock(), title, sub }),
             );
+            // The daemon is reading the last few hours behind this screen. Shown
+            // only while it works (and for a few seconds at most), then a new
+            // note may arrive; an unchanged picture simply makes the line vanish.
+            if (this._state?.live?.catchingUp)
+                screen.add_child(label(tr("live.catchingUp"), "ai-usage-sessions-empty"));
             if (!tools.length) {
                 const text = this._state
                     ? tr("empty.noProviders")
