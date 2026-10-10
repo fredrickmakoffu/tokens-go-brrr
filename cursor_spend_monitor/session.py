@@ -7,7 +7,7 @@ from .providers.cursor import CursorProvider
 
 
 def run_setup() -> int:
-    print("AI usage — setup")
+    print("tokens-go-brrr — setup")
     print()
     print("Providers use local app logins. No browser cookies.")
     print()

@@ -1,4 +1,4 @@
-# AI usage — GNOME Shell extension
+# tokens-go-brrr — GNOME Shell extension
 
 UUID: `ai-usage@fredrickmakoffu.github.io`
 
