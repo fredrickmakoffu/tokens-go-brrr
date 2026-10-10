@@ -338,6 +338,7 @@ class DaemonBillboardTest(unittest.TestCase):
         stub.ledger.connection = self.con
         stub._billboard = None
         stub._latest_message = None
+        stub._recent_messages = []
         stub._publish = mock.Mock()
         for name in (
             "_billboard_ids",
@@ -446,6 +447,7 @@ class DaemonBillboardTest(unittest.TestCase):
             last_error=None,
             _billboard=None,
             _latest_message=None,
+            _recent_messages=[],
         )
         payload = UsageDaemon.state_payload(stub)
         self.assertIn("billboard", payload)

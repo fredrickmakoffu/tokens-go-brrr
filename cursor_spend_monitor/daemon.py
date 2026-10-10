@@ -74,6 +74,7 @@ class UsageDaemon:
         self._last_slot: dict[str, str] = {}
         self._billboard: dict[str, Any] | None = None
         self._latest_message: dict[str, Any] | None = None
+        self._recent_messages: list[dict[str, Any]] = []
         self.snapshots: list[ProviderSnapshot] = []
         self.last_error: str | None = None
         self.last_fetch: datetime | None = None
@@ -640,6 +641,7 @@ class UsageDaemon:
         if not self.config.billboard_enabled:
             self._billboard = None
             self._latest_message = None
+            self._recent_messages = []
             return
 
         pending = ledger.pending_messages(con)
@@ -660,6 +662,10 @@ class UsageDaemon:
         self._latest_message = (
             notify_engine.billboard_payload(latest) if latest else None
         )
+        self._recent_messages = [
+            notify_engine.billboard_payload(row)
+            for row in ledger.recent_messages(con)
+        ]
 
     def _attach_forecasts(self) -> None:
         """Give each meter a time-to-exhaustion from its recorded samples.
@@ -726,6 +732,7 @@ class UsageDaemon:
         payload["latestMessage"] = (
             dict(self._latest_message) if self._latest_message else None
         )
+        payload["recentMessages"] = [dict(m) for m in self._recent_messages]
         return payload
 
     def _publish(self) -> None:
