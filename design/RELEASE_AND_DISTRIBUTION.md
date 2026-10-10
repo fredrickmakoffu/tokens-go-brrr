@@ -70,11 +70,17 @@ stable. The code needs Python >= 3.11, so Ubuntu 22.04 (3.10) is not supported.
 
 ## Release pipeline
 
-`release.yml`, on a `v*` tag:
+`release.yml`, on a `v*` tag, or run by hand from the Actions tab (**Release >
+Run workflow**, on `main`) when there is no terminal to push a tag from:
 
 1. Check the tag equals the code version and the commit is on `main`.
 2. Run the tests, build rpm + deb, write `SHA256SUMS` and `manifest.json`.
 3. Create a **draft** GitHub release with those files.
+
+A manual run takes the version from the code, refuses any branch but `main`, and
+creates the `v<version>` tag itself only after the build and tests have passed,
+so a broken build leaves no tag. Re-running is safe: a tag already on that commit
+is reused, and one on another commit stops the release.
 
 Audit step: download the draft's artifacts, install in a VM, run
 `design/QA_CHECKLIST.md`, then press **Publish**. Windows and macOS jobs slot into
