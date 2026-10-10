@@ -63,12 +63,12 @@ function Readout({ b }) {
   );
 }
 
-function DirB({ b }) {
+function DirB({ b, dark }) {
   const [drop, setDrop] = React.useState(false);
   return (
-    <div data-theme="dark" data-status="signal" style={{ background: "var(--color-bg)", color: "var(--color-text)", minHeight: "100vh" }}>
+    <div data-status="signal" style={{ background: "var(--color-bg)", color: "var(--color-text)", minHeight: "100vh" }}>
       <TopBar b={b} open={drop} onToggle={() => setDrop((d) => !d)} />
-      {drop && <div style={{ position: "fixed", top: 40, right: 16, zIndex: 60 }}><PagePopover b={b} dark /></div>}
+      {drop && <div style={{ position: "fixed", top: 40, right: 16, zIndex: 60 }}><PagePopover b={b} dark={dark} /></div>}
       <Rail b={b} />
       <div aria-hidden="true" style={{ position: "fixed", right: "-1vw", bottom: "-7vw", zIndex: 0, pointerEvents: "none", ...HEAD, fontSize: "40vw", lineHeight: 0.8, fontVariantNumeric: "tabular-nums", color: "transparent", WebkitTextStroke: "1px color-mix(in srgb, " + stColor(b.status) + " 50%, transparent)", transition: "-webkit-text-stroke-color 300ms" }}>{b.pct}</div>
       <div style={{ marginLeft: 76, position: "relative", zIndex: 1 }}>
@@ -81,7 +81,7 @@ function DirB({ b }) {
             <HeroButtons />
             <p style={{ margin: 0, fontSize: 14, color: "var(--muted)", maxWidth: 600 }}>{t("hero.rail")}</p>
           </section>
-          <Sections b={b} dark />
+          <Sections b={b} dark={dark} />
         </div>
       </div>
     </div>
