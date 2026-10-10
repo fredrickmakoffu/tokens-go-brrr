@@ -30,10 +30,14 @@ from __future__ import annotations
 import http.client
 import json
 import os
+import sys
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from . import llm_log
 from .notify_engine import Message, provider_label
 
 # Endpoints, one per generator we can actually authenticate to. Hosts are
@@ -427,14 +431,27 @@ def _text_of_openai(payload: dict[str, Any]) -> str:
     return str(message.get("content") or "")
 
 
-def generate(
-    generator: Generator,
-    prompt: str,
-    *,
-    max_tokens: int = 200,
-    timeout: int = 30,
-) -> str:
-    """Ask the chosen provider for the wording. Raises `LlmError` on refusal."""
+def _usage_of(payload: dict[str, Any], provider_id: str) -> dict[str, int]:
+    """Token counts from a provider's usage block, or an empty dict."""
+    usage = payload.get("usage")
+    if not isinstance(usage, dict):
+        return {}
+    if provider_id == "claude":
+        tin, tout = usage.get("input_tokens"), usage.get("output_tokens")
+    else:
+        tin, tout = usage.get("prompt_tokens"), usage.get("completion_tokens")
+    found: dict[str, int] = {}
+    if tin is not None:
+        found["tokens_in"] = _as_int(tin)
+    if tout is not None:
+        found["tokens_out"] = _as_int(tout)
+    return found
+
+
+def _complete(
+    generator: Generator, prompt: str, *, max_tokens: int, timeout: int
+) -> tuple[str, dict[str, int]]:
+    """One request, returning the reply text and the provider's token counts."""
     endpoint = ENDPOINTS.get(generator.provider_id)
     if endpoint is None:
         raise LlmError(f"{generator.provider_id} is not a generator")
@@ -458,7 +475,7 @@ def generate(
             },
             timeout=timeout,
         )
-        return _text_of_anthropic(response)
+        return _text_of_anthropic(response), _usage_of(response, "claude")
 
     response = _post_json(
         host,
@@ -467,7 +484,60 @@ def generate(
         {"authorization": f"Bearer {_opencode_key()}"},
         timeout=timeout,
     )
-    return _text_of_openai(response)
+    return _text_of_openai(response), _usage_of(response, generator.provider_id)
+
+
+def _outcome_of(exc: LlmError) -> str:
+    if isinstance(exc, LlmRateLimited):
+        return llm_log.RATE_LIMITED
+    return llm_log.TIMEOUT if "timed out" in str(exc) else llm_log.ERROR
+
+
+def generate(
+    generator: Generator,
+    prompt: str,
+    *,
+    max_tokens: int = 200,
+    timeout: int = 30,
+    recorder: Callable[[dict[str, Any]], None] | None = None,
+    context: dict[str, Any] | None = None,
+) -> str:
+    """Ask the chosen provider for the wording. Raises `LlmError` on refusal.
+
+    `recorder`, when given, is handed one entry per call -- successful or not --
+    for the LLM log. It is best-effort: a recorder that raises must not turn a
+    good reply into a failure, so its errors stop here. `context` is merged in
+    (why the call ran, which message it was for).
+    """
+    started = time.monotonic()
+
+    def record(outcome: str, **extra: Any) -> None:
+        if recorder is None:
+            return
+        try:
+            recorder(
+                {
+                    **(context or {}),
+                    "provider": generator.provider_id,
+                    "model": generator.model,
+                    "outcome": outcome,
+                    "latency_ms": int((time.monotonic() - started) * 1000),
+                    "prompt": prompt,
+                    **extra,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001 -- see the docstring
+            print(f"LLM log recorder failed: {exc}", file=sys.stderr, flush=True)
+
+    try:
+        text, usage = _complete(
+            generator, prompt, max_tokens=max_tokens, timeout=timeout
+        )
+    except LlmError as exc:
+        record(_outcome_of(exc), error=f"{type(exc).__name__}: {exc}")
+        raise
+    record(llm_log.OK, reply=text, **usage)
+    return text
 
 
 def rewrite(
@@ -477,6 +547,8 @@ def rewrite(
     facts: dict[str, Any],
     max_tokens: int = 200,
     timeout: int = 30,
+    recorder: Callable[[dict[str, Any]], None] | None = None,
+    context: dict[str, Any] | None = None,
 ) -> Message | None:
     """The message in the model's words, or None to keep the template.
 
@@ -490,6 +562,12 @@ def rewrite(
             build_prompt(message, facts),
             max_tokens=max_tokens,
             timeout=timeout,
+            recorder=recorder,
+            context={
+                "message_kind": message.kind,
+                "message_key": message.key,
+                **(context or {}),
+            },
         )
     except LlmError:
         return None

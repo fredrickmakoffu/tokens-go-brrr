@@ -1,6 +1,7 @@
 # Live notes and the LLM call log — design
 
-**Status:** proposed — nothing here is built yet.
+**Status:** in progress — step 1 (rolling windows, provenance, tier expiry) and
+step 2 (the LLM call log) are built; steps 3–5 are not.
 **Date:** 2026-10-10
 **Builds on:** `USAGE_ANALYTICS_AND_GUIDANCE.md` (ledger + notification engine) and
 `BILLBOARD_LANDING_PAGE.md` (the landing page).
@@ -162,7 +163,7 @@ One entry per call:
 | `tokens_in`, `tokens_out` | From the provider's usage block when present |
 | `prompt` | The prompt text sent (it is built only from ledger figures and meter values — no file contents, paths or credentials) |
 | `reply` | The text returned |
-| `message_id` | The stored note this call produced, if any |
+| `message_kind`, `message_key` | The note this call was for. The note has no row id yet when the call is made, so the `(kind, key)` pair that identifies it is logged instead |
 | `error` | Error class and a short message, never a token or header |
 
 The prompt is logged in full because the point is transparency. It is already
@@ -178,7 +179,7 @@ never logged.
   no migrations and is trivially greppable.
 - Every line leads with its `ts`, and lookups are by timestamp: the Settings
   viewer opens a day and scrolls its entries in order, and a note can link to
-  the exact call (`message_id` ↔ `ts`).
+  the exact call (`message_kind`/`message_key` ↔ `ts`).
 - Files are append-only and written under the daemon's existing lock, one
   writer. A crash loses at most the line being written.
 - **Retention:** `llm_log_days` (default 30), pruned alongside
@@ -188,7 +189,9 @@ never logged.
 
 ### 5.4 Settings screen
 
-A new **"LLM activity"** entry under Settings:
+A new **"LLM activity"** entry. The panel's "Settings" button opens the config
+file outside the popover, so the entry lives on the **About** screen, which is
+the in-panel settings-like page:
 
 - Opens to **today**, newest first, with prev/next day and a day picker limited
   to days that have a file.
@@ -199,9 +202,10 @@ A new **"LLM activity"** entry under Settings:
 - Strings go through the existing catalogs (`locales.js`, en / fr / pt-BR);
   `tests/test_locales.py` keeps them in step.
 
-The daemon exposes the log over D-Bus as read-only methods
-(`LlmLogDays() → [date]`, `LlmLog(date) → entries`), so the extension never
-reads files itself.
+The daemon exposes the log over D-Bus (`LlmLog(day) → json` with the day list,
+the day's summary and its entries, and `ClearLlmLog()`), so the extension never
+reads files itself. An older daemon without the methods makes the screen say so
+rather than fail.
 
 ---
 

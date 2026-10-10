@@ -74,6 +74,8 @@ class MonitorConfig:
     llm_generator_model: str = ""
     llm_max_output_tokens: int = 200
     llm_min_headroom: int = 15
+    # Days of the per-call LLM log to keep; 0 turns the log off.
+    llm_log_days: int = 30
     # The landing page: one notification shown as a quote when the popover
     # opens. `billboard_auto_advance_seconds` of 0 means Continue is the only
     # way out; `billboard_freshness_hours` is a ceiling over the per-kind
@@ -135,6 +137,7 @@ class MonitorConfig:
             llm_generator_model=str(data.get("llm_generator_model") or ""),
             llm_max_output_tokens=_as_int(data.get("llm_max_output_tokens"), 200),
             llm_min_headroom=_as_int(data.get("llm_min_headroom"), 15),
+            llm_log_days=max(0, _as_int(data.get("llm_log_days"), 30)),
             billboard_enabled=bool(
                 data.get("billboard_enabled", data.get("quote_panel", True))
             ),
@@ -170,6 +173,7 @@ class MonitorConfig:
             "llm_generator_model": self.llm_generator_model,
             "llm_max_output_tokens": self.llm_max_output_tokens,
             "llm_min_headroom": self.llm_min_headroom,
+            "llm_log_days": self.llm_log_days,
             "billboard_enabled": self.billboard_enabled,
             "billboard_auto_advance_seconds": self.billboard_auto_advance_seconds,
             "billboard_freshness_hours": self.billboard_freshness_hours,
