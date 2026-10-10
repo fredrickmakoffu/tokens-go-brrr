@@ -22,9 +22,8 @@
     "page.title": "Tokens go brrr — see which AI coding limit runs out first",
     "page.description": "See which of your AI coding limits runs out first, from your GNOME top bar. Works with Cursor, Claude Code, OpenCode, Pi and Codex. Download for Fedora and Debian/Ubuntu.",
     "lang.label": "Language",
-    "theme.auto": "Theme: auto",
-    "theme.light": "Theme: light",
-    "theme.dark": "Theme: dark",
+    "theme.toLight": "Switch to light theme",
+    "theme.toDark": "Switch to dark theme",
 
     // hero
     "hero.kicker": "For GNOME Shell on Linux",
@@ -297,9 +296,8 @@
     "page.title": "Tokens go brrr — voyez quelle limite d’IA de code tombe en premier",
     "page.description": "Voyez laquelle de vos limites d’IA de code tombe en premier, depuis la barre du haut de GNOME. Fonctionne avec Cursor, Claude Code, OpenCode, Pi et Codex. Téléchargement pour Fedora et Debian/Ubuntu.",
     "lang.label": "Langue",
-    "theme.auto": "Thème : auto",
-    "theme.light": "Thème : clair",
-    "theme.dark": "Thème : sombre",
+    "theme.toLight": "Passer au thème clair",
+    "theme.toDark": "Passer au thème sombre",
 
     "hero.kicker": "Pour GNOME Shell sous Linux",
     "hero.sub": "Voyez quelle limite d’IA de code tombe en premier, depuis la barre du haut. Fonctionne avec Cursor, Claude Code, OpenCode, Pi et Codex.",
@@ -559,9 +557,8 @@
     "page.title": "Tokens go brrr — veja qual limite de IA de código acaba primeiro",
     "page.description": "Veja qual dos seus limites de IA de código acaba primeiro, direto na barra superior do GNOME. Funciona com Cursor, Claude Code, OpenCode, Pi e Codex. Baixe para Fedora e Debian/Ubuntu.",
     "lang.label": "Idioma",
-    "theme.auto": "Tema: automático",
-    "theme.light": "Tema: claro",
-    "theme.dark": "Tema: escuro",
+    "theme.toLight": "Mudar para o tema claro",
+    "theme.toDark": "Mudar para o tema escuro",
 
     "hero.kicker": "Para GNOME Shell no Linux",
     "hero.sub": "Veja qual dos seus limites de IA de código acaba primeiro, direto na barra superior. Funciona com Cursor, Claude Code, OpenCode, Pi e Codex.",

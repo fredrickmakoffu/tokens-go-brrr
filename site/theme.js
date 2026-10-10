@@ -3,7 +3,8 @@
  * Loaded in <head>, before first paint, so data-theme is already on <html>
  * when the page draws and a dark-system visitor never sees a light flash.
  * ?theme=light|dark wins for that load only (handy for screenshots); a click on
- * the toggle saves the choice. Tokens in styles.css key off [data-theme].
+ * the toggle flips light/dark and saves the choice (before that, no choice is
+ * stored and the page tracks the system). Tokens in styles.css key off [data-theme].
  */
 (function () {
   var KEY = "tgb-theme";
@@ -44,7 +45,9 @@
   window.THEME = {
     mode: function () { return mode; },
     resolved: resolved,
-    cycle: function () { setMode(MODES[(MODES.indexOf(mode) + 1) % MODES.length]); },
+    // Two states only. Until the first click the theme is the system's; a click
+    // flips whatever is showing and from then on the choice is saved.
+    toggle: function () { setMode(resolved() === "dark" ? "light" : "dark"); },
     subscribe: function (fn) { listeners.push(fn); return function () { listeners = listeners.filter(function (f) { return f !== fn; }); }; },
   };
   apply();
