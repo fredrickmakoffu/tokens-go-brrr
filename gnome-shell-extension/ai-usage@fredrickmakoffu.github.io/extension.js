@@ -40,6 +40,11 @@ const IFACE_XML = `
     <method name="Acknowledge">
       <arg type="u" direction="in" name="id"/>
     </method>
+    <method name="LlmLog">
+      <arg type="s" direction="in" name="day"/>
+      <arg type="s" direction="out" name="json"/>
+    </method>
+    <method name="ClearLlmLog"/>
     <method name="Quit"/>
     <signal name="StateChanged"><arg type="s" name="json"/></signal>
   </interface>
@@ -877,6 +882,60 @@ function templateText(template) {
                 });
             return text;
         }
+        case "warm": {
+            const work = p.sessions
+                ? tr("tpl.warm.main", {
+                      n: p.sessions,
+                      hours: p.hours,
+                      tokens: formatTokens(p.tokens),
+                  }) +
+                  (p.project ? tr("tpl.warm.project", { project: p.project }) : "") +
+                  "."
+                : tr("tpl.warm.none", { hours: p.hours });
+            // Usage the meters saw and this machine did not: said first, because
+            // it is the part a person could not have known.
+            const away = p.elsewhere
+                ? tr("tpl.warm.elsewhere", {
+                      points: p.elsewhere.points,
+                      provider: p.elsewhere.provider,
+                      label: metricLabel(p.elsewhere.label),
+                      time: GLib.DateTime.new_from_unix_local(p.elsewhere.since).format(
+                          "%H:%M",
+                      ),
+                  })
+                : "";
+            let text = [away, work].filter(Boolean).join(" ");
+            if (p.meter)
+                text += tr("tpl.warm.meter", {
+                    provider: p.meter.provider,
+                    label: metricLabel(p.meter.label),
+                    pct: p.meter.pct,
+                });
+            return text;
+        }
+        case "insight.cache":
+            return tr(p.high ? "tpl.insight.cache.high" : "tpl.insight.cache.low", {
+                pct: p.pct,
+                days: p.days,
+            });
+        case "insight.week":
+            return tr(`tpl.insight.week.${["up", "down"].includes(p.dir) ? p.dir : "flat"}`, {
+                pct: p.pct,
+                limit: p.limit,
+            });
+        case "insight.peak":
+            return tr("tpl.insight.peak", {
+                hour: `${String(p.hour).padStart(2, "0")}:00`,
+                day: tr(`tpl.insight.day.${p.weekday}`),
+            });
+        case "insight.focus":
+            return tr("tpl.insight.focus", {
+                project: p.project,
+                pct: p.pct,
+                days: p.days,
+            });
+        case "insight.rhythm":
+            return tr("tpl.insight.rhythm", { pct: p.pct });
         case "fun.cache":
             return tr("tpl.fun.cache", { pct: p.pct, tokens: formatTokens(p.tokens) });
         case "fun.streak":
@@ -975,6 +1034,8 @@ const Indicator = GObject.registerClass(
             this._screen = "list";
             this._toolId = null;
             this._sessionsFilter = "active"; // 'active' | 'paused' on the sessions screen
+            this._llmLog = null; // the daemon's LLM log payload for the day on screen
+            this._llmOpen = new Set(); // entries expanded on the LLM activity screen
             this._lastSwapped = null;
             this._firstRender = true;
             this._probedMatch = null; // {toolId, project, title} from async pid probe
@@ -1412,6 +1473,7 @@ const Indicator = GObject.registerClass(
             else if (this._screen === "earlier") this._renderEarlier(screen);
             else if (this._screen === "guide") this._renderGuide(screen);
             else if (this._screen === "about") this._renderAbout(screen);
+            else if (this._screen === "llmlog") this._renderLlmLog(screen);
             else this._renderList(screen);
             this.menu.box.add_child(screen);
 
@@ -1835,6 +1897,11 @@ const Indicator = GObject.registerClass(
             screen.add_child(
                 this._screenHeader({ kicker: tr("brand"), meta: this._clock(), title, sub }),
             );
+            // The daemon is reading the last few hours behind this screen. Shown
+            // only while it works (and for a few seconds at most), then a new
+            // note may arrive; an unchanged picture simply makes the line vanish.
+            if (this._state?.live?.catchingUp)
+                screen.add_child(label(tr("live.catchingUp"), "ai-usage-sessions-empty"));
             if (!tools.length) {
                 const text = this._state
                     ? tr("empty.noProviders")
@@ -2124,6 +2191,11 @@ const Indicator = GObject.registerClass(
                 ),
             );
             screen.add_child(section);
+            screen.add_child(
+                this._listRow(tr("llm.kicker"), tr("llm.title"), tr("llm.sub"), () =>
+                    this._openLlmLog(),
+                ),
+            );
             const refresh = new St.Button({
                 style_class: "ai-usage-secondary-btn ai-usage-about-refresh",
                 label: tr("ui.refresh"),
@@ -2132,6 +2204,180 @@ const Indicator = GObject.registerClass(
             });
             refresh.connect("clicked", () => this._ext.refresh());
             screen.add_child(refresh);
+        }
+
+        // -- the LLM activity log ----------------------------------------------
+
+        _openLlmLog() {
+            this._llmLog = null;
+            this._llmOpen = new Set();
+            this._loadLlmLog("");
+            this._navigate("llmlog");
+        }
+
+        _loadLlmLog(day) {
+            this._ext.fetchLlmLog(day, (data) => {
+                this._llmLog = data ?? { unavailable: true };
+                this._llmOpen = new Set();
+                if (this._screen === "llmlog" && this.menu.isOpen)
+                    this._render(false);
+            });
+        }
+
+        _renderLlmLog(screen) {
+            const data = this._llmLog;
+            screen.add_child(
+                this._screenHeader({
+                    kicker: tr("llm.kicker"),
+                    title: tr("llm.title"),
+                    sub: tr("llm.sub"),
+                    back: () => this._navigate("about"),
+                }),
+            );
+            const note = (text) => {
+                const box = this._section();
+                box.add_child(label(text, "ai-usage-sessions-empty"));
+                screen.add_child(box);
+            };
+            if (!data) {
+                note(tr("llm.loading"));
+                return;
+            }
+            if (data.unavailable) {
+                note(tr("llm.unavailable"));
+                return;
+            }
+            if (!data.enabled) {
+                note(tr("llm.off"));
+                return;
+            }
+            if (!data.days?.length) {
+                note(tr("llm.emptyAll"));
+                screen.add_child(this._llmFooter(data));
+                return;
+            }
+
+            // Newest day first in `days`, so "earlier" is the next index.
+            const at = data.days.indexOf(data.day);
+            const earlier = data.days[at + 1];
+            const later = at > 0 ? data.days[at - 1] : undefined;
+            const nav = new St.BoxLayout({
+                style_class: "ai-usage-sessions-filters",
+                x_expand: true,
+            });
+            const step = (text, day) => {
+                const btn = new St.Button({
+                    style_class: "ai-usage-filter-chip",
+                    label: text,
+                    can_focus: day !== undefined,
+                    reactive: day !== undefined,
+                    opacity: day !== undefined ? 255 : 90,
+                    accessible_name: text,
+                    y_align: Clutter.ActorAlign.CENTER,
+                });
+                if (day !== undefined)
+                    btn.connect("clicked", () => this._loadLlmLog(day));
+                return btn;
+            };
+            nav.add_child(step("‹", earlier));
+            nav.add_child(
+                label(data.day, "ai-usage-kicker", {
+                    x_expand: true,
+                    x_align: Clutter.ActorAlign.CENTER,
+                    y_align: Clutter.ActorAlign.CENTER,
+                }),
+            );
+            nav.add_child(step("›", later));
+            screen.add_child(nav);
+
+            const summary = data.summary ?? {};
+            screen.add_child(
+                wrappedLabel(
+                    tr("llm.summary", {
+                        calls: summary.calls ?? 0,
+                        failed: summary.failures ?? 0,
+                        tin: formatTokens(summary.tokens_in ?? 0),
+                        tout: formatTokens(summary.tokens_out ?? 0),
+                    }),
+                    "ai-usage-hdr-sub",
+                ),
+            );
+
+            const list = this._section();
+            const entries = [...(data.entries ?? [])].reverse();
+            if (!entries.length) {
+                list.add_child(label(tr("llm.empty"), "ai-usage-sessions-empty"));
+            }
+            entries.forEach((entry, i) => list.add_child(this._llmRow(entry, i)));
+            screen.add_child(list);
+            screen.add_child(this._llmFooter(data));
+        }
+
+        _llmRow(entry, index) {
+            const open = this._llmOpen.has(index);
+            const outcome = String(entry.outcome ?? "");
+            const time = String(entry.ts ?? "").slice(11, 19);
+            const who = [entry.provider, entry.model].filter(Boolean).join(" · ");
+            const bits = [tr(`llm.outcome.${outcome}`)];
+            if (outcome === "skipped" && entry.reason)
+                bits.push(tr("llm.skipped", { reason: entry.reason }));
+            if (entry.latency_ms !== undefined)
+                bits.push(`${entry.latency_ms} ms`);
+            if (entry.tokens_in !== undefined || entry.tokens_out !== undefined)
+                bits.push(
+                    `${formatTokens(entry.tokens_in ?? 0)} → ${formatTokens(entry.tokens_out ?? 0)}`,
+                );
+
+            const row = new St.Button({
+                style_class: "ai-usage-list-row",
+                can_focus: true,
+                x_expand: true,
+            });
+            const box = new St.BoxLayout({
+                orientation: Clutter.Orientation.VERTICAL,
+                x_expand: true,
+            });
+            box.add_child(
+                label(
+                    [time, entry.trigger].filter(Boolean).join(" · ").toUpperCase(),
+                    "ai-usage-kicker",
+                ),
+            );
+            box.add_child(wrappedLabel(who || "—", "ai-usage-list-title"));
+            box.add_child(wrappedLabel(bits.join(" · "), "ai-usage-sub"));
+            if (open) {
+                const detail = (title, text) => {
+                    if (!text) return;
+                    box.add_child(
+                        label(title.toUpperCase(), "ai-usage-section-label"),
+                    );
+                    box.add_child(wrappedLabel(String(text), "ai-usage-guide-desc"));
+                };
+                detail(tr("llm.prompt"), entry.prompt);
+                detail(tr("llm.reply"), entry.reply);
+                detail(tr("llm.error"), entry.error);
+            }
+            row.set_child(box);
+            row.connect("clicked", () => {
+                if (this._llmOpen.has(index)) this._llmOpen.delete(index);
+                else this._llmOpen.add(index);
+                this._render(false);
+            });
+            return row;
+        }
+
+        _llmFooter(data) {
+            return this._footer(
+                tr("llm.where", { dir: data.directory ?? "" }),
+                [
+                    {
+                        label: tr("llm.clear"),
+                        cb: () =>
+                            this._ext.clearLlmLog(() => this._loadLlmLog("")),
+                    },
+                ],
+                false,
+            );
         }
 
         // -- the landing page and the insights behind it -----------------------
@@ -2454,6 +2700,52 @@ export default class AiUsageExtension extends Extension {
     setPrimary(providerId, metricKey) {
         if (this._proxy?.g_name_owner)
             this._proxy.SetPrimaryRemote(providerId, metricKey, () => {});
+    }
+
+    // The LLM log is read through the daemon, never from its files. Defensive
+    // for the same reason as acknowledge(): an older daemon has no such method,
+    // and the screen should say so instead of breaking.
+    fetchLlmLog(day, callback) {
+        if (
+            !this._proxy?.g_name_owner ||
+            typeof this._proxy.LlmLogRemote !== "function"
+        ) {
+            callback(null);
+            return;
+        }
+        try {
+            this._proxy.LlmLogRemote(day, (result, error) => {
+                if (error) {
+                    callback(null);
+                    return;
+                }
+                try {
+                    callback(JSON.parse(result[0]));
+                } catch (e) {
+                    console.error(`[ai-usage] bad LLM log payload: ${e.message}`);
+                    callback(null);
+                }
+            });
+        } catch (e) {
+            console.error(`[ai-usage] LLM log failed: ${e.message}`);
+            callback(null);
+        }
+    }
+
+    clearLlmLog(callback) {
+        if (
+            !this._proxy?.g_name_owner ||
+            typeof this._proxy.ClearLlmLogRemote !== "function"
+        ) {
+            callback();
+            return;
+        }
+        try {
+            this._proxy.ClearLlmLogRemote(() => callback());
+        } catch (e) {
+            console.error(`[ai-usage] clearing the LLM log failed: ${e.message}`);
+            callback();
+        }
     }
 
     acknowledge(messageId) {

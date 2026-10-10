@@ -382,6 +382,33 @@ class RewriteTest(unittest.TestCase):
         assert rewritten is not None
         self.assertEqual(rewritten.share, "SHARE: 1.9M tokens.")
 
+    def test_a_reworded_message_is_marked_as_the_models(self):
+        rewritten = self.rewrite("Body.\nFEATURED: opencode")
+        assert rewritten is not None
+        self.assertEqual(rewritten.meta["source"], "llm")
+
+    def test_a_reworded_warm_note_is_shown_as_written_not_re_rendered(self):
+        from cursor_spend_monitor import notify_engine as ne
+
+        warm = Message(
+            kind=INFORMATIVE,
+            key="warm:abc",
+            body="Last 2h: 3 sessions.",
+            meta={"tier": "warm", "asOf": 1, "tpl": {"id": "warm", "p": {"hours": 2}}},
+        )
+        with mock.patch.object(llm, "generate", return_value="Model words."):
+            rewritten = llm.rewrite(warm, generator=self.generator(), facts=FACTS)
+        assert rewritten is not None
+        payload = ne.billboard_payload(
+            {
+                "id": 1, "kind": rewritten.kind, "created_at": 1,
+                "body": rewritten.body, "meta": __import__("json").dumps(rewritten.meta),
+            }
+        )
+        self.assertIsNone(payload["template"])
+        self.assertEqual(payload["source"], "llm")
+        self.assertEqual(payload["tier"], "warm")
+
     def test_an_empty_reply_keeps_the_template(self):
         self.assertIsNone(self.rewrite("   "))
 
@@ -463,7 +490,10 @@ class DaemonComposeTest(unittest.TestCase):
         stub = mock.Mock()
         stub.config = MonitorConfig(**values)
         stub.snapshots = []
+        stub._llm_backoff = {}
         stub._facts_for = _types.MethodType(UsageDaemon._facts_for, stub)
+        stub._log_skipped = _types.MethodType(UsageDaemon._log_skipped, stub)
+        stub._record_llm = _types.MethodType(UsageDaemon._record_llm, stub)
         return stub
 
     def message(self) -> Message:
@@ -506,6 +536,39 @@ class DaemonComposeTest(unittest.TestCase):
         ):
             result = self.compose(stub)
         self.assertEqual(result[0].body, "template body")
+
+    def test_a_skipped_rewrite_is_logged_with_its_origin(self):
+        stub = self.daemon(llm_notifications=True)
+        from cursor_spend_monitor.daemon import UsageDaemon
+
+        with mock.patch.object(llm, "choose", return_value=None):
+            UsageDaemon._compose(
+                stub, self.con, [self.message()], origin="scheduled:weekly"
+            )
+        (entry,) = [c.args[0] for c in stub.llm_log.record.call_args_list]
+        self.assertEqual(entry["outcome"], "skipped")
+        self.assertEqual(entry["reason"], "no_generator")
+        self.assertEqual(entry["trigger"], "scheduled:weekly")
+        self.assertEqual(entry["message_key"], "weekly:1")
+
+    def test_a_rewrite_is_given_the_log_and_its_origin(self):
+        stub = self.daemon(llm_notifications=True)
+        from cursor_spend_monitor.daemon import UsageDaemon
+
+        with (
+            mock.patch.object(llm, "choose", return_value=self.generator()),
+            mock.patch.object(llm, "rewrite", return_value=None) as rewrite,
+        ):
+            UsageDaemon._compose(
+                stub, self.con, [self.message()], origin="event:meter"
+            )
+        self.assertIs(rewrite.call_args.kwargs["recorder"], stub._record_llm)
+        self.assertEqual(rewrite.call_args.kwargs["context"], {"trigger": "event:meter"})
+
+    def test_nothing_is_logged_while_the_feature_is_off(self):
+        stub = self.daemon(llm_notifications=False)
+        self.compose(stub)
+        stub.llm_log.record.assert_not_called()
 
     def test_the_floor_and_the_pins_come_from_the_config(self):
         stub = self.daemon(
