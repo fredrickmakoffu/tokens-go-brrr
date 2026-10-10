@@ -1017,6 +1017,12 @@ WARM_WINDOW_HOURS = 2
 WARM_TOKEN_BUCKET = 10_000
 WARM_KEY_PREFIX = "warm:"
 
+# "Ran elsewhere": a meter that rose this many points over the window while this
+# machine recorded no session for that provider. The baseline must be at least
+# this old, or two polls a minute apart would read as movement.
+ELSEWHERE_MIN_POINTS = 8
+ELSEWHERE_MIN_AGE_SECONDS = 300
+
 
 def tightest_short_meter(snapshots: list[Any]) -> dict[str, Any] | None:
     """The fullest rolling-window meter among providers that own one.
@@ -1047,11 +1053,77 @@ def tightest_short_meter(snapshots: list[Any]) -> dict[str, Any] | None:
     return best
 
 
+def find_elsewhere(
+    con: sqlite3.Connection,
+    snapshots: list[Any],
+    samples: dict[tuple[str, str], list[tuple[float, float]]],
+    *,
+    now: datetime | None = None,
+    hours: int = WARM_WINDOW_HOURS,
+) -> dict[str, Any] | None:
+    """Usage that moved a meter without leaving a trace on this machine.
+
+    The transcripts only see this machine; the meters see every client. So a
+    rolling meter that climbed while the ledger recorded no session for that
+    provider is usage from somewhere else -- a phone, the web, another computer.
+    `samples` is the history series per (provider, meter), read by the caller
+    because the history store belongs to the main loop's connection.
+
+    Silent unless the claim is safe: the baseline must be a few minutes old, the
+    climb must be real, and no session of that provider may be live now (a
+    session still being written has not reached the ledger yet).
+    """
+    until = _epoch(now)
+    since = until - max(1, _as_int(hours)) * 3600
+    best: dict[str, Any] | None = None
+    for snap in snapshots:
+        if snap.status != "ok" or snap.borrowed_from is not None:
+            continue
+        instances = getattr(snap, "instances", None)
+        if instances is not None and getattr(instances, "active", None):
+            continue
+        for meter in snap.metrics:
+            if meter.kind != "rolling":
+                continue
+            series = [
+                (ts, pct)
+                for ts, pct in samples.get((snap.provider_id, meter.key), [])
+                if ts >= since
+            ]
+            if not series:
+                continue
+            base_ts, base_pct = series[0]
+            if until - base_ts < ELSEWHERE_MIN_AGE_SECONDS:
+                continue
+            points = _as_float(meter.percent) - base_pct
+            if points < ELSEWHERE_MIN_POINTS:
+                continue
+            local = ledger.rolling_period_totals(
+                con, since=int(base_ts), until=until, group_by="provider"
+            )
+            if any(
+                row["provider"] == snap.provider_id and row["sessions"] for row in local
+            ):
+                continue
+            if best is None or points > best["points"]:
+                best = {
+                    "providerId": snap.provider_id,
+                    "provider": snap.display_name,
+                    "label": meter.label,
+                    "points": points,
+                    "since": int(base_ts),
+                }
+    if best is not None:
+        best["points"] = _pct(best["points"])
+    return best
+
+
 def warm_facts(
     con: sqlite3.Connection,
     snapshots: list[Any],
     *,
     hours: int = WARM_WINDOW_HOURS,
+    samples: dict[tuple[str, str], list[tuple[float, float]]] | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """Every figure a warm note may use: the recent window and the live meter."""
@@ -1067,6 +1139,11 @@ def warm_facts(
         "tokens": _as_int(totals["tokens"]),
         "project": top["project"] if top else None,
         "meter": tightest_short_meter(snapshots),
+        "elsewhere": (
+            find_elsewhere(con, snapshots, samples, now=now, hours=hours)
+            if samples
+            else None
+        ),
     }
 
 
@@ -1078,12 +1155,24 @@ def warm_fingerprint(facts: dict[str, Any]) -> str:
         facts["tokens"] // WARM_TOKEN_BUCKET,
         facts["project"],
         [meter["providerId"], meter["key"], meter["pct"]] if meter else None,
+        [facts["elsewhere"]["providerId"], facts["elsewhere"]["points"]]
+        if facts.get("elsewhere")
+        else None,
     )
 
 
 def render_warm(facts: dict[str, Any]) -> str:
     """The warm note's English wording, which is also the fallback text."""
     hours = facts["hours"]
+    parts: list[str] = []
+    away = facts.get("elsewhere")
+    if away:
+        since = datetime.fromtimestamp(away["since"]).strftime("%H:%M")
+        parts.append(
+            f"About {away['points']} points of your {away['provider']} "
+            f"{away['label']} went somewhere other than this machine since "
+            f"{since}: phone or web, probably."
+        )
     if facts["sessions"]:
         body = (
             f"Last {hours}h: {facts['sessions']} sessions, "
@@ -1091,19 +1180,20 @@ def render_warm(facts: dict[str, Any]) -> str:
         )
         if facts["project"]:
             body += f", mostly {facts['project']}"
-        body += "."
+        parts.append(body + ".")
     else:
-        body = f"No sessions in the last {hours}h."
+        parts.append(f"No sessions in the last {hours}h.")
     meter = facts["meter"]
     if meter:
-        body += f" {meter['provider']} {meter['label']} is at {meter['pct']}%."
-    return body
+        parts.append(f"{meter['provider']} {meter['label']} is at {meter['pct']}%.")
+    return " ".join(parts)
 
 
 def warm_note(
     con: sqlite3.Connection,
     snapshots: list[Any],
     *,
+    samples: dict[tuple[str, str], list[tuple[float, float]]] | None = None,
     now: datetime | None = None,
 ) -> Message | None:
     """A note about the last couple of hours, from the freshest figures there are.
@@ -1111,8 +1201,8 @@ def warm_note(
     Template wording only; nothing here reaches a model. None when there is
     neither recent activity nor a meter to speak of.
     """
-    facts = warm_facts(con, snapshots, now=now)
-    if not facts["sessions"] and not facts["meter"]:
+    facts = warm_facts(con, snapshots, samples=samples, now=now)
+    if not facts["sessions"] and not facts["meter"] and not facts["elsewhere"]:
         return None
     fingerprint = warm_fingerprint(facts)
     meter = facts["meter"]
@@ -1120,7 +1210,11 @@ def warm_note(
         kind=INFORMATIVE,
         key=f"{WARM_KEY_PREFIX}{fingerprint}",
         body=render_warm(facts),
-        provider=meter["providerId"] if meter else "",
+        provider=(
+            facts["elsewhere"]["providerId"]
+            if facts["elsewhere"]
+            else (meter["providerId"] if meter else "")
+        ),
         meta={
             "period": "warm",
             "tpl": _tpl(
@@ -1129,6 +1223,16 @@ def warm_note(
                 sessions=facts["sessions"],
                 tokens=facts["tokens"],
                 project=facts["project"],
+                elsewhere=(
+                    {
+                        "provider": facts["elsewhere"]["provider"],
+                        "label": facts["elsewhere"]["label"],
+                        "points": facts["elsewhere"]["points"],
+                        "since": facts["elsewhere"]["since"],
+                    }
+                    if facts["elsewhere"]
+                    else None
+                ),
                 meter=(
                     {
                         "provider": meter["provider"],

@@ -1178,3 +1178,134 @@ class WarmNoteTest(NotifyCase):
         self.assertFalse(
             notify.has_pending_insight(ledger.pending_messages(self.con), now=NOW)
         )
+
+
+def away_snap(provider_id="claude", name="Claude Code", *, percent=50.0, active=0, **kw):
+    from cursor_spend_monitor.instances import Instance, InstanceReport
+
+    snap = meter_snap(provider_id, name, percent=percent, **kw)
+    if active:
+        snap.instances = InstanceReport(
+            active=[
+                Instance(
+                    provider_id=provider_id, pid=1, project="x", directory="/x",
+                    started_at=None, suspended=False,
+                )
+            ]
+        )
+    return snap
+
+
+class ElsewhereTest(NotifyCase):
+    NOW_TS = int(NOW.timestamp())
+
+    def series(self, start_pct=30.0, minutes_ago=90, provider="claude", key="five_hour"):
+        return {(provider, key): [(self.NOW_TS - minutes_ago * 60, start_pct)]}
+
+    def find(self, snaps, samples):
+        return notify.find_elsewhere(self.con, snaps, samples, now=NOW)
+
+    def test_a_climb_with_no_local_session_is_usage_from_elsewhere(self):
+        found = self.find([away_snap(percent=50)], self.series(30))
+        assert found is not None
+        self.assertEqual(found["points"], 20)
+        self.assertEqual(found["providerId"], "claude")
+        self.assertEqual(found["since"], self.NOW_TS - 90 * 60)
+
+    def test_a_local_session_for_that_provider_explains_the_climb(self):
+        self.seed([make("claude", "here", started=NOW - timedelta(minutes=60), duration_s=300)])
+        self.assertIsNone(self.find([away_snap(percent=50)], self.series(30)))
+
+    def test_a_session_for_another_provider_does_not(self):
+        self.seed([make("opencode", "other", started=NOW - timedelta(minutes=60), duration_s=300)])
+        self.assertIsNotNone(self.find([away_snap(percent=50)], self.series(30)))
+
+    def test_a_session_from_before_the_baseline_does_not_count(self):
+        self.seed([make("claude", "old", started=NOW - timedelta(minutes=115), duration_s=60)])
+        self.assertIsNotNone(self.find([away_snap(percent=50)], self.series(30)))
+
+    def test_a_live_session_is_not_called_elsewhere(self):
+        self.assertIsNone(self.find([away_snap(percent=50, active=1)], self.series(30)))
+
+    def test_a_small_climb_says_nothing(self):
+        self.assertIsNone(self.find([away_snap(percent=36)], self.series(30)))
+
+    def test_a_reset_looks_like_a_fall_and_says_nothing(self):
+        self.assertIsNone(self.find([away_snap(percent=5)], self.series(60)))
+
+    def test_a_baseline_a_moment_old_is_not_a_baseline(self):
+        self.assertIsNone(
+            self.find([away_snap(percent=50)], self.series(30, minutes_ago=2))
+        )
+
+    def test_a_sample_older_than_the_window_is_ignored(self):
+        self.assertIsNone(
+            self.find([away_snap(percent=50)], self.series(30, minutes_ago=240))
+        )
+
+    def test_no_history_says_nothing(self):
+        self.assertIsNone(self.find([away_snap(percent=50)], {}))
+
+    def test_only_rolling_meters_are_considered(self):
+        self.assertIsNone(
+            self.find(
+                [away_snap(percent=50, kind="monthly")], self.series(30)
+            )
+        )
+
+    def test_a_borrowed_or_broken_provider_is_ignored(self):
+        self.assertIsNone(
+            self.find([away_snap(percent=50, borrowed="opencode")], self.series(30))
+        )
+        self.assertIsNone(
+            self.find([away_snap(percent=50, status="error")], self.series(30))
+        )
+
+    def test_the_biggest_climb_is_reported(self):
+        samples = {
+            **self.series(30, provider="claude"),
+            **self.series(10, provider="opencode", key="rolling"),
+        }
+        found = self.find(
+            [
+                away_snap("claude", "Claude Code", percent=45),
+                away_snap("opencode", "OpenCode", percent=60, key="rolling"),
+            ],
+            samples,
+        )
+        assert found is not None
+        self.assertEqual(found["providerId"], "opencode")
+
+    # -- in the note ----------------------------------------------------------
+
+    def warm(self, snaps, samples):
+        return notify.warm_note(self.con, snaps, samples=samples, now=NOW)
+
+    def test_the_warm_note_says_it_first(self):
+        message = self.warm([away_snap(percent=50)], self.series(30))
+        assert message is not None
+        self.assertTrue(message.body.startswith("About 20 points of your Claude Code"))
+        self.assertIn("somewhere other than this machine", message.body)
+        self.assertIn("phone or web", message.body)
+        self.assertIn("No sessions in the last 2h.", message.body)
+        params = message.meta["tpl"]["p"]
+        self.assertEqual(params["elsewhere"]["points"], 20)
+        self.assertEqual(message.provider, "claude")
+
+    def test_without_samples_there_is_no_such_claim(self):
+        message = self.warm([away_snap(percent=50)], None)
+        assert message is not None
+        self.assertNotIn("somewhere other", message.body)
+        self.assertIsNone(message.meta["tpl"]["p"]["elsewhere"])
+
+    def test_the_claim_changes_the_fingerprint(self):
+        plain = self.warm([away_snap(percent=50)], None)
+        away = self.warm([away_snap(percent=50)], self.series(30))
+        assert plain and away
+        self.assertNotEqual(plain.meta["fingerprint"], away.meta["fingerprint"])
+
+    def test_a_bigger_climb_is_news(self):
+        a = self.warm([away_snap(percent=50)], self.series(30))
+        b = self.warm([away_snap(percent=50)], self.series(25))
+        assert a and b
+        self.assertNotEqual(a.meta["fingerprint"], b.meta["fingerprint"])

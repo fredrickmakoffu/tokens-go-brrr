@@ -21,6 +21,7 @@ from unittest import mock
 from cursor_spend_monitor import ledger
 from cursor_spend_monitor import notify_engine as notify
 from cursor_spend_monitor.config import MonitorConfig
+from cursor_spend_monitor.llm_budget import CallBudget
 from cursor_spend_monitor.providers.base import Meter, ProviderSnapshot
 
 NOW = datetime(2026, 10, 6, 12, 0, tzinfo=timezone.utc)
@@ -604,8 +605,8 @@ class LiveConfigTest(unittest.TestCase):
         self.assertEqual(config.live_hot_minutes, 10.0)
 
 
-class DaemonWarmNoteTest(unittest.TestCase):
-    """The warm tier: when an open is warm, and what the worker does about it."""
+class WarmDaemonBase(unittest.TestCase):
+    """A daemon stub over a real ledger, shared by the warm-tier test classes."""
 
     def setUp(self) -> None:
         self._dir = tempfile.TemporaryDirectory()
@@ -628,14 +629,23 @@ class DaemonWarmNoteTest(unittest.TestCase):
         stub._catching_up = False
         stub._harvesting = False
         stub._polling = False
+        stub._warm_samples = {}
+        stub._llm_backoff = {}
+        stub.llm_budget = CallBudget(4, 24)
         stub.snapshots = []
         stub.poll = mock.Mock(return_value=False)
         stub._wanted = mock.Mock(return_value=True)
         stub._start_cold_note = mock.Mock()
+        stub._collect_samples = mock.Mock(return_value={})
         for name in (
             "panel_opened",
             "_start_warm_note",
             "_warm_worker",
+            "_warm_wording",
+            "_compose",
+            "_log_skipped",
+            "_record_llm",
+            "_facts_for",
             "_finish_warm",
             "_stop_catching_up",
             "state_payload",
@@ -644,6 +654,34 @@ class DaemonWarmNoteTest(unittest.TestCase):
         stub.real_panel_opened = stub.panel_opened
         stub.real_start = stub._start_warm_note
         return stub
+
+    def seed(self):
+        now = int(datetime.now(timezone.utc).timestamp())
+        ledger.upsert_sessions(
+            self.con,
+            [
+                ledger.SessionRow(
+                    provider="claude", source="local-transcript", external_id="w1",
+                    model="m", project="alpha", started_at=now - 1800,
+                    ended_at=now - 1200, duration_s=600, tokens_input=50_000,
+                )
+            ],
+        )
+        ledger.fold_all(self.con)
+
+    def run_worker(self, stub, harvest_here=False):
+        stub.ledger.worker.return_value.__enter__ = mock.Mock(return_value=self.con)
+        stub.ledger.worker.return_value.__exit__ = mock.Mock(return_value=False)
+        stub._warm_running = True
+        stub._catching_up = True
+        stub._run_readers = mock.Mock()
+        with mock.patch("cursor_spend_monitor.daemon.GLib") as glib:
+            stub._warm_worker(harvest_here)
+        return glib
+
+
+class DaemonWarmNoteTest(WarmDaemonBase):
+    """The warm tier: when an open is warm, and what the worker does about it."""
 
     def open_at(self, stub, at: float) -> None:
         stub._start_warm_note = mock.Mock()
@@ -757,29 +795,7 @@ class DaemonWarmNoteTest(unittest.TestCase):
 
     # -- the worker -----------------------------------------------------------
 
-    def seed(self):
-        now = int(datetime.now(timezone.utc).timestamp())
-        ledger.upsert_sessions(
-            self.con,
-            [
-                ledger.SessionRow(
-                    provider="claude", source="local-transcript", external_id="w1",
-                    model="m", project="alpha", started_at=now - 1800,
-                    ended_at=now - 1200, duration_s=600, tokens_input=50_000,
-                )
-            ],
-        )
-        ledger.fold_all(self.con)
 
-    def run_worker(self, stub, harvest_here=False):
-        stub.ledger.worker.return_value.__enter__ = mock.Mock(return_value=self.con)
-        stub.ledger.worker.return_value.__exit__ = mock.Mock(return_value=False)
-        stub._warm_running = True
-        stub._catching_up = True
-        stub._run_readers = mock.Mock()
-        with mock.patch("cursor_spend_monitor.daemon.GLib") as glib:
-            stub._warm_worker(harvest_here)
-        return glib
 
     def test_the_worker_stores_a_warm_note_and_finishes(self):
         self.seed()
@@ -875,3 +891,209 @@ class DaemonWarmNoteTest(unittest.TestCase):
         self.assertEqual(stub.state_payload()["live"], {"catchingUp": False})
         stub._catching_up = True
         self.assertEqual(stub.state_payload()["live"], {"catchingUp": True})
+
+
+class DaemonWarmWordingTest(WarmDaemonBase):
+    """The quick-model wording of a warm note, and the limits around it."""
+
+    def warm_message(self):
+        from cursor_spend_monitor import notify_engine as ne
+
+        self.seed()
+        message = ne.warm_note(self.con, [])
+        assert message is not None
+        return message
+
+    def generator(self, provider="claude"):
+        from cursor_spend_monitor import llm_composer as llm
+
+        return llm.Generator(
+            provider_id=provider, name=provider.title(), model="a-cheap-model",
+            short_headroom=60, monthly_headroom=None, reason="test",
+        )
+
+    def reworded(self, message):
+        from cursor_spend_monitor.notify_engine import Message
+
+        meta = dict(message.meta)
+        meta["composed_by"] = "claude"
+        meta["source"] = "llm"
+        return Message(
+            kind=message.kind, key=message.key, body="Model words.",
+            provider=message.provider, meta=meta,
+        )
+
+    def wording(self, stub, message, *, generator="default", rewrite="default"):
+        from cursor_spend_monitor import llm_composer as llm
+
+        gen = self.generator() if generator == "default" else generator
+        with (
+            mock.patch.object(llm, "choose", return_value=gen) as choose,
+            mock.patch.object(
+                llm, "rewrite",
+                return_value=self.reworded(message) if rewrite == "default" else rewrite,
+            ) as rewrite_mock,
+        ):
+            result = stub._warm_wording(self.con, message)
+        return result, choose, rewrite_mock
+
+    def test_with_the_feature_off_the_template_stands_and_nothing_is_asked(self):
+        stub = self.daemon(llm_notifications=False)
+        message = self.warm_message()
+        result, choose, rewrite = self.wording(stub, message)
+        self.assertIs(result, message)
+        choose.assert_not_called()
+        rewrite.assert_not_called()
+
+    def test_a_changed_picture_is_reworded_within_the_warm_budget(self):
+        stub = self.daemon(llm_notifications=True)
+        message = self.warm_message()
+        result, _, rewrite = self.wording(stub, message)
+        self.assertEqual(result.body, "Model words.")
+        self.assertEqual(result.meta["source"], "llm")
+        from cursor_spend_monitor.daemon import WARM_LLM_TIMEOUT_SECONDS
+
+        self.assertEqual(rewrite.call_args.kwargs["timeout"], WARM_LLM_TIMEOUT_SECONDS)
+        self.assertEqual(rewrite.call_args.kwargs["context"], {"trigger": "open"})
+
+    def test_an_unchanged_picture_is_not_worth_a_call(self):
+        stub = self.daemon(llm_notifications=True)
+        message = self.warm_message()
+        ledger.store_message(
+            self.con, kind=message.kind, key=message.key, body=message.body,
+            meta=message.meta,
+        )
+        result, choose, rewrite = self.wording(stub, message)
+        self.assertIs(result, message)
+        rewrite.assert_not_called()
+
+    def test_each_call_spends_the_budget_until_the_cap(self):
+        stub = self.daemon(llm_notifications=True)
+        stub.llm_budget = CallBudget(2, 24)
+        message = self.warm_message()
+        for _ in range(2):
+            result, _, _ = self.wording(stub, message)
+            self.assertEqual(result.body, "Model words.")
+        result, _, rewrite = self.wording(stub, message)
+        self.assertIs(result, message)
+        rewrite.assert_not_called()
+
+    def test_a_refused_call_is_logged_as_skipped_with_its_reason(self):
+        stub = self.daemon(llm_notifications=True)
+        stub.llm_budget = CallBudget(0, 24)
+        self.wording(stub, self.warm_message())
+        (entry,) = [c.args[0] for c in stub.llm_log.record.call_args_list]
+        self.assertEqual(entry["outcome"], "skipped")
+        self.assertEqual(entry["reason"], "over_hour_cap")
+        self.assertEqual(entry["trigger"], "open")
+
+    def test_no_generator_does_not_spend_the_budget(self):
+        stub = self.daemon(llm_notifications=True)
+        stub.llm_budget = CallBudget(1, 24)
+        message = self.warm_message()
+        self.wording(stub, message, generator=None)
+        self.assertIsNone(stub.llm_budget.refusal())
+
+    def test_a_failed_rewrite_keeps_the_template_and_still_spends(self):
+        stub = self.daemon(llm_notifications=True)
+        stub.llm_budget = CallBudget(1, 24)
+        message = self.warm_message()
+        result, _, _ = self.wording(stub, message, rewrite=None)
+        self.assertIs(result, message)
+        self.assertIsNotNone(stub.llm_budget.refusal())
+
+    def test_a_rate_limit_rests_that_provider(self):
+        stub = self.daemon(llm_notifications=True)
+        stub._record_llm({"provider": "claude", "outcome": "rate_limited"})
+        self.assertIn("claude", stub._llm_backoff)
+        stub.llm_log.record.assert_called_once()
+
+    def test_other_outcomes_do_not_rest_a_provider(self):
+        stub = self.daemon(llm_notifications=True)
+        stub._record_llm({"provider": "claude", "outcome": "error"})
+        stub._record_llm({"provider": "claude", "outcome": "ok"})
+        self.assertEqual(stub._llm_backoff, {})
+
+    def test_a_resting_provider_is_not_offered_as_a_writer(self):
+        from cursor_spend_monitor import llm_composer as llm
+        from cursor_spend_monitor.daemon import UsageDaemon  # noqa: F401
+
+        stub = self.daemon(llm_notifications=True)
+        stub.snapshots = [
+            ProviderSnapshot(provider_id="claude", display_name="Claude", icon="c",
+                             plan=None, metrics=[], primary_key=""),
+            ProviderSnapshot(provider_id="opencode", display_name="OC", icon="o",
+                             plan=None, metrics=[], primary_key=""),
+        ]
+        with mock.patch("cursor_spend_monitor.daemon.time.monotonic", return_value=100.0):
+            stub._llm_backoff = {"claude": 100.0 + 60}
+            with mock.patch.object(llm, "choose", return_value=None) as choose:
+                stub._compose(self.con, [self.warm_message()], origin="open")
+        offered = [s.provider_id for s in choose.call_args.args[0]]
+        self.assertEqual(offered, ["opencode"])
+
+    def test_a_rest_ends(self):
+        from cursor_spend_monitor import llm_composer as llm
+
+        stub = self.daemon(llm_notifications=True)
+        stub.snapshots = [
+            ProviderSnapshot(provider_id="claude", display_name="Claude", icon="c",
+                             plan=None, metrics=[], primary_key=""),
+        ]
+        with mock.patch("cursor_spend_monitor.daemon.time.monotonic", return_value=500.0):
+            stub._llm_backoff = {"claude": 100.0}
+            with mock.patch.object(llm, "choose", return_value=None) as choose:
+                stub._compose(self.con, [self.warm_message()], origin="open")
+        self.assertEqual([s.provider_id for s in choose.call_args.args[0]], ["claude"])
+
+    def test_scheduled_composition_is_not_capped(self):
+        stub = self.daemon(llm_notifications=True)
+        stub.llm_budget = CallBudget(0, 0)
+        from cursor_spend_monitor import llm_composer as llm
+
+        message = self.warm_message()
+        with (
+            mock.patch.object(llm, "choose", return_value=self.generator()),
+            mock.patch.object(llm, "rewrite", return_value=self.reworded(message)),
+        ):
+            result = stub._compose(self.con, [message], origin="scheduled:daily")
+        self.assertEqual(result[0].body, "Model words.")
+
+    def test_the_model_is_given_the_fresh_figures(self):
+        stub = self.daemon(llm_notifications=True)
+        facts = stub._facts_for(self.con, self.warm_message())
+        self.assertEqual(facts["period"], "warm")
+        self.assertEqual(facts["now"]["sessions"], 1)
+
+    def test_other_messages_get_no_fresh_figures(self):
+        stub = self.daemon(llm_notifications=True)
+        from cursor_spend_monitor.notify_engine import INFORMATIVE, Message
+
+        facts = stub._facts_for(self.con, Message(kind=INFORMATIVE, key="k", body="b"))
+        self.assertNotIn("now", facts)
+
+    def test_starting_a_warm_note_reads_the_history_on_the_main_loop(self):
+        stub = self.daemon()
+        stub._collect_samples = mock.Mock(return_value={("claude", "five_hour"): [(1.0, 2.0)]})
+        with (
+            mock.patch("cursor_spend_monitor.daemon.threading.Thread"),
+            mock.patch("cursor_spend_monitor.daemon.GLib"),
+        ):
+            stub.real_start()
+        self.assertEqual(stub._warm_samples, {("claude", "five_hour"): [(1.0, 2.0)]})
+
+    def test_the_worker_hands_the_history_to_the_note(self):
+        from cursor_spend_monitor import notify_engine as ne
+
+        stub = self.daemon()
+        stub._warm_samples = {("claude", "five_hour"): [(1.0, 2.0)]}
+        with mock.patch.object(ne, "warm_note", return_value=None) as warm:
+            self.run_worker(stub)
+        self.assertEqual(warm.call_args.kwargs["samples"], stub._warm_samples)
+
+
+class LiveLlmConfigTest(unittest.TestCase):
+    def test_defaults(self):
+        config = MonitorConfig()
+        self.assertEqual(config.live_llm_per_hour, 4)
+        self.assertEqual(config.live_llm_per_day, 24)

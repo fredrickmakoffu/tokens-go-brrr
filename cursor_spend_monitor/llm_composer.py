@@ -38,7 +38,7 @@ from pathlib import Path
 from typing import Any
 
 from . import llm_log
-from .notify_engine import Message, provider_label
+from .notify_engine import SOURCE_LLM, Message, provider_label
 
 # Endpoints, one per generator we can actually authenticate to. Hosts are
 # separate from paths so a connection is https by construction rather than a URL
@@ -580,6 +580,8 @@ def rewrite(
     provider = featured if featured in allowed else message.provider
     meta = dict(message.meta)
     meta["composed_by"] = generator.provider_id
+    # The wording is the model's now; the figures were still the ledger's.
+    meta["source"] = SOURCE_LLM
     if provider:
         meta["providerName"] = provider_label(provider)
     return Message(

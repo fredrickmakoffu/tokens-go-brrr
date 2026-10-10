@@ -883,7 +883,7 @@ function templateText(template) {
             return text;
         }
         case "warm": {
-            let text = p.sessions
+            const work = p.sessions
                 ? tr("tpl.warm.main", {
                       n: p.sessions,
                       hours: p.hours,
@@ -892,6 +892,19 @@ function templateText(template) {
                   (p.project ? tr("tpl.warm.project", { project: p.project }) : "") +
                   "."
                 : tr("tpl.warm.none", { hours: p.hours });
+            // Usage the meters saw and this machine did not: said first, because
+            // it is the part a person could not have known.
+            const away = p.elsewhere
+                ? tr("tpl.warm.elsewhere", {
+                      points: p.elsewhere.points,
+                      provider: p.elsewhere.provider,
+                      label: metricLabel(p.elsewhere.label),
+                      time: GLib.DateTime.new_from_unix_local(p.elsewhere.since).format(
+                          "%H:%M",
+                      ),
+                  })
+                : "";
+            let text = [away, work].filter(Boolean).join(" ");
             if (p.meter)
                 text += tr("tpl.warm.meter", {
                     provider: p.meter.provider,
