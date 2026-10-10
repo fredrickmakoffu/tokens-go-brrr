@@ -874,7 +874,7 @@ def _add_best_parser(sub: argparse._SubParsersAction) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="cursor-spend-monitor",
-        description="AI usage daemon for the GNOME Shell indicator",
+        description="tokens-go-brrr daemon for the GNOME Shell indicator",
     )
     parser.add_argument(
         "--version", action="version", version=f"%(prog)s {__version__}"

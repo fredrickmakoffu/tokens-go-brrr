@@ -8,7 +8,7 @@
 // paths, and technical diagnostics the daemon passes through.
 
 const en = {
-    brand: "AI usage",
+    brand: "tokens-go-brrr",
 
     // chrome
     "ui.back": "Back",
@@ -179,7 +179,7 @@ const en = {
 };
 
 const fr = {
-    brand: "AI usage",
+    brand: "tokens-go-brrr",
 
     "ui.back": "Retour",
     "ui.settings": "Réglages",
@@ -344,7 +344,7 @@ const fr = {
 };
 
 const pt = {
-    brand: "AI usage",
+    brand: "tokens-go-brrr",
 
     "ui.back": "Voltar",
     "ui.settings": "Configurações",
