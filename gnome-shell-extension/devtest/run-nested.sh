@@ -11,6 +11,8 @@ DURATION="${1:-60}"
 
 mkdir -p "$RUNTIME"/{config/glib-2.0/settings,data/gnome-shell/extensions,cache,shots}
 ln -sfn "$REPO/gnome-shell-extension/$UUID" "$RUNTIME/data/gnome-shell/extensions/$UUID"
+# The shell resolves Barlow through fontconfig, which reads $XDG_DATA_HOME/fonts.
+ln -sfn "$REPO/gnome-shell-extension/$UUID/fonts" "$RUNTIME/data/fonts"
 
 cat > "$RUNTIME/config/glib-2.0/settings/keyfile" <<EOF
 [org/gnome/shell]
