@@ -34,13 +34,32 @@ const IFACE_XML = `
 </node>`;
 const UsageProxy = Gio.DBusProxy.makeProxyWrapper(IFACE_XML);
 
-const COLOR = {
-    ok: "#94bce3",
-    wait: "#f0ba59",
-    crit: "#fd7562",
-    error: "#7a7a7d",
-    muted: "#5d5d60",
+// Status colours and the two text colours set inline from JS. The stylesheet
+// carries the rest, and its light overrides sit under .ai-usage-light; this table
+// is the same split for the colours that are not in CSS. The light values are the
+// website's, darkened until each reads at 4.5:1 on the paper surface.
+const PALETTES = {
+    dark: {
+        ok: "#94bce3",
+        wait: "#f0ba59",
+        crit: "#fd7562",
+        error: "#7a7a7d",
+        muted: "#5d5d60",
+        text: "#f5f5f8",
+        mutedText: "#98989b",
+    },
+    light: {
+        ok: "#416180",
+        wait: "#a45900",
+        crit: "#c83122",
+        error: "#7a7a7d",
+        muted: "#98989b",
+        text: "#1d1f20",
+        mutedText: "#5d5d60",
+    },
 };
+// Mutated in place so every reader sees the active palette on its next render.
+const COLOR = { ...PALETTES.dark };
 const BADGE_FILES = {
     cursor: "cursor.png",
     claude: "claude.svg",
@@ -69,12 +88,19 @@ function colorFor(pct) {
     return COLOR.ok;
 }
 
+// The top bar sits on GNOME's panel, which is dark whatever the popover is.
+function panelColorFor(pct) {
+    if (pct >= CRITICAL_AT) return PALETTES.dark.crit;
+    if (pct >= CAUTION_AT) return PALETTES.dark.wait;
+    return PALETTES.dark.ok;
+}
+
 // The number is the headline of a meter, so it takes the status colour only
 // once the meter is worth attention; a healthy figure stays in plain text, as
 // in the design, where colour is kept for the rows that need it.
 function statusTextColor(pct, muted = false) {
-    if (muted) return "#98989b";
-    return pct >= CAUTION_AT ? colorFor(pct) : "#f5f5f8";
+    if (muted) return COLOR.mutedText;
+    return pct >= CAUTION_AT ? colorFor(pct) : COLOR.text;
 }
 
 // "5-hour limit" -> "5-hour": the tag sits beside the name, where "limit" is
@@ -798,11 +824,37 @@ const ROLE_COPY = {
 const Indicator = GObject.registerClass(
     class AiUsageIndicator extends PanelMenu.Button {
         destroy() {
+            if (this._schemeId) {
+                this._interface.disconnect(this._schemeId);
+                this._schemeId = 0;
+            }
             if (this._noteId) {
                 GLib.source_remove(this._noteId);
                 this._noteId = 0;
             }
             super.destroy();
+        }
+
+        // Light only when GNOME says prefer-light. "default" is what most installs
+        // sit on and it means no preference, and the shell's own panel and popups
+        // stay dark either way, so dark is the safer reading of "default".
+        _watchColorScheme() {
+            this._interface = new Gio.Settings({
+                schema_id: "org.gnome.desktop.interface",
+            });
+            const apply = (rerender) => {
+                const light =
+                    this._interface.get_string("color-scheme") === "prefer-light";
+                Object.assign(COLOR, light ? PALETTES.light : PALETTES.dark);
+                if (light) this.menu.actor.add_style_class_name("ai-usage-light");
+                else this.menu.actor.remove_style_class_name("ai-usage-light");
+                if (rerender) this._render(false);
+            };
+            this._schemeId = this._interface.connect(
+                "changed::color-scheme",
+                () => apply(true),
+            );
+            apply(false);
         }
 
         _init(ext) {
@@ -872,6 +924,7 @@ const Indicator = GObject.registerClass(
             this.connect("destroy", () => this._disconnectFocusWatch());
 
             this.menu.actor.add_style_class_name("ai-usage-menu");
+            this._watchColorScheme();
             this.menu.connect("open-state-changed", (_menu, open) => {
                 if (open) {
                     this._ext.refresh();
@@ -1178,7 +1231,7 @@ const Indicator = GObject.registerClass(
                 if (hasMeters(tool) && pct >= CAUTION_AT) {
                     chip.add_child(
                         label(`${Math.round(pct)}%`, "ai-usage-session-pct", {
-                            style: `color: ${colorFor(pct)};`,
+                            style: `color: ${panelColorFor(pct)};`,
                             y_align: Clutter.ActorAlign.CENTER,
                         }),
                     );
