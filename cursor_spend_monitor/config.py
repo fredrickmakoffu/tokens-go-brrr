@@ -74,6 +74,11 @@ class MonitorConfig:
     llm_generator_model: str = ""
     llm_max_output_tokens: int = 200
     llm_min_headroom: int = 15
+    # Live notes (design/LIVE_NOTES_AND_LLM_LOG.md). `live_notes` is the master
+    # switch; an open after `live_cold_hours` idle (or a fresh daemon) is "cold"
+    # and earns a trend or insight note.
+    live_notes: bool = True
+    live_cold_hours: float = 4.0
     # Days of the per-call LLM log to keep; 0 turns the log off.
     llm_log_days: int = 30
     # The landing page: one notification shown as a quote when the popover
@@ -137,6 +142,8 @@ class MonitorConfig:
             llm_generator_model=str(data.get("llm_generator_model") or ""),
             llm_max_output_tokens=_as_int(data.get("llm_max_output_tokens"), 200),
             llm_min_headroom=_as_int(data.get("llm_min_headroom"), 15),
+            live_notes=bool(data.get("live_notes", True)),
+            live_cold_hours=max(0.0, _as_float(data.get("live_cold_hours"), 4.0)),
             llm_log_days=max(0, _as_int(data.get("llm_log_days"), 30)),
             billboard_enabled=bool(
                 data.get("billboard_enabled", data.get("quote_panel", True))
@@ -173,6 +180,8 @@ class MonitorConfig:
             "llm_generator_model": self.llm_generator_model,
             "llm_max_output_tokens": self.llm_max_output_tokens,
             "llm_min_headroom": self.llm_min_headroom,
+            "live_notes": self.live_notes,
+            "live_cold_hours": self.live_cold_hours,
             "llm_log_days": self.llm_log_days,
             "billboard_enabled": self.billboard_enabled,
             "billboard_auto_advance_seconds": self.billboard_auto_advance_seconds,

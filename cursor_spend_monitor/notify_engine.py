@@ -743,6 +743,263 @@ def scheduled_messages(
     return messages
 
 
+# -- tiers and the cold insight pool ----------------------------------------
+
+
+def tier_for(idle_seconds: float | None, *, cold_hours: float = 4.0) -> str:
+    """Which temperature an open of the popover is.
+
+    `idle_seconds` is the time since the popover was last opened, or None when
+    it never has been in this daemon's life. A first open and a long absence are
+    both cold: what the person needs is the shape of their usage, not the last
+    hour of it. Anything shorter is inside a working cycle and therefore not
+    cold; the warm and hot tiers that refine it arrive with the live flow.
+    """
+    if idle_seconds is None or idle_seconds >= max(0.0, cold_hours) * 3600:
+        return COLD
+    return WARM
+
+
+# The insights, in the order ties are broken. Each looks at a trailing window
+# and returns nothing when there is too little data for the claim to mean
+# anything: a percentage of three sessions is not an insight.
+INSIGHT_IDS = ("cache", "week", "peak", "focus", "rhythm")
+INSIGHT_WINDOW_DAYS = 30
+MIN_INSIGHT_TOKENS = 100_000
+MIN_INSIGHT_SESSIONS = 10
+HIGH_CACHE_SHARE = 60
+FLAT_WEEK_PCT = 5
+
+WEEKDAYS = (
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+)
+
+
+def _insight(
+    insight_id: str,
+    body: str,
+    params: dict[str, Any],
+    *,
+    now: datetime | None,
+    fingerprint_parts: Any,
+) -> Message:
+    """A cold-tier message for one insight, keyed by the day it was made."""
+    today = day_range(1, now=now)[0]
+    return Message(
+        kind=INFORMATIVE,
+        key=f"{INSIGHT_KEY_PREFIX}{insight_id}:{today}",
+        body=body,
+        meta={
+            "period": "insight",
+            "insight": insight_id,
+            "tpl": _tpl(f"insight.{insight_id}", **params),
+            **provenance(
+                tier=COLD,
+                as_of=_epoch(now),
+                fingerprint=fingerprint_of(insight_id, fingerprint_parts),
+            ),
+        },
+    )
+
+
+INSIGHT_KEY_PREFIX = "insight:"
+
+
+def insight_cache(con: sqlite3.Connection, *, now: datetime | None = None) -> Message | None:
+    start, end = day_range(INSIGHT_WINDOW_DAYS, now=now)
+    cache = ledger.cache_share(con, start_day=start, end_day=end)
+    if cache["tokens"] < MIN_INSIGHT_TOKENS:
+        return None
+    pct = _pct(100 * cache["share"])
+    high = pct >= HIGH_CACHE_SHARE
+    body = (
+        f"{pct}% of your tokens in the last {INSIGHT_WINDOW_DAYS} days were cache reads."
+    )
+    if high:
+        body += (
+            " That is the cheap kind, but a long thread re-reads its whole history"
+            " every turn; a fresh session per task keeps it down."
+        )
+    else:
+        body += " Staying on one task within a session lets the cache do more of the work."
+    return _insight(
+        "cache",
+        body,
+        {"pct": pct, "high": high, "days": INSIGHT_WINDOW_DAYS},
+        now=now,
+        fingerprint_parts=[pct, high],
+    )
+
+
+def insight_week(con: sqlite3.Connection, *, now: datetime | None = None) -> Message | None:
+    start, end = day_range(7, now=now)
+    before_end = (datetime.fromisoformat(start) - timedelta(days=1)).date().isoformat()
+    before_start = (
+        datetime.fromisoformat(start) - timedelta(days=7)
+    ).date().isoformat()
+    this = ledger.totals(con, start_day=start, end_day=end)["tokens"]
+    before = ledger.totals(con, start_day=before_start, end_day=before_end)["tokens"]
+    if before < MIN_INSIGHT_TOKENS // 10 or this <= 0:
+        return None
+    change = 100 * (this - before) / before
+    pct = abs(_pct(change))
+    if pct < FLAT_WEEK_PCT:
+        direction = "flat"
+        body = (
+            f"Your last 7 days were steady: within {FLAT_WEEK_PCT}% of the 7 before."
+            " Same rhythm as last week."
+        )
+    elif change > 0:
+        direction = "up"
+        body = (
+            f"You used {pct}% more tokens in the last 7 days than in the 7 before."
+            " Worth a glance at which project drove it."
+        )
+    else:
+        direction = "down"
+        body = (
+            f"You used {pct}% fewer tokens in the last 7 days than in the 7 before."
+            " A lighter week."
+        )
+    return _insight(
+        "week",
+        body,
+        {"dir": direction, "pct": pct, "limit": FLAT_WEEK_PCT},
+        now=now,
+        fingerprint_parts=[direction, pct],
+    )
+
+
+def insight_peak(con: sqlite3.Connection, *, now: datetime | None = None) -> Message | None:
+    start, end = day_range(INSIGHT_WINDOW_DAYS, now=now)
+    shape = ledger.session_shape(con, start_day=start, end_day=end)
+    if shape["sessions"] < MIN_INSIGHT_SESSIONS:
+        return None
+    hour = max(range(24), key=lambda h: (shape["hours"][h], -h))
+    counts = ledger.weekday_counts(con, start_day=start, end_day=end)
+    weekday = max(range(7), key=lambda d: (counts[d], -d))
+    return _insight(
+        "peak",
+        f"Most of your AI work happens around {hour:02d}:00, and {WEEKDAYS[weekday]}"
+        f" is your busiest day. Plan the heavy sessions for then."
+        ,
+        {"hour": hour, "weekday": weekday},
+        now=now,
+        fingerprint_parts=[hour, weekday],
+    )
+
+
+def insight_focus(con: sqlite3.Connection, *, now: datetime | None = None) -> Message | None:
+    start, end = day_range(INSIGHT_WINDOW_DAYS, now=now)
+    total = ledger.totals(con, start_day=start, end_day=end)["tokens"]
+    top = _top(con, start, end, "project")
+    if total < MIN_INSIGHT_TOKENS or not top or not top["project"]:
+        return None
+    pct = _pct(100 * _as_float(top["tokens"]) / total)
+    return _insight(
+        "focus",
+        f"{top['project']} took {pct}% of your tokens over the last"
+        f" {INSIGHT_WINDOW_DAYS} days. That is where your usage actually goes.",
+        {"project": top["project"], "pct": pct, "days": INSIGHT_WINDOW_DAYS},
+        now=now,
+        fingerprint_parts=[top["project"], pct],
+    )
+
+
+def insight_rhythm(con: sqlite3.Connection, *, now: datetime | None = None) -> Message | None:
+    start, end = day_range(INSIGHT_WINDOW_DAYS, now=now)
+    shape = ledger.session_shape(con, start_day=start, end_day=end)
+    if shape["sessions"] < MIN_INSIGHT_SESSIONS:
+        return None
+    pct = _pct(100 * shape["work_hours_share"])
+    return _insight(
+        "rhythm",
+        f"{pct}% of your sessions run on weekdays between 08:00 and 18:00."
+        " The rest is evenings and weekends.",
+        {"pct": pct},
+        now=now,
+        fingerprint_parts=[pct],
+    )
+
+
+_INSIGHT_BUILDERS = {
+    "cache": insight_cache,
+    "week": insight_week,
+    "peak": insight_peak,
+    "focus": insight_focus,
+    "rhythm": insight_rhythm,
+}
+
+
+def insight_candidates(
+    con: sqlite3.Connection, *, now: datetime | None = None
+) -> list[Message]:
+    """Every insight there is enough data to say, in tie-break order."""
+    found: list[Message] = []
+    for insight_id in INSIGHT_IDS:
+        message = _INSIGHT_BUILDERS[insight_id](con, now=now)
+        if message is not None:
+            found.append(message)
+    return found
+
+
+def next_insight(
+    con: sqlite3.Connection, *, now: datetime | None = None
+) -> Message | None:
+    """The insight that has waited longest, so none repeats before the rest.
+
+    Rotation is read from the messages table itself: each insight's key carries
+    the day it was made, and the newest one under its prefix says when it last
+    had a turn. One that never has, goes first.
+    """
+    candidates = insight_candidates(con, now=now)
+    if not candidates:
+        return None
+
+    def last_turn(message: Message) -> int:
+        prefix = f"{INSIGHT_KEY_PREFIX}{message.meta['insight']}:"
+        stamp = ledger.last_generated_at(
+            con, kind=message.kind, key_prefix=prefix
+        )
+        return -1 if stamp is None else stamp
+
+    # sorted() is stable, so equal turns keep INSIGHT_IDS order.
+    return sorted(candidates, key=last_turn)[0]
+
+
+def has_pending_insight(
+    rows: list[dict[str, Any]], *, now: datetime | None = None
+) -> bool:
+    """Whether an unread, still-fresh insight is already waiting on the page.
+
+    A person who has not read the last one does not need another, and without
+    this every open after a long absence would pile a new one on top.
+    """
+    now_ts = _epoch(now)
+    for row in rows:
+        if not str(row.get("key") or "").startswith(INSIGHT_KEY_PREFIX):
+            continue
+        expires = _expires_of(row)
+        if expires is None or expires > now_ts:
+            return True
+    return False
+
+
+def cold_note(
+    con: sqlite3.Connection, *, now: datetime | None = None
+) -> Message | None:
+    """The note for a cold open: the next insight, unless one is waiting unread."""
+    if has_pending_insight(ledger.pending_messages(con), now=now):
+        return None
+    return next_insight(con, now=now)
+
+
 # -- events ------------------------------------------------------------------
 
 

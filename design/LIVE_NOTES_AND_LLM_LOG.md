@@ -1,7 +1,8 @@
 # Live notes and the LLM call log — design
 
 **Status:** in progress — step 1 (rolling windows, provenance, tier expiry) and
-step 2 (the LLM call log) are built; steps 3–5 are not.
+step 2 (the LLM call log) and step 3 (the cold tier and insight pool) are built;
+steps 4–5 are not.
 **Date:** 2026-10-10
 **Builds on:** `USAGE_ANALYTICS_AND_GUIDANCE.md` (ledger + notification engine) and
 `BILLBOARD_LANDING_PAGE.md` (the landing page).
@@ -83,6 +84,15 @@ window went somewhere other than this machine — phone or web, probably."* This
 is the only signal available for mobile use and needs no new harvester.
 
 ### 2.3 Cold insights
+
+*Built.* The daemon treats each panel open as cold when it is the first since
+start or comes `live_cold_hours` after the previous one, and then stores one
+insight (no model, no desktop notification) unless an unread one is already
+waiting. Rotation is read from the messages table: an insight's key carries the
+day (`insight:<id>:<date>`) so a return is a new row that an old acknowledgement
+cannot hide, and the newest key under each prefix says when it last had a turn.
+Between `live_cold_hours` and the warm window an open is simply "not cold" until
+step 4 defines warm and hot.
 
 A rotating pool of insights computed from the ledger over **rolling** windows
 (last 7 / 30 days), each with a `last_shown_at` so one does not repeat until the

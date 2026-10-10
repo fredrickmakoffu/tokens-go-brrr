@@ -600,3 +600,317 @@ class TierExpiryTest(unittest.TestCase):
         self.assertEqual(payload["tier"], "")
         self.assertEqual(payload["asOf"], self.CREATED)
         self.assertEqual(payload["source"], notify.SOURCE_TEMPLATE)
+
+
+class TierTest(unittest.TestCase):
+    def test_a_first_open_is_cold(self):
+        self.assertEqual(notify.tier_for(None), notify.COLD)
+
+    def test_a_long_absence_is_cold(self):
+        self.assertEqual(notify.tier_for(5 * 3600), notify.COLD)
+
+    def test_the_threshold_itself_is_cold(self):
+        self.assertEqual(notify.tier_for(4 * 3600), notify.COLD)
+        self.assertEqual(notify.tier_for(4 * 3600 - 1), notify.WARM)
+
+    def test_an_open_inside_a_working_cycle_is_not_cold(self):
+        self.assertEqual(notify.tier_for(30 * 60), notify.WARM)
+
+    def test_the_threshold_is_configurable(self):
+        self.assertEqual(notify.tier_for(2 * 3600, cold_hours=1), notify.COLD)
+        self.assertEqual(notify.tier_for(2 * 3600, cold_hours=8), notify.WARM)
+
+    def test_a_zero_threshold_makes_every_open_cold(self):
+        self.assertEqual(notify.tier_for(0, cold_hours=0), notify.COLD)
+
+
+def _local(ts: int) -> datetime:
+    return datetime.fromtimestamp(ts)
+
+
+class InsightData(NotifyCase):
+    def seed_history(self) -> None:
+        """Enough of a month for every insight to have something to say."""
+        rows = []
+        for i in range(6):  # this week: heavy, mostly cache, mostly "alpha"
+            rows.append(
+                make(
+                    external_id=f"now{i}",
+                    project="alpha" if i < 5 else "beta",
+                    started=NOW - timedelta(days=i, hours=3),
+                    tin=40_000,
+                    tcr=120_000,
+                )
+            )
+        for i in range(6):  # the week before: lighter
+            rows.append(
+                make(
+                    external_id=f"before{i}",
+                    project="alpha",
+                    started=NOW - timedelta(days=8 + i, hours=3),
+                    tin=20_000,
+                    tcr=40_000,
+                )
+            )
+        self.seed(rows)
+
+
+class InsightTest(InsightData):
+    def test_every_insight_speaks_when_there_is_a_month_of_data(self):
+        self.seed_history()
+        ids = [m.meta["insight"] for m in notify.insight_candidates(self.con, now=NOW)]
+        self.assertEqual(ids, list(notify.INSIGHT_IDS))
+
+    def test_too_little_data_says_nothing(self):
+        self.seed([make(tin=500, started=NOW - timedelta(hours=2))])
+        self.assertEqual(notify.insight_candidates(self.con, now=NOW), [])
+        self.assertIsNone(notify.next_insight(self.con, now=NOW))
+
+    def test_a_high_cache_share_carries_the_tip(self):
+        self.seed_history()
+        message = notify.insight_cache(self.con, now=NOW)
+        assert message is not None
+        self.assertTrue(message.meta["tpl"]["p"]["high"])
+        self.assertIn("fresh session per task", message.body)
+
+    def test_a_low_cache_share_gets_the_other_wording(self):
+        self.seed(
+            [
+                make(
+                    external_id=f"s{i}",
+                    started=NOW - timedelta(days=i, hours=2),
+                    tin=60_000,
+                    tcr=5_000,
+                )
+                for i in range(3)
+            ]
+        )
+        message = notify.insight_cache(self.con, now=NOW)
+        assert message is not None
+        self.assertFalse(message.meta["tpl"]["p"]["high"])
+        self.assertIn("one task within a session", message.body)
+
+    def test_a_heavier_week_is_reported_as_up(self):
+        self.seed_history()
+        message = notify.insight_week(self.con, now=NOW)
+        assert message is not None
+        params = message.meta["tpl"]["p"]
+        self.assertEqual(params["dir"], "up")
+        self.assertGreater(params["pct"], notify.FLAT_WEEK_PCT)
+        self.assertIn("more tokens", message.body)
+
+    def test_a_lighter_week_is_reported_as_down(self):
+        self.seed(
+            [
+                make(external_id="a", started=NOW - timedelta(days=1), tin=10_000),
+                make(external_id="b", started=NOW - timedelta(days=9), tin=90_000),
+            ]
+        )
+        message = notify.insight_week(self.con, now=NOW)
+        assert message is not None
+        self.assertEqual(message.meta["tpl"]["p"]["dir"], "down")
+        self.assertIn("fewer tokens", message.body)
+
+    def test_a_steady_week_is_reported_as_flat(self):
+        self.seed(
+            [
+                make(external_id="a", started=NOW - timedelta(days=1), tin=50_000),
+                make(external_id="b", started=NOW - timedelta(days=9), tin=50_000),
+            ]
+        )
+        message = notify.insight_week(self.con, now=NOW)
+        assert message is not None
+        self.assertEqual(message.meta["tpl"]["p"]["dir"], "flat")
+
+    def test_no_prior_week_means_no_comparison(self):
+        self.seed([make(started=NOW - timedelta(days=1), tin=50_000)])
+        self.assertIsNone(notify.insight_week(self.con, now=NOW))
+
+    def test_the_peak_hour_and_weekday_are_the_busiest_local_ones(self):
+        self.seed_history()
+        message = notify.insight_peak(self.con, now=NOW)
+        assert message is not None
+        params = message.meta["tpl"]["p"]
+        # Every session started three hours before NOW, so one local hour wins.
+        started = int((NOW - timedelta(hours=3)).timestamp())
+        self.assertEqual(params["hour"], _local(started).hour)
+        self.assertIn(notify.WEEKDAYS[params["weekday"]], message.body)
+        self.assertIn(f"{params['hour']:02d}:00", message.body)
+
+    def test_the_focus_insight_names_the_top_project_and_its_share(self):
+        self.seed_history()
+        message = notify.insight_focus(self.con, now=NOW)
+        assert message is not None
+        params = message.meta["tpl"]["p"]
+        self.assertEqual(params["project"], "alpha")
+        self.assertGreater(params["pct"], 50)
+        self.assertIn("alpha", message.body)
+
+    def test_the_rhythm_share_matches_the_ledger(self):
+        self.seed_history()
+        message = notify.insight_rhythm(self.con, now=NOW)
+        assert message is not None
+        start, end = notify.day_range(notify.INSIGHT_WINDOW_DAYS, now=NOW)
+        shape = ledger.session_shape(self.con, start_day=start, end_day=end)
+        self.assertEqual(
+            message.meta["tpl"]["p"]["pct"], round(100 * shape["work_hours_share"])
+        )
+
+    def test_an_insight_is_a_cold_template_note(self):
+        self.seed_history()
+        message = notify.insight_cache(self.con, now=NOW)
+        assert message is not None
+        self.assertEqual(message.kind, notify.INFORMATIVE)
+        self.assertEqual(message.meta["tier"], notify.COLD)
+        self.assertEqual(message.meta["source"], notify.SOURCE_TEMPLATE)
+        self.assertEqual(message.meta["asOf"], int(NOW.timestamp()))
+        self.assertEqual(message.meta["tpl"]["id"], "insight.cache")
+        self.assertTrue(message.meta["fingerprint"])
+
+    def test_an_insights_key_carries_the_day(self):
+        self.seed_history()
+        today = notify.insight_cache(self.con, now=NOW)
+        tomorrow = notify.insight_cache(self.con, now=NOW + timedelta(days=1))
+        assert today and tomorrow
+        self.assertEqual(today.key, "insight:cache:2026-10-06")
+        self.assertNotEqual(today.key, tomorrow.key)
+
+
+class InsightRotationTest(InsightData):
+    def play(self, when: datetime) -> notify.Message:
+        message = notify.next_insight(self.con, now=when)
+        assert message is not None
+        ledger.store_message(
+            self.con,
+            kind=message.kind,
+            key=message.key,
+            body=message.body,
+            meta=message.meta,
+            at=when,
+        )
+        return message
+
+    def test_none_repeats_before_the_rest_have_had_a_turn(self):
+        self.seed_history()
+        seen = []
+        for day in range(len(notify.INSIGHT_IDS)):
+            seen.append(self.play(NOW + timedelta(days=day)).meta["insight"])
+        self.assertEqual(sorted(seen), sorted(notify.INSIGHT_IDS))
+        self.assertEqual(len(set(seen)), len(notify.INSIGHT_IDS))
+
+    def test_after_a_full_round_the_oldest_goes_again(self):
+        self.seed_history()
+        first_round = [
+            self.play(NOW + timedelta(days=d)).meta["insight"]
+            for d in range(len(notify.INSIGHT_IDS))
+        ]
+        again = self.play(NOW + timedelta(days=len(notify.INSIGHT_IDS)))
+        self.assertEqual(again.meta["insight"], first_round[0])
+
+    def test_an_insight_that_never_spoke_goes_before_one_that_did(self):
+        self.seed_history()
+        ledger.store_message(
+            self.con, kind=notify.INFORMATIVE, key="insight:cache:2026-10-05",
+            body="x", at=NOW,
+        )
+        message = notify.next_insight(self.con, now=NOW)
+        assert message is not None
+        self.assertNotEqual(message.meta["insight"], "cache")
+
+
+class ColdNoteTest(InsightData):
+    def test_a_cold_open_produces_an_insight(self):
+        self.seed_history()
+        message = notify.cold_note(self.con, now=NOW)
+        assert message is not None
+        self.assertEqual(message.meta["tier"], notify.COLD)
+
+    def test_an_unread_insight_means_no_second_one(self):
+        self.seed_history()
+        first = notify.cold_note(self.con, now=NOW)
+        assert first is not None
+        ledger.store_message(
+            self.con, kind=first.kind, key=first.key, body=first.body,
+            meta=first.meta, at=NOW,
+        )
+        self.assertIsNone(notify.cold_note(self.con, now=NOW + timedelta(hours=1)))
+
+    def test_a_read_insight_makes_room_for_the_next(self):
+        self.seed_history()
+        first = notify.cold_note(self.con, now=NOW)
+        assert first is not None
+        mid = ledger.store_message(
+            self.con, kind=first.kind, key=first.key, body=first.body,
+            meta=first.meta, at=NOW,
+        )
+        ledger.mark_message_seen(self.con, mid)
+        second = notify.cold_note(self.con, now=NOW + timedelta(hours=1))
+        assert second is not None
+        self.assertNotEqual(second.meta["insight"], first.meta["insight"])
+
+    def test_an_expired_unread_insight_does_not_block_a_new_one(self):
+        self.seed_history()
+        first = notify.cold_note(self.con, now=NOW)
+        assert first is not None
+        ledger.store_message(
+            self.con, kind=first.kind, key=first.key, body=first.body,
+            meta=first.meta, at=NOW,
+        )
+        later = NOW + timedelta(hours=30)
+        self.assertIsNotNone(notify.cold_note(self.con, now=later))
+
+    def test_an_acknowledged_insight_does_not_hide_its_return(self):
+        self.seed_history()
+        key_day1 = notify.insight_cache(self.con, now=NOW)
+        key_day2 = notify.insight_cache(self.con, now=NOW + timedelta(days=1))
+        assert key_day1 and key_day2
+        mid = ledger.store_message(
+            self.con, kind=key_day1.kind, key=key_day1.key, body="x",
+            meta=key_day1.meta, at=NOW,
+        )
+        ledger.mark_message_seen(self.con, mid)
+        ledger.store_message(
+            self.con, kind=key_day2.kind, key=key_day2.key, body="y",
+            meta=key_day2.meta, at=NOW + timedelta(days=1),
+        )
+        pending = ledger.pending_messages(self.con)
+        self.assertEqual([r["key"] for r in pending], [key_day2.key])
+
+    def test_a_cold_insight_can_be_the_billboard(self):
+        self.seed_history()
+        message = notify.cold_note(self.con, now=NOW)
+        assert message is not None
+        ledger.store_message(
+            self.con, kind=message.kind, key=message.key, body=message.body,
+            meta=message.meta, at=NOW,
+        )
+        shown = notify.choose_billboard(ledger.pending_messages(self.con), now=NOW)
+        assert shown is not None
+        self.assertEqual(shown["tier"], notify.COLD)
+        self.assertEqual(shown["template"]["id"], f"insight.{message.meta['insight']}")
+
+
+class LedgerHelpersTest(NotifyCase):
+    def test_last_generated_at_looks_across_days_by_prefix(self):
+        ledger.store_message(self.con, kind="informative", key="insight:cache:2026-10-01", body="a", at=NOW - timedelta(days=5))
+        ledger.store_message(self.con, kind="informative", key="insight:cache:2026-10-04", body="b", at=NOW - timedelta(days=2))
+        ledger.store_message(self.con, kind="informative", key="insight:week:2026-10-05", body="c", at=NOW - timedelta(days=1))
+        got = ledger.last_generated_at(self.con, kind="informative", key_prefix="insight:cache:")
+        self.assertEqual(got, int((NOW - timedelta(days=2)).timestamp()))
+        self.assertIsNone(
+            ledger.last_generated_at(self.con, kind="informative", key_prefix="insight:focus:")
+        )
+
+    def test_a_prefix_with_sql_wildcards_matches_only_itself(self):
+        ledger.store_message(self.con, kind="informative", key="insight:a_b:1", body="a", at=NOW)
+        self.assertIsNone(
+            ledger.last_generated_at(self.con, kind="informative", key_prefix="insight:a%")
+        )
+
+    def test_weekday_counts_are_local_and_monday_first(self):
+        self.seed([make(external_id=f"s{i}", started=NOW - timedelta(days=i)) for i in range(3)])
+        start, end = notify.day_range(30, now=NOW)
+        counts = ledger.weekday_counts(self.con, start_day=start, end_day=end)
+        self.assertEqual(len(counts), 7)
+        self.assertEqual(sum(counts), 3)
+        self.assertEqual(counts[_local(int(NOW.timestamp())).weekday()], 1)

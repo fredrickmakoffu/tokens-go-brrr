@@ -882,6 +882,29 @@ function templateText(template) {
                 });
             return text;
         }
+        case "insight.cache":
+            return tr(p.high ? "tpl.insight.cache.high" : "tpl.insight.cache.low", {
+                pct: p.pct,
+                days: p.days,
+            });
+        case "insight.week":
+            return tr(`tpl.insight.week.${["up", "down"].includes(p.dir) ? p.dir : "flat"}`, {
+                pct: p.pct,
+                limit: p.limit,
+            });
+        case "insight.peak":
+            return tr("tpl.insight.peak", {
+                hour: `${String(p.hour).padStart(2, "0")}:00`,
+                day: tr(`tpl.insight.day.${p.weekday}`),
+            });
+        case "insight.focus":
+            return tr("tpl.insight.focus", {
+                project: p.project,
+                pct: p.pct,
+                days: p.days,
+            });
+        case "insight.rhythm":
+            return tr("tpl.insight.rhythm", { pct: p.pct });
         case "fun.cache":
             return tr("tpl.fun.cache", { pct: p.pct, tokens: formatTokens(p.tokens) });
         case "fun.streak":

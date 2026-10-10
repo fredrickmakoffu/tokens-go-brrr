@@ -457,3 +457,145 @@ class DaemonBillboardTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DaemonColdNoteTest(unittest.TestCase):
+    """The daemon decides when an open is cold and makes the note off-loop."""
+
+    def setUp(self) -> None:
+        self._dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._dir.cleanup)
+        self.con = ledger.connect(Path(self._dir.name) / "usage.db")
+        self.addCleanup(self.con.close)
+
+    def daemon(self, **config_values):
+        from cursor_spend_monitor.daemon import UsageDaemon
+
+        stub = mock.Mock()
+        stub.config = MonitorConfig(**config_values)
+        stub.ledger.connection = self.con
+        stub._last_open = None
+        stub._cold_running = False
+        stub.poll = mock.Mock(return_value=False)
+        stub._wanted = mock.Mock(return_value=True)
+        for name in ("panel_opened", "_start_cold_note", "_cold_worker"):
+            setattr(stub, name, types.MethodType(getattr(UsageDaemon, name), stub))
+        # `_start_cold_note` is the unit under test in some cases and a spy in
+        # others; keep a handle on the real one.
+        stub.real_start = stub._start_cold_note
+        return stub
+
+    def opened(self, stub, at: float) -> None:
+        with mock.patch("cursor_spend_monitor.daemon.time.monotonic", return_value=at):
+            stub._start_cold_note = mock.Mock()
+            stub.panel_opened()
+
+    def test_the_first_open_is_cold(self):
+        stub = self.daemon()
+        self.opened(stub, 1000.0)
+        stub._start_cold_note.assert_called_once()
+
+    def test_a_quick_reopen_is_not_cold(self):
+        stub = self.daemon()
+        self.opened(stub, 1000.0)
+        stub._start_cold_note.reset_mock()
+        self.opened(stub, 1000.0 + 600)
+        stub._start_cold_note.assert_not_called()
+
+    def test_an_open_after_a_long_absence_is_cold_again(self):
+        stub = self.daemon()
+        self.opened(stub, 1000.0)
+        self.opened(stub, 1000.0 + 5 * 3600)
+        stub._start_cold_note.assert_called_once()
+
+    def test_the_threshold_comes_from_the_config(self):
+        stub = self.daemon(live_cold_hours=1)
+        self.opened(stub, 1000.0)
+        self.opened(stub, 1000.0 + 2 * 3600)
+        stub._start_cold_note.assert_called_once()
+
+    def test_live_notes_off_never_makes_a_cold_note(self):
+        stub = self.daemon(live_notes=False)
+        self.opened(stub, 1000.0)
+        stub._start_cold_note.assert_not_called()
+
+    def test_every_open_still_refreshes(self):
+        stub = self.daemon(live_notes=False)
+        self.opened(stub, 1000.0)
+        stub.poll.assert_called_once()
+
+    def test_no_thread_starts_while_one_is_running(self):
+        stub = self.daemon()
+        stub._cold_running = True
+        with mock.patch("cursor_spend_monitor.daemon.threading.Thread") as thread:
+            stub.real_start()
+        thread.assert_not_called()
+
+    def test_no_thread_starts_when_informative_notes_are_unwanted(self):
+        stub = self.daemon()
+        stub._wanted.return_value = False
+        with mock.patch("cursor_spend_monitor.daemon.threading.Thread") as thread:
+            stub.real_start()
+        thread.assert_not_called()
+
+    def test_a_thread_starts_otherwise(self):
+        stub = self.daemon()
+        with mock.patch("cursor_spend_monitor.daemon.threading.Thread") as thread:
+            stub.real_start()
+        thread.return_value.start.assert_called_once()
+        self.assertTrue(stub._cold_running)
+
+    def run_worker(self, stub):
+        stub.ledger.worker.return_value.__enter__ = mock.Mock(return_value=self.con)
+        stub.ledger.worker.return_value.__exit__ = mock.Mock(return_value=False)
+        stub._cold_running = True
+        with mock.patch("cursor_spend_monitor.daemon.GLib") as glib:
+            stub._cold_worker()
+        return glib
+
+    def seed(self):
+        rows = [
+            ledger.SessionRow(
+                provider="claude", source="local-transcript", external_id=f"s{i}",
+                model="m", project="alpha",
+                started_at=int(datetime.now(timezone.utc).timestamp()) - i * 86400,
+                ended_at=int(datetime.now(timezone.utc).timestamp()) - i * 86400 + 60,
+                duration_s=60, tokens_input=60_000, tokens_cache_read=60_000,
+            )
+            for i in range(4)
+        ]
+        ledger.upsert_sessions(self.con, rows)
+        ledger.fold_all(self.con)
+
+    def test_the_worker_stores_an_insight_and_asks_for_a_publish(self):
+        self.seed()
+        stub = self.daemon()
+        glib = self.run_worker(stub)
+        stored = ledger.pending_messages(self.con)
+        self.assertEqual(len(stored), 1)
+        self.assertTrue(stored[0]["key"].startswith("insight:"))
+        glib.idle_add.assert_called_once_with(stub._publish_cold)
+        self.assertFalse(stub._cold_running)
+
+    def test_the_worker_does_not_publish_when_there_is_nothing_to_say(self):
+        stub = self.daemon()
+        glib = self.run_worker(stub)
+        self.assertEqual(ledger.pending_messages(self.con), [])
+        glib.idle_add.assert_not_called()
+        self.assertFalse(stub._cold_running)
+
+    def test_the_worker_hands_the_flag_back_when_the_ledger_is_gone(self):
+        stub = self.daemon()
+        stub.ledger.worker.return_value.__enter__ = mock.Mock(return_value=None)
+        stub.ledger.worker.return_value.__exit__ = mock.Mock(return_value=False)
+        stub._cold_running = True
+        with mock.patch("cursor_spend_monitor.daemon.GLib"):
+            stub._cold_worker()
+        self.assertFalse(stub._cold_running)
+
+
+class LiveConfigTest(unittest.TestCase):
+    def test_defaults(self):
+        config = MonitorConfig()
+        self.assertTrue(config.live_notes)
+        self.assertEqual(config.live_cold_hours, 4.0)
