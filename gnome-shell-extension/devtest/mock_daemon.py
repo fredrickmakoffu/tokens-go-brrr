@@ -19,6 +19,7 @@ tools = [
                 "label": "Monthly limit",
                 "value": 74,
                 "resets": "Resets in 12 days",
+                "elapsed": 60,
                 "kind": "monthly",
             },
             {
@@ -26,25 +27,26 @@ tools = [
                 "label": "Other models",
                 "value": 31,
                 "resets": "Resets in 12 days",
+                "elapsed": 60,
                 "kind": "other",
             },
         ],
         "instances": {
             "active": 2,
             "suspended": 1,
-            "projects": ["maarifa-project", "optimus"],
+            "projects": ["web-app", "api-server"],
             "suspendedProjects": ["cursor-folder"],
             "sessions": [
                 {
-                    "project": "maarifa-project",
-                    "directory": "/home/u/maarifa-project",
+                    "project": "web-app",
+                    "directory": "/home/u/web-app",
                     "paused": False,
                     "kind": "agent",
                     "tty": "pts/2",
                 },
                 {
-                    "project": "optimus",
-                    "directory": "/home/u/optimus",
+                    "project": "api-server",
+                    "directory": "/home/u/api-server",
                     "paused": False,
                     "kind": "agent",
                     "tty": "pts/3",
@@ -72,6 +74,7 @@ tools = [
                 "label": "5-hour limit",
                 "value": 42,
                 "resets": "Resets in 2h 15m",
+                "elapsed": 55,
                 "kind": "rolling",
             },
             {
@@ -79,6 +82,7 @@ tools = [
                 "label": "Weekly",
                 "value": 81,
                 "resets": "Resets in 4 days",
+                "elapsed": 43,
                 "kind": "weekly",
             },
         ],
@@ -96,6 +100,7 @@ tools = [
                 "label": "Rolling limit",
                 "value": 15,
                 "resets": "Resets in 4h 50m",
+                "elapsed": 3,
                 "kind": "rolling",
             },
             {
@@ -103,6 +108,7 @@ tools = [
                 "label": "Weekly",
                 "value": 33,
                 "resets": "Resets in 6 days",
+                "elapsed": 71,
                 "kind": "weekly",
             },
             {
@@ -110,6 +116,7 @@ tools = [
                 "label": "Monthly",
                 "value": 23,
                 "resets": "Resets in 20 days",
+                "elapsed": 33,
                 "kind": "monthly",
             },
         ],
@@ -139,6 +146,7 @@ tools = [
                 "label": "Rolling limit",
                 "value": 15,
                 "resets": "Resets in 4h 50m",
+                "elapsed": 3,
                 "kind": "rolling",
             },
             {
@@ -146,6 +154,7 @@ tools = [
                 "label": "Weekly",
                 "value": 33,
                 "resets": "Resets in 6 days",
+                "elapsed": 71,
                 "kind": "weekly",
             },
             {
@@ -153,18 +162,19 @@ tools = [
                 "label": "Monthly",
                 "value": 23,
                 "resets": "Resets in 20 days",
+                "elapsed": 33,
                 "kind": "monthly",
             },
         ],
         "instances": {
             "active": 2,
             "suspended": 0,
-            "projects": ["optimus", "sundeskv2"],
+            "projects": ["api-server", "mobile-app"],
             "suspendedProjects": [],
             "sessions": [
                 {
-                    "project": "optimus",
-                    "directory": "/home/u/optimus",
+                    "project": "api-server",
+                    "directory": "/home/u/api-server",
                     "paused": False,
                     "kind": "session",
                     "tty": "pts/5",
@@ -177,8 +187,8 @@ tools = [
                     },
                 },
                 {
-                    "project": "sundeskv2",
-                    "directory": "/home/u/sundeskv2",
+                    "project": "mobile-app",
+                    "directory": "/home/u/mobile-app",
                     "paused": False,
                     "kind": "session",
                     "tty": "pts/6",
@@ -258,6 +268,7 @@ def state():
         "tools": tools,
         "billboard": BILLBOARDS[_shown] if _shown < len(BILLBOARDS) else None,
         "latestMessage": BILLBOARDS[-1],
+        "recentMessages": list(reversed(BILLBOARDS)),
     }
 
 
