@@ -199,6 +199,13 @@ the usual case: the list is already up from last time.
 
 ## Surface and font
 
+> **Superseded by the AI Usage design system.** The popover now follows the
+> blueprint look: square corners, 1px hairlines (`#4b4b4e`), graphite surface
+> `#2b2b2d`, snow text `#f5f5f8`, a single steel accent `#94bce3`, a 4px meter
+> track, and the design's signal hues for status (amber `#f0ba59`, red `#fd7562`).
+> Width is 380px. The gunmetal reasoning below is kept as history; the palette
+> values in it no longer apply.
+
 The popover is gunmetal — `#24282f` with `#474a50` edges — rather than the
 mockup's near-black. Two things about it, and the second is why it is not slate.
 
@@ -221,10 +228,19 @@ the 3:1 bar for UI components applies instead.
 The top bar keeps neutral colours. It sits on GNOME's panel, which is not our
 surface, so tinting its text to match a menu that is not open would be wrong.
 
-The popover sets no `font-family`. The mockup asked for Inter, which is not
-installed on a default Fedora or Ubuntu, so for the life of the project the menu
-quietly rendered in Noto Sans while the shell, the top bar and every other
-extension used Adwaita Sans. Inheriting is both more honest and more consistent.
+The popover is set in **Barlow**, with **Barlow Condensed** for titles, kickers,
+tags, figures and buttons, as the AI Usage design system specifies. Neither ships
+with Fedora or Ubuntu, so the extension bundles the TTFs in `fonts/` (SIL Open
+Font License, `fonts/OFL.txt`) and `install.sh` (or `install-fonts.sh` on its own) copies them to
+`~/.local/share/fonts/ai-usage/` and refreshes the font cache. A shell extension
+cannot register fonts itself — St resolves `font-family` through fontconfig — so
+installing the extension by hand means copying `fonts/*.ttf` there too. Without
+them fontconfig falls back to the shell's sans and nothing breaks; the popover
+just loses the design's typography. The top bar keeps the shell font: it sits on
+GNOME's panel, which is not our surface.
+
+The devtest scripts link `fonts/` into the throwaway shell's `$XDG_DATA_HOME`, so
+screenshots there show Barlow without touching your real font directory.
 
 Numbers carry `font-feature-settings: "tnum"`. Proportional digits change width
 as they change value, so a meter ticking 9% to 10% nudged the text beside it, and
@@ -232,7 +248,8 @@ in the top bar shifted every chip along the row.
 
 ## Type scale
 
-The popover sets no base `font-size`. The mockup pinned 13px and every child
+The popover sets no base `font-size`. (Barlow is set in the design's px, but the
+sizes here stay `em` so the menu still follows `text-scaling-factor`.) The mockup pinned 13px and every child
 below it in half-point steps, which is the whole story in a browser and the wrong
 one here: it overrides the font the user picked and freezes the menu against
 `text-scaling-factor`, so the popover stays put while every other menu on the

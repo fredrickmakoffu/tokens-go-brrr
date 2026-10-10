@@ -20,6 +20,9 @@ rm -rf "$EXT_DST"
 mkdir -p "$(dirname "$EXT_DST")"
 cp -r "$EXT_SRC" "$EXT_DST"
 
+echo "==> Installing Barlow fonts (the design system's typeface)..."
+"$ROOT/install-fonts.sh"
+
 echo "==> Installing systemd user service..."
 mkdir -p "$HOME/.config/systemd/user"
 cp "$SERVICE_SRC" "$SERVICE_DST"
