@@ -1,8 +1,8 @@
 # Live notes and the LLM call log — design
 
 **Status:** in progress — step 1 (rolling windows, provenance, tier expiry) and
-step 2 (the LLM call log) and step 3 (the cold tier and insight pool) are built;
-steps 4–5 are not.
+step 2 (the LLM call log) and step 3 (the cold tier and insight pool) and step 4 (the warm tier, with
+template wording) are built; step 5 is not.
 **Date:** 2026-10-10
 **Builds on:** `USAGE_ANALYTICS_AND_GUIDANCE.md` (ledger + notification engine) and
 `BILLBOARD_LANDING_PAGE.md` (the landing page).
@@ -57,6 +57,19 @@ Thresholds are config values (`live_cold_hours`, `live_warm_hours`,
 `live_hot_minutes`), not constants.
 
 ### 2.1 Warm flow on open
+
+*Built (template wording).* As implemented: `panel_opened` classifies the open,
+starts the poll first, then a worker harvests the stores if nobody has in the
+last minute (claiming the harvest on the main loop so two can never overlap),
+waits up to 4s for the poll it started, and builds the note from the ledger's
+last two hours plus the fullest rolling meter. The fingerprint is the note's
+key, so an unchanged picture is a no-op at the same cooldown that guards every
+other message. The state payload carries `live.catchingUp` and the list screen
+shows the line; a timer takes it down after 4s whatever is still running, and a
+note that lands later still arrives. Two differences from the sketch below:
+the line is shown for every warm open rather than only when a change is known
+(the change cannot be known before the refresh), and the quick-model wording is
+step 5, so a warm note is template wording with `source: template`.
 
 1. Show the best cached note now.
 2. In the background: poll meters (existing path), run an **incremental**

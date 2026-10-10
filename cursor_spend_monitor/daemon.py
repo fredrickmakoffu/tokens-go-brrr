@@ -56,6 +56,11 @@ def _now_ts() -> int:
 # more requests than the scheduled polling would.
 REFRESH_COOLDOWN_SECONDS = 60
 
+# The warm tier: how long the "catching up" line may stay up, and how soon after
+# a harvest another is not worth running.
+WARM_BUDGET_SECONDS = 4
+WARM_HARVEST_SPACING_SECONDS = 60
+
 
 class UsageDaemon:
     """Polls providers, raises alerts, and publishes state over D-Bus for the shell extension."""
@@ -77,6 +82,13 @@ class UsageDaemon:
         # and whether a cold note is already being made.
         self._last_open: float | None = None
         self._cold_running = False
+        # The warm tier: when its note was last made (monotonic), whether one is
+        # being made, whether the panel should say so, and when the ledger last
+        # finished a harvest, so an open does not re-read what was just read.
+        self._last_warm_at: float | None = None
+        self._warm_running = False
+        self._catching_up = False
+        self._last_harvest_at: float | None = None
         # The first harvest of a run may backfill (Cursor's previous cycle);
         # later ones are strictly incremental.
         self._harvest_full = True
@@ -178,12 +190,23 @@ class UsageDaemon:
         now = time.monotonic()
         idle = None if self._last_open is None else now - self._last_open
         self._last_open = now
-        if self.config.live_notes and (
-            notify_engine.tier_for(idle, cold_hours=self.config.live_cold_hours)
-            == notify_engine.COLD
-        ):
+        tier = None
+        if self.config.live_notes:
+            warm_age = None if self._last_warm_at is None else now - self._last_warm_at
+            tier = notify_engine.tier_for(
+                idle,
+                cold_hours=self.config.live_cold_hours,
+                hot_minutes=self.config.live_hot_minutes,
+                last_warm_age=warm_age,
+            )
+        # Poll first: the warm worker waits for it, so it must already be running.
+        result = self.poll(*args)
+        if tier == notify_engine.COLD:
             self._start_cold_note()
-        return self.poll(*args)
+        elif tier == notify_engine.WARM:
+            self._start_warm_note()
+        # A hot open does nothing more: the last warm note is still the answer.
+        return result
 
     def _start_cold_note(self) -> None:
         """Make a cold insight off the main loop, if the person wants one."""
@@ -219,6 +242,90 @@ class UsageDaemon:
             self._cold_running = False
         if stored:
             GLib.idle_add(self._publish_cold)
+
+    def _start_warm_note(self) -> None:
+        """Catch the note up with the last couple of hours, behind the panel.
+
+        The panel already shows the best cached note. This reads what happened
+        since, and a changed picture arrives as a new note a moment later; an
+        unchanged one makes no note at all (the key is the fingerprint). The
+        "catching up" line is shown for at most WARM_BUDGET_SECONDS, however long
+        the harvest takes.
+        """
+        if self._warm_running or self.ledger.connection is None:
+            return
+        if not self._wanted(notify_engine.INFORMATIVE):
+            return
+        now = time.monotonic()
+        self._warm_running = True
+        self._last_warm_at = now
+        # The hourly harvest may be running; if not, and nothing was read in the
+        # last minute, read the tools' stores now. Claimed on the main loop so
+        # two harvests can never overlap.
+        recent = (
+            self._last_harvest_at is not None
+            and now - self._last_harvest_at < WARM_HARVEST_SPACING_SECONDS
+        )
+        harvest_here = self.ledger.active and not self._harvesting and not recent
+        if harvest_here:
+            self._harvesting = True
+        self._catching_up = True
+        self._publish()
+        GLib.timeout_add_seconds(WARM_BUDGET_SECONDS, self._stop_catching_up)
+        threading.Thread(
+            target=self._warm_worker,
+            args=(harvest_here,),
+            name="ai-usage-warm",
+            daemon=True,
+        ).start()
+
+    def _warm_worker(self, harvest_here: bool) -> None:
+        deadline = time.monotonic() + WARM_BUDGET_SECONDS
+        stored = False
+        try:
+            with self.ledger.worker() as con:
+                if con is None:
+                    return
+                if harvest_here:
+                    try:
+                        self._run_readers(con, full=False)
+                    except Exception as exc:  # noqa: BLE001 - see _harvest_worker
+                        print(f"Warm harvest failed: {exc}", file=sys.stderr, flush=True)
+                # A poll started by this same open is the freshest meter there is.
+                while self._polling and time.monotonic() < deadline:
+                    time.sleep(0.1)
+                message = notify_engine.warm_note(con, list(self.snapshots))
+                if message is not None:
+                    stored = bool(
+                        notify_engine.keep(
+                            con,
+                            [message],
+                            cooldown_seconds=notify_engine.DEFAULT_COOLDOWN_SECONDS,
+                        )
+                    )
+        except sqlite3.Error as exc:
+            print(f"Could not build a warm note: {exc}", file=sys.stderr, flush=True)
+        finally:
+            if harvest_here:
+                self._last_harvest_at = time.monotonic()
+                self._harvesting = False
+            self._warm_running = False
+            GLib.idle_add(self._finish_warm, stored)
+
+    def _finish_warm(self, stored: bool) -> bool:
+        self._catching_up = False
+        con = self.ledger.connection
+        if con is not None and stored:
+            self._refresh_billboard(con)
+        self._publish()
+        return False
+
+    def _stop_catching_up(self) -> bool:
+        """Take the line down when the budget runs out, whatever is still running."""
+        if self._catching_up:
+            self._catching_up = False
+            self._publish()
+        return False
 
     def _publish_cold(self) -> bool:
         con = self.ledger.connection
@@ -428,6 +535,12 @@ class UsageDaemon:
         ).start()
         return True
 
+    def _run_readers(self, con: sqlite3.Connection, *, full: bool) -> None:
+        for reader in harvesters.build():
+            if not reader.available():
+                continue
+            reader.harvest(con, full=full)
+
     def _harvest_worker(self) -> None:
         try:
             # A worker thread needs its own connection: the ledger's belongs to
@@ -435,10 +548,7 @@ class UsageDaemon:
             with self.ledger.worker() as con:
                 if con is None:
                     return
-                for reader in harvesters.build():
-                    if not reader.available():
-                        continue
-                    reader.harvest(con, full=self._harvest_full)
+                self._run_readers(con, full=self._harvest_full)
                 ledger.prune(con, keep_days=self.config.ledger_days)
                 self.llm_log.prune()
             # Back to the main loop before touching D-Bus: this runs on a
@@ -449,6 +559,7 @@ class UsageDaemon:
         finally:
             self._harvest_full = False
             self._harvesting = False
+            self._last_harvest_at = time.monotonic()
 
     # -- notifications -------------------------------------------------------
 
@@ -833,6 +944,8 @@ class UsageDaemon:
             dict(self._latest_message) if self._latest_message else None
         )
         payload["recentMessages"] = [dict(m) for m in self._recent_messages]
+        # Additive, like the fields above: true while a warm note is being made.
+        payload["live"] = {"catchingUp": bool(self._catching_up)}
         return payload
 
     def _publish(self) -> None:

@@ -476,6 +476,8 @@ class DaemonColdNoteTest(unittest.TestCase):
         stub.ledger.connection = self.con
         stub._last_open = None
         stub._cold_running = False
+        stub._last_warm_at = None
+        stub._start_warm_note = mock.Mock()
         stub.poll = mock.Mock(return_value=False)
         stub._wanted = mock.Mock(return_value=True)
         for name in ("panel_opened", "_start_cold_note", "_cold_worker"):
@@ -599,3 +601,277 @@ class LiveConfigTest(unittest.TestCase):
         config = MonitorConfig()
         self.assertTrue(config.live_notes)
         self.assertEqual(config.live_cold_hours, 4.0)
+        self.assertEqual(config.live_hot_minutes, 10.0)
+
+
+class DaemonWarmNoteTest(unittest.TestCase):
+    """The warm tier: when an open is warm, and what the worker does about it."""
+
+    def setUp(self) -> None:
+        self._dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._dir.cleanup)
+        self.con = ledger.connect(Path(self._dir.name) / "usage.db")
+        self.addCleanup(self.con.close)
+
+    def daemon(self, **config_values):
+        from cursor_spend_monitor.daemon import UsageDaemon
+
+        stub = mock.Mock()
+        stub.config = MonitorConfig(**config_values)
+        stub.ledger.connection = self.con
+        stub.ledger.active = True
+        stub._last_open = None
+        stub._last_warm_at = None
+        stub._last_harvest_at = None
+        stub._cold_running = False
+        stub._warm_running = False
+        stub._catching_up = False
+        stub._harvesting = False
+        stub._polling = False
+        stub.snapshots = []
+        stub.poll = mock.Mock(return_value=False)
+        stub._wanted = mock.Mock(return_value=True)
+        stub._start_cold_note = mock.Mock()
+        for name in (
+            "panel_opened",
+            "_start_warm_note",
+            "_warm_worker",
+            "_finish_warm",
+            "_stop_catching_up",
+            "state_payload",
+        ):
+            setattr(stub, name, types.MethodType(getattr(UsageDaemon, name), stub))
+        stub.real_panel_opened = stub.panel_opened
+        stub.real_start = stub._start_warm_note
+        return stub
+
+    def open_at(self, stub, at: float) -> None:
+        stub._start_warm_note = mock.Mock()
+        with mock.patch("cursor_spend_monitor.daemon.time.monotonic", return_value=at):
+            stub.real_panel_opened()
+
+    # -- which tier an open is ----------------------------------------------
+
+    def test_an_open_inside_a_working_cycle_is_warm(self):
+        stub = self.daemon()
+        self.open_at(stub, 1000.0)  # the first open is cold
+        self.open_at(stub, 1000.0 + 1800)
+        stub._start_warm_note.assert_called_once()
+
+    def test_the_first_open_is_cold_and_makes_no_warm_note(self):
+        stub = self.daemon()
+        self.open_at(stub, 1000.0)
+        stub._start_cold_note.assert_called_once()
+        stub._start_warm_note.assert_not_called()
+
+    def test_an_open_right_after_a_warm_note_is_hot(self):
+        stub = self.daemon()
+        self.open_at(stub, 1000.0)
+        stub._last_warm_at = 1000.0 + 1700
+        self.open_at(stub, 1000.0 + 1800)  # 100s after the warm note
+        stub._start_warm_note.assert_not_called()
+
+    def test_the_hot_window_comes_from_the_config(self):
+        stub = self.daemon(live_hot_minutes=1)
+        self.open_at(stub, 1000.0)
+        stub._last_warm_at = 1000.0 + 1500
+        self.open_at(stub, 1000.0 + 1800)  # 300s, past a one-minute hot window
+        stub._start_warm_note.assert_called_once()
+
+    def test_live_notes_off_makes_no_warm_note(self):
+        stub = self.daemon(live_notes=False)
+        self.open_at(stub, 1000.0)
+        self.open_at(stub, 1000.0 + 1800)
+        stub._start_warm_note.assert_not_called()
+
+    def test_the_poll_starts_before_the_warm_note_waits_on_it(self):
+        stub = self.daemon()
+        order = []
+        stub.poll = mock.Mock(side_effect=lambda *a: order.append("poll") or False)
+        self.open_at(stub, 1000.0)
+        stub._start_warm_note = mock.Mock(side_effect=lambda: order.append("warm"))
+        with mock.patch(
+            "cursor_spend_monitor.daemon.time.monotonic", return_value=1000.0 + 1800
+        ):
+            stub.real_panel_opened()
+        self.assertEqual(order[-2:], ["poll", "warm"])
+
+    # -- starting one ---------------------------------------------------------
+
+    def start(self, stub):
+        with (
+            mock.patch("cursor_spend_monitor.daemon.threading.Thread") as thread,
+            mock.patch("cursor_spend_monitor.daemon.GLib") as glib,
+        ):
+            stub.real_start()
+        return thread, glib
+
+    def test_starting_publishes_the_catching_up_line_and_spawns_a_worker(self):
+        stub = self.daemon()
+        thread, glib = self.start(stub)
+        self.assertTrue(stub._catching_up)
+        self.assertTrue(stub._warm_running)
+        stub._publish.assert_called_once()
+        thread.return_value.start.assert_called_once()
+        glib.timeout_add_seconds.assert_called_once()
+        self.assertEqual(thread.call_args.kwargs["args"], (True,))
+
+    def test_it_claims_the_harvest_so_two_cannot_overlap(self):
+        stub = self.daemon()
+        self.start(stub)
+        self.assertTrue(stub._harvesting)
+
+    def test_it_does_not_harvest_while_one_is_already_running(self):
+        stub = self.daemon()
+        stub._harvesting = True
+        thread, _ = self.start(stub)
+        self.assertEqual(thread.call_args.kwargs["args"], (False,))
+
+    def test_it_does_not_re_read_what_was_read_a_moment_ago(self):
+        stub = self.daemon()
+        with mock.patch(
+            "cursor_spend_monitor.daemon.time.monotonic", return_value=500.0
+        ):
+            stub._last_harvest_at = 480.0
+            thread, _ = self.start(stub)
+        self.assertEqual(thread.call_args.kwargs["args"], (False,))
+
+    def test_nothing_starts_while_one_is_running(self):
+        stub = self.daemon()
+        stub._warm_running = True
+        thread, _ = self.start(stub)
+        thread.assert_not_called()
+        self.assertFalse(stub._catching_up)
+
+    def test_nothing_starts_without_a_ledger(self):
+        stub = self.daemon()
+        stub.ledger.connection = None
+        thread, _ = self.start(stub)
+        thread.assert_not_called()
+
+    def test_nothing_starts_when_informative_notes_are_unwanted(self):
+        stub = self.daemon()
+        stub._wanted.return_value = False
+        thread, _ = self.start(stub)
+        thread.assert_not_called()
+
+    # -- the worker -----------------------------------------------------------
+
+    def seed(self):
+        now = int(datetime.now(timezone.utc).timestamp())
+        ledger.upsert_sessions(
+            self.con,
+            [
+                ledger.SessionRow(
+                    provider="claude", source="local-transcript", external_id="w1",
+                    model="m", project="alpha", started_at=now - 1800,
+                    ended_at=now - 1200, duration_s=600, tokens_input=50_000,
+                )
+            ],
+        )
+        ledger.fold_all(self.con)
+
+    def run_worker(self, stub, harvest_here=False):
+        stub.ledger.worker.return_value.__enter__ = mock.Mock(return_value=self.con)
+        stub.ledger.worker.return_value.__exit__ = mock.Mock(return_value=False)
+        stub._warm_running = True
+        stub._catching_up = True
+        stub._run_readers = mock.Mock()
+        with mock.patch("cursor_spend_monitor.daemon.GLib") as glib:
+            stub._warm_worker(harvest_here)
+        return glib
+
+    def test_the_worker_stores_a_warm_note_and_finishes(self):
+        self.seed()
+        stub = self.daemon()
+        glib = self.run_worker(stub)
+        (row,) = ledger.pending_messages(self.con)
+        self.assertTrue(row["key"].startswith("warm:"))
+        glib.idle_add.assert_called_once_with(stub._finish_warm, True)
+        self.assertFalse(stub._warm_running)
+
+    def test_the_worker_reads_the_stores_only_when_it_claimed_the_harvest(self):
+        stub = self.daemon()
+        self.run_worker(stub, harvest_here=False)
+        stub._run_readers.assert_not_called()
+        stub2 = self.daemon()
+        stub2._harvesting = True
+        self.run_worker(stub2, harvest_here=True)
+        stub2._run_readers.assert_called_once()
+        self.assertEqual(stub2._run_readers.call_args.kwargs, {"full": False})
+        self.assertFalse(stub2._harvesting)
+        self.assertIsNotNone(stub2._last_harvest_at)
+
+    def test_a_failing_reader_does_not_stop_the_note(self):
+        self.seed()
+        stub = self.daemon()
+        stub.ledger.worker.return_value.__enter__ = mock.Mock(return_value=self.con)
+        stub.ledger.worker.return_value.__exit__ = mock.Mock(return_value=False)
+        stub._run_readers = mock.Mock(side_effect=RuntimeError("bad file"))
+        stub._harvesting = True
+        with mock.patch("cursor_spend_monitor.daemon.GLib"):
+            stub._warm_worker(True)
+        self.assertEqual(len(ledger.pending_messages(self.con)), 1)
+        self.assertFalse(stub._harvesting)
+
+    def test_an_unchanged_picture_makes_no_second_note(self):
+        self.seed()
+        stub = self.daemon()
+        self.run_worker(stub)
+        glib = self.run_worker(stub)
+        self.assertEqual(len(ledger.pending_messages(self.con)), 1)
+        glib.idle_add.assert_called_once_with(stub._finish_warm, False)
+
+    def test_nothing_to_say_still_takes_the_line_down(self):
+        stub = self.daemon()
+        glib = self.run_worker(stub)
+        self.assertEqual(ledger.pending_messages(self.con), [])
+        glib.idle_add.assert_called_once_with(stub._finish_warm, False)
+        self.assertFalse(stub._warm_running)
+
+    def test_the_worker_waits_for_a_poll_it_started(self):
+        stub = self.daemon()
+        stub._polling = True
+
+        def finish(_seconds):
+            stub._polling = False
+
+        with mock.patch("cursor_spend_monitor.daemon.time.sleep", side_effect=finish) as sleep:
+            self.run_worker(stub)
+        sleep.assert_called_once()
+
+    def test_finishing_takes_the_line_down_and_publishes(self):
+        stub = self.daemon()
+        stub._catching_up = True
+        stub._finish_warm(False)
+        self.assertFalse(stub._catching_up)
+        stub._publish.assert_called_once()
+
+    def test_finishing_with_a_new_note_refreshes_the_billboard(self):
+        stub = self.daemon()
+        stub._finish_warm(True)
+        stub._refresh_billboard.assert_called_once_with(self.con)
+
+    def test_the_budget_takes_the_line_down_if_the_work_is_still_going(self):
+        stub = self.daemon()
+        stub._catching_up = True
+        self.assertFalse(stub._stop_catching_up())
+        self.assertFalse(stub._catching_up)
+        stub._publish.assert_called_once()
+
+    def test_the_budget_does_nothing_if_the_work_already_finished(self):
+        stub = self.daemon()
+        stub._catching_up = False
+        stub._stop_catching_up()
+        stub._publish.assert_not_called()
+
+    def test_the_state_says_when_it_is_catching_up(self):
+        stub = self.daemon()
+        stub.last_fetch = None
+        stub.last_error = None
+        stub._billboard = None
+        stub._latest_message = None
+        stub._recent_messages = []
+        self.assertEqual(stub.state_payload()["live"], {"catchingUp": False})
+        stub._catching_up = True
+        self.assertEqual(stub.state_payload()["live"], {"catchingUp": True})

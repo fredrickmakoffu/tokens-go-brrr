@@ -369,10 +369,21 @@ where your tokens go, your weekday rhythm. They rotate so none repeats before
 the rest have had a turn, never call a model, and wait on the landing page
 instead of popping a desktop notification.
 
+**Warm notes.** Open the panel again inside a working cycle and the daemon
+catches the note up with the last couple of hours: it reads the tools' stores
+once more, waits for the fresh meters, and -- only if the picture changed --
+adds a note like "Last 2h: 3 sessions, 480K tokens, mostly alpha. Claude Code
+5-hour limit is at 42%." A short "Catching up…" line shows while it works (never
+more than four seconds), then goes. Reopening within `live_hot_minutes` of the
+last one changes nothing; warm notes stop being shown two hours after the
+figures they describe were read. Wording is a template, translated like the
+rest.
+
 ```jsonc
 {
   "live_notes": true,        // false = scheduled digests only
-  "live_cold_hours": 4       // idle hours before an open counts as cold
+  "live_cold_hours": 4,      // idle hours before an open counts as cold
+  "live_hot_minutes": 10     // a warm note this recent is simply served again
 }
 ```
 

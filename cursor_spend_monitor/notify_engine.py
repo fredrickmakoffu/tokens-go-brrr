@@ -746,17 +746,26 @@ def scheduled_messages(
 # -- tiers and the cold insight pool ----------------------------------------
 
 
-def tier_for(idle_seconds: float | None, *, cold_hours: float = 4.0) -> str:
+def tier_for(
+    idle_seconds: float | None,
+    *,
+    cold_hours: float = 4.0,
+    hot_minutes: float = 10.0,
+    last_warm_age: float | None = None,
+) -> str:
     """Which temperature an open of the popover is.
 
     `idle_seconds` is the time since the popover was last opened, or None when
     it never has been in this daemon's life. A first open and a long absence are
     both cold: what the person needs is the shape of their usage, not the last
-    hour of it. Anything shorter is inside a working cycle and therefore not
-    cold; the warm and hot tiers that refine it arrive with the live flow.
+    hour of it. Inside a working cycle an open is warm, and hot when a warm note
+    was made `hot_minutes` ago or less -- the figures cannot have moved enough to
+    be worth another look, so the last warm note is served as it is.
     """
     if idle_seconds is None or idle_seconds >= max(0.0, cold_hours) * 3600:
         return COLD
+    if last_warm_age is not None and 0 <= last_warm_age < max(0.0, hot_minutes) * 60:
+        return HOT
     return WARM
 
 
@@ -998,6 +1007,146 @@ def cold_note(
     if has_pending_insight(ledger.pending_messages(con), now=now):
         return None
     return next_insight(con, now=now)
+
+
+# -- the warm note ----------------------------------------------------------
+
+# A warm note describes the last couple of hours. Its token count is bucketed
+# when fingerprinted so a few hundred tokens of drift is not "something new".
+WARM_WINDOW_HOURS = 2
+WARM_TOKEN_BUCKET = 10_000
+WARM_KEY_PREFIX = "warm:"
+
+
+def tightest_short_meter(snapshots: list[Any]) -> dict[str, Any] | None:
+    """The fullest rolling-window meter among providers that own one.
+
+    The 5-hour kind of limit is the one that moves within a working session, so
+    it is the meter a note about "now" can honestly mention. Borrowed meters are
+    skipped: they are another account's number shown on a harness.
+    """
+    best: dict[str, Any] | None = None
+    for snap in snapshots:
+        if snap.status != "ok" or snap.borrowed_from is not None:
+            continue
+        for meter in snap.metrics:
+            if meter.kind != "rolling":
+                continue
+            if best is None or meter.percent > best["raw"]:
+                best = {
+                    "raw": meter.percent,
+                    "providerId": snap.provider_id,
+                    "provider": snap.display_name,
+                    "key": meter.key,
+                    "label": meter.label,
+                    "kind": meter.kind,
+                }
+    if best is None:
+        return None
+    best["pct"] = _pct(best.pop("raw"))
+    return best
+
+
+def warm_facts(
+    con: sqlite3.Connection,
+    snapshots: list[Any],
+    *,
+    hours: int = WARM_WINDOW_HOURS,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Every figure a warm note may use: the recent window and the live meter."""
+    since, until = rolling_range(hours, now=now)
+    totals = ledger.rolling_totals(con, since=since, until=until)
+    projects = ledger.rolling_period_totals(
+        con, since=since, until=until, group_by="project", limit=1
+    )
+    top = projects[0] if projects and projects[0]["project"] else None
+    return {
+        "hours": hours,
+        "sessions": _as_int(totals["sessions"]),
+        "tokens": _as_int(totals["tokens"]),
+        "project": top["project"] if top else None,
+        "meter": tightest_short_meter(snapshots),
+    }
+
+
+def warm_fingerprint(facts: dict[str, Any]) -> str:
+    """The figures a warm note was built from, bucketed to what is noticeable."""
+    meter = facts["meter"]
+    return fingerprint_of(
+        facts["sessions"],
+        facts["tokens"] // WARM_TOKEN_BUCKET,
+        facts["project"],
+        [meter["providerId"], meter["key"], meter["pct"]] if meter else None,
+    )
+
+
+def render_warm(facts: dict[str, Any]) -> str:
+    """The warm note's English wording, which is also the fallback text."""
+    hours = facts["hours"]
+    if facts["sessions"]:
+        body = (
+            f"Last {hours}h: {facts['sessions']} sessions, "
+            f"{ledger.format_tokens(facts['tokens'])} tokens"
+        )
+        if facts["project"]:
+            body += f", mostly {facts['project']}"
+        body += "."
+    else:
+        body = f"No sessions in the last {hours}h."
+    meter = facts["meter"]
+    if meter:
+        body += f" {meter['provider']} {meter['label']} is at {meter['pct']}%."
+    return body
+
+
+def warm_note(
+    con: sqlite3.Connection,
+    snapshots: list[Any],
+    *,
+    now: datetime | None = None,
+) -> Message | None:
+    """A note about the last couple of hours, from the freshest figures there are.
+
+    Template wording only; nothing here reaches a model. None when there is
+    neither recent activity nor a meter to speak of.
+    """
+    facts = warm_facts(con, snapshots, now=now)
+    if not facts["sessions"] and not facts["meter"]:
+        return None
+    fingerprint = warm_fingerprint(facts)
+    meter = facts["meter"]
+    return Message(
+        kind=INFORMATIVE,
+        key=f"{WARM_KEY_PREFIX}{fingerprint}",
+        body=render_warm(facts),
+        provider=meter["providerId"] if meter else "",
+        meta={
+            "period": "warm",
+            "tpl": _tpl(
+                "warm",
+                hours=facts["hours"],
+                sessions=facts["sessions"],
+                tokens=facts["tokens"],
+                project=facts["project"],
+                meter=(
+                    {
+                        "provider": meter["provider"],
+                        "label": meter["label"],
+                        "kind": meter["kind"],
+                        "pct": meter["pct"],
+                    }
+                    if meter
+                    else None
+                ),
+            ),
+            **provenance(
+                tier=WARM,
+                as_of=_epoch(now),
+                fingerprint=fingerprint,
+            ),
+        },
+    )
 
 
 # -- events ------------------------------------------------------------------
