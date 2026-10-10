@@ -20,6 +20,7 @@ function TopBar({ b, onToggle, open }) {
       <button onClick={onToggle} title={t("bar.usage")} style={{ display: "flex", border: 0, padding: 0, background: open ? "color-mix(in srgb, var(--color-neutral-100) 14%, transparent)" : "transparent", cursor: "pointer" }} className={b.brrr ? "tgb-shake" : ""}>
         <ExtPanelIndicator variant={urgent ? "quiet" : "tightest"} urgent={urgent} name={t("bar.name")} value={b.limited ? t("bar.out") : b.eta ? "~" + fmtDur(b.eta) : b.pct + "%"} dot={b.status === "warn"} />
       </button>
+      <LangSwitch bar />
       <ExtIcon name="wifi" size={15} /><ExtIcon name="battery" size={15} />
     </div>
   );
@@ -70,13 +71,13 @@ const galleryItems = () => [
   { value: "guide", label: t("gal.guide"), nav: { screen: "guide" }, cap: t("gal.guide.cap") },
 ];
 
-function LangSwitch() {
+function LangSwitch({ bar }) {
   const cur = I18N.locale();
   return (
-    <span role="group" aria-label={t("lang.label")} style={{ display: "flex", gap: 12 }}>
+    <span role="group" aria-label={t("lang.label")} style={{ display: "flex", gap: bar ? 8 : 12, fontSize: bar ? 13 : "inherit", fontWeight: bar ? 600 : "inherit" }}>
       {Object.entries(I18N.LOCALES).map(([code, l]) => (
         <button key={code} lang={code} onClick={() => I18N.setLocale(code)} aria-pressed={cur === code} title={l.label}
-          style={{ border: 0, background: "transparent", padding: 0, cursor: "pointer", font: "inherit", textTransform: "uppercase", letterSpacing: "0.08em", color: cur === code ? "var(--color-text)" : "var(--muted)", textDecoration: cur === code ? "underline" : "none", textUnderlineOffset: 4 }}>{l.short}</button>
+          style={{ border: 0, background: "transparent", padding: 0, cursor: "pointer", font: "inherit", textTransform: "uppercase", letterSpacing: "0.08em", color: bar ? "inherit" : cur === code ? "var(--color-text)" : "var(--muted)", opacity: bar && cur !== code ? 0.55 : 1, textDecoration: cur === code ? "underline" : "none", textUnderlineOffset: 4 }}>{l.short}</button>
       ))}
     </span>
   );
