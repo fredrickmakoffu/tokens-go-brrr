@@ -1,13 +1,14 @@
 # Handover — popover redesign, site copy, website i18n, light and dark
 
-**State:** shipped and merged. `main` @ `bd64556`, version **0.6.2** (no release cut
-for any of this yet). PRs [#25](https://github.com/fredrickmakoffu/cursor-spend-monitor/pull/25),
+**State:** #25–#31 shipped and merged; **#33 (extension i18n) and #34 (rename) are open**,
+#34 stacked on #33. `main` @ `440c2b3`, version **0.6.2** (no release cut for any of this
+yet). PRs [#25](https://github.com/fredrickmakoffu/cursor-spend-monitor/pull/25),
 [#26](https://github.com/fredrickmakoffu/cursor-spend-monitor/pull/26),
 [#27](https://github.com/fredrickmakoffu/cursor-spend-monitor/pull/27),
 [#29](https://github.com/fredrickmakoffu/cursor-spend-monitor/pull/29),
 [#30](https://github.com/fredrickmakoffu/cursor-spend-monitor/pull/30). **416 tests pass.**
 
-**Left:** extension i18n, then the rename (below). Nothing half-done sits on a branch.
+**Left:** merge #33 then #34, then the logo.
 
 ---
 
@@ -20,6 +21,9 @@ for any of this yet). PRs [#25](https://github.com/fredrickmakoffu/cursor-spend-
 | #27 | Website i18n: **en, fr, pt-BR**. Switcher in the top bar and footer | `site/i18n.js` |
 | #29 | Website light and dark. Follows the system until the first click; the toggle is two-state and saved on click | `site/theme.js`, `site/styles.css` |
 | #30 | Extension light theme, following GNOME's `color-scheme` | `stylesheet.css`, `extension.js`, `scripts/gen_light_css.py` |
+
+| #33 | Extension i18n (en, fr, pt-BR). The daemon now sends numbers and template ids instead of English sentences | `i18n.js`, `locales.js`, `notify_engine.py`, `providers/base.py` |
+| #34 | Display name "AI usage" → `tokens-go-brrr` (lowercase, hyphenated) | popover, notifications, README, site mock |
 
 ## 2. How each piece works
 
@@ -92,15 +96,43 @@ next release. New files in `site/` are picked up by the `cp site/*`.
   headless Brave, not clicked through in a window. The modal in light mode especially.
 - The 46 unticked boxes in `design/UI_TEST_GUIDE.md` are still a person's job.
 
-## 6. What is next
+## 6. Extension i18n and the rename (#33, #34)
 
-1. **Extension i18n**, same three languages as the website. The daemon currently sends
-   English sentences (`resets`, `eta`, insight titles/bodies); decision already made:
-   **send data, format in the UI**, so the daemon payload changes. The extension
-   follows the system locale, not a switcher.
-2. **Rename "AI usage" → `tokens-go-brrr`** (lowercase, hyphenated, to match the
-   website's branding). Display strings only; the UUID, D-Bus names and package names
-   stay, since changing them breaks installs and upgrades.
-3. The extension stays normally cased (no lowercase style). The website's lowercase is
-   unchanged.
-4. After that: the logo.
+**Data, not sentences.** Each meter carries `resetsSeconds` (and already had
+`etaSeconds`); each message the engine wrote carries `template: {id, params}` in the
+payload, taken from `meta.tpl` (`notify_engine._tpl`). The English `text` is unchanged
+and is what the CLI prints and a model rewrites. `_template_of` drops the template when
+`meta.composed_by` is set: a model-reworded message is its own prose, so it shows as
+written, in English. Template ids: `digest`, `fun.cache`, `fun.streak`, `fun.longest`,
+`share`, `actionable`. Adding one means: set `tpl` in the builder, add `tpl.*` keys to
+all three catalogs, add a `case` in `templateText` (`extension.js`).
+
+**Catalogs.** `locales.js` (en/fr/pt-BR) + `i18n.js` (`tr`, plurals, `duration`,
+`formatTokens`, `metricLabel`). Locale from GLib's language names; `AI_USAGE_LANG`
+forces one. A plain JS catalog, not gettext, so the packages need no `msgfmt` step;
+the keys are stable if gettext is wanted for extensions.gnome.org later.
+`tests/test_locales.py` (needs `node`) checks keys and `{placeholders}` for the
+extension **and** the website catalogs.
+
+**Fallbacks that stay English:** model-reworded messages; diagnostics with a detail
+("HTTP 429 from Claude usage ..."); only a fixed list of daemon error strings is
+translated (`err.*` keys); and an older daemon with no `resetsSeconds` shows its own
+English label. Dates come from GLib's `LC_TIME`, so they follow the session, not
+`AI_USAGE_LANG` (headless screenshots show English dates).
+
+**Behaviour change:** Copy on a share line copies the sentence without the old
+`SHARE:` marker when it renders from the template.
+
+**Rename.** Display strings only. Deliberately unchanged: the extension UUID
+`ai-usage@fredrickmakoffu.github.io`, D-Bus names (`...AIUsage`), `ai-usage-*` CSS
+classes, `[ai-usage]` log prefixes, the config dir and package names
+(`cursor-spend-monitor`) — changing them breaks installs and upgrades. The "AI Usage
+design system" keeps its name. The popover kicker keeps the brand's own case instead of
+uppercasing it.
+
+## 7. What is next
+
+1. Merge #33, then #34 (retargets to `main` by itself).
+2. Native-speaker review of the French and Portuguese, on the site and in the extension.
+3. A real-session check: French session against the real daemon.
+4. The logo.

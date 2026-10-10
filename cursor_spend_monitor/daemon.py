@@ -145,7 +145,7 @@ class UsageDaemon:
 
     def _name_lost(self) -> None:
         print(
-            "Another AI usage daemon owns the bus name; exiting.",
+            "Another tokens-go-brrr daemon owns the bus name; exiting.",
             file=sys.stderr,
             flush=True,
         )
@@ -527,7 +527,7 @@ class UsageDaemon:
             if not self._wanted(message.kind):
                 continue
             if not actionable:
-                send("AI usage", message.body)
+                send("tokens-go-brrr", message.body)
                 continue
             # Urgency comes from the recorded percentage rather than from
             # reading the sentence back, which would make prose load-bearing.
@@ -535,7 +535,7 @@ class UsageDaemon:
             spent = (
                 isinstance(percent, (int, float)) and percent >= notify_engine.SPENT_AT
             )
-            send("AI usage", message.body, urgency="critical" if spent else "normal")
+            send("tokens-go-brrr", message.body, urgency="critical" if spent else "normal")
         con = self.ledger.connection
         if messages and con is not None:
             self._refresh_billboard(con)

@@ -1,4 +1,4 @@
-// AI Usage — GNOME Shell indicator matching design/menu-bar-concept.html.
+// tokens-go-brrr — GNOME Shell indicator matching design/menu-bar-concept.html.
 // Data comes from the cursor-spend-monitor daemon over D-Bus.
 
 import Clutter from "gi://Clutter";
@@ -1498,7 +1498,8 @@ const Indicator = GObject.registerClass(
                 top.add_child(button);
             }
             top.add_child(
-                label(kicker.toUpperCase(), "ai-usage-kicker", {
+                // The product name is a name, not a label: it keeps its own case.
+                label(kicker === tr("brand") ? kicker : kicker.toUpperCase(), "ai-usage-kicker", {
                     x_expand: true,
                     y_align: Clutter.ActorAlign.CENTER,
                 }),

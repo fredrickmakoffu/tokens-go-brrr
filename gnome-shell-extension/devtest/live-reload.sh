@@ -55,7 +55,7 @@ import json, pathlib, sys
 path, uuid, rev = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
 meta = json.loads(path.read_text())
 meta['uuid'] = uuid
-meta['name'] = f'AI Usage (live reload r{rev})'
+meta['name'] = f'tokens-go-brrr (live reload r{rev})'
 path.write_text(json.dumps(meta, indent=2) + '\n')
 PYEOF
 
