@@ -416,7 +416,7 @@ function ExtFooter({
     label: a.label,
     onClick: a.onClick
   })), showSettings && /*#__PURE__*/React.createElement("button", {
-    "aria-label": "Settings",
+    "aria-label": window.t ? window.t("ds.settings") : "Settings",
     onClick: onSettings,
     className: "ext-settings-btn"
   }, /*#__PURE__*/React.createElement(__ds_scope.ExtIcon, {
@@ -457,7 +457,7 @@ function ExtHeader({
     }
   }, typeof onBack === "function" && /*#__PURE__*/React.createElement("button", {
     onClick: onBack,
-    "aria-label": "Back",
+    "aria-label": window.t ? window.t("ds.back") : "Back",
     className: "ext-icon-btn",
     style: {
       width: 22,
@@ -877,7 +877,7 @@ function ExtSessionRow({
   }, meta)), /*#__PURE__*/React.createElement(__ds_scope.ExtButton, {
     variant: "secondary",
     size: "sm",
-    label: focused ? "Focused" : "Focus",
+    label: window.t ? window.t(focused ? "ds.focused" : "ds.focus") : (focused ? "Focused" : "Focus"),
     icon: focused ? "check" : "focus",
     onClick: onFocus
   }));

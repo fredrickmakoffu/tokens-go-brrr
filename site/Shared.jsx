@@ -9,17 +9,18 @@ const goTo = (id) => { const el = document.getElementById(id); if (el) window.sc
 
 function TopBar({ b, onToggle, open }) {
   const [clock, setClock] = React.useState(() => new Date());
-  React.useEffect(() => { const t = setInterval(() => setClock(new Date()), 15000); return () => clearInterval(t); }, []);
-  const date = clock.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + " " + clock.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  React.useEffect(() => { const id = setInterval(() => setClock(new Date()), 15000); return () => clearInterval(id); }, []);
+  const date = clock.toLocaleDateString(I18N.locale(), { month: "short", day: "numeric" }) + " " + clock.toLocaleTimeString(I18N.locale(), { hour: "2-digit", minute: "2-digit", hour12: false });
   const urgent = b.status === "crit";
   return (
     <div data-theme="light" style={{ position: "sticky", top: 0, zIndex: 50, height: 30, background: "var(--topbar-bg)", display: "flex", alignItems: "center", padding: "0 12px", gap: 14, color: "var(--color-neutral-100)", fontSize: 13 }}>
-      <span style={{ fontWeight: 600 }}>Activities</span>
+      <span style={{ fontWeight: 600 }}>{t("bar.activities")}</span>
       <span style={{ flex: 1, textAlign: "center", fontWeight: 600 }}>{date}</span>
       {b.brrr && <span className="tgb-brrr" style={{ ...HEAD, fontSize: 13, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--indicator-dot)" }}>brrr</span>}
-      <button onClick={onToggle} title="This page's usage" style={{ display: "flex", border: 0, padding: 0, background: open ? "color-mix(in srgb, var(--color-neutral-100) 14%, transparent)" : "transparent", cursor: "pointer" }} className={b.brrr ? "tgb-shake" : ""}>
-        <ExtPanelIndicator variant={urgent ? "quiet" : "tightest"} urgent={urgent} name="This page" value={b.limited ? "out" : b.eta ? "~" + fmtDur(b.eta) : b.pct + "%"} dot={b.status === "warn"} />
+      <button onClick={onToggle} title={t("bar.usage")} style={{ display: "flex", border: 0, padding: 0, background: open ? "color-mix(in srgb, var(--color-neutral-100) 14%, transparent)" : "transparent", cursor: "pointer" }} className={b.brrr ? "tgb-shake" : ""}>
+        <ExtPanelIndicator variant={urgent ? "quiet" : "tightest"} urgent={urgent} name={t("bar.name")} value={b.limited ? t("bar.out") : b.eta ? "~" + fmtDur(b.eta) : b.pct + "%"} dot={b.status === "warn"} />
       </button>
+      <LangSwitch bar />
       <ExtIcon name="wifi" size={15} /><ExtIcon name="battery" size={15} />
     </div>
   );
@@ -28,14 +29,14 @@ function TopBar({ b, onToggle, open }) {
 function PagePopover({ b, dark }) {
   return (
     <ExtPopover dark={dark} signal>
-      <ExtHeader kicker="This page" meta="5-minute window" title={b.title} sub={b.sub} />
+      <ExtHeader kicker={t("page.kicker")} meta={t("page.window")} title={b.title} sub={b.sub} />
       <ExtSection>
-        <ExtMeterRow label="Tokens go brrr" tag="tightest" value={b.pct} elapsed={b.elapsedPct} status={b.status} showPace sub={b.rate > 50 ? "Burning " + fmtTok(b.rate) + " tokens/s" : "Idle · even pace marked by the tick"} />
+        <ExtMeterRow label="Tokens go brrr" tag={t("page.tightest")} value={b.pct} elapsed={b.elapsedPct} status={b.status} showPace sub={b.rate > 50 ? t("page.burning", { rate: fmtTok(b.rate) }) : t("page.idle")} />
       </ExtSection>
-      <ExtSection label="Spent on">
+      <ExtSection label={t("page.spentOn")}>
         {b.parts.map((p) => <ExtMeterRow key={p.key} label={p.label} value={p.value} status={statusOf(p.value)} sub={p.sub} muted={p.value === 0} />)}
       </ExtSection>
-      <ExtFooter text={b.limited ? "Rate limited" : "Updated just now"} actionLabel="Reset window" onAction={b.reset} showSettings={false} />
+      <ExtFooter text={b.limited ? t("page.limited") : t("page.updated")} actionLabel={t("page.reset")} onAction={b.reset} showSettings={false} />
     </ExtPopover>
   );
 }
@@ -53,21 +54,37 @@ function SectionHead({ id, n, kicker, title, b }) {
     <div ref={ref} style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 28 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 16, borderTop: "1px solid var(--color-divider)", paddingTop: 10 }}>
         <span style={KICK}>{n + " · " + kicker}</span>
-        <span style={{ ...KICK, fontVariantNumeric: "tabular-nums" }}>{"Costs ~" + fmtTok(cost) + " to scroll"}</span>
+        <span style={{ ...KICK, fontVariantNumeric: "tabular-nums" }}>{t("sec.cost", { n: fmtTok(cost) })}</span>
       </div>
       <h2 style={{ ...HEAD, fontSize: "clamp(34px, 4.4vw, 52px)", lineHeight: 1.02, margin: 0, textWrap: "balance" }}>{title}</h2>
     </div>
   );
 }
 
-const GALLERY = [
-  { value: "landing", label: "Insight", nav: { screen: "landing", ins: "act", fromEarlier: false }, cap: "One sentence on where to spend next, only when there is something worth saying." },
-  { value: "list", label: "Agents", nav: { screen: "list" }, cap: "Every tool and its limit. The tick marks even pace: a bar past the tick is spending too fast." },
-  { value: "detail", label: "Provider", nav: { screen: "detail", prov: "claude" }, cap: "One tool's limits, when each resets, and the terminal sessions using it." },
-  { value: "sessions", label: "Sessions", nav: { screen: "sessions", prov: "cursor", filter: "active" }, cap: "Running and paused sessions. A session paused with Ctrl+Z spends nothing, so it is counted separately." },
-  { value: "guide", label: "Guide", nav: { screen: "guide" }, cap: "Healthy under 70%, caution to 89%, critical from 90%. The number is always written beside the bar." },
+const PRIVACY_KEYS = ["logins", "ext", "history", "prompts"];
+const FAQ_KEYS = ["tools", "nobar", "paused", "poll", "script", "gnome", "os"];
+const galleryItems = () => [
+  { value: "landing", label: t("gal.insight"), nav: { screen: "landing", ins: "act", fromEarlier: false }, cap: t("gal.insight.cap") },
+  { value: "list", label: t("gal.agents"), nav: { screen: "list" }, cap: t("gal.agents.cap") },
+  { value: "detail", label: t("gal.provider"), nav: { screen: "detail", prov: "claude" }, cap: t("gal.provider.cap") },
+  { value: "sessions", label: t("gal.sessions"), nav: { screen: "sessions", prov: "cursor", filter: "active" }, cap: t("gal.sessions.cap") },
+  { value: "guide", label: t("gal.guide"), nav: { screen: "guide" }, cap: t("gal.guide.cap") },
 ];
+
+function LangSwitch({ bar }) {
+  const cur = I18N.locale();
+  return (
+    <span role="group" aria-label={t("lang.label")} style={{ display: "flex", gap: bar ? 8 : 12, fontSize: bar ? 13 : "inherit", fontWeight: bar ? 600 : "inherit" }}>
+      {Object.entries(I18N.LOCALES).map(([code, l]) => (
+        <button key={code} lang={code} onClick={() => I18N.setLocale(code)} aria-pressed={cur === code} title={l.label}
+          style={{ border: 0, background: "transparent", padding: 0, cursor: "pointer", font: "inherit", textTransform: "uppercase", letterSpacing: "0.08em", color: bar ? "inherit" : cur === code ? "var(--color-text)" : "var(--muted)", opacity: bar && cur !== code ? 0.55 : 1, textDecoration: cur === code ? "underline" : "none", textUnderlineOffset: 4 }}>{l.short}</button>
+      ))}
+    </span>
+  );
+}
+
 function Gallery({ dark }) {
+  const GALLERY = galleryItems();
   const [nav, setNav] = React.useState(GALLERY[0].nav);
   const [win, setWin] = React.useState("rolling");
   const go = (patch) => setNav((n) => ({ ...n, ...patch }));
@@ -79,7 +96,7 @@ function Gallery({ dark }) {
       <div style={{ flex: "1 1 240px", minWidth: 0, display: "flex", flexDirection: "column", gap: 16 }}>
         <ExtFilterChips options={GALLERY.map((g) => ({ value: g.value, label: g.label }))} value={tab} onChange={(v) => setNav(GALLERY.find((g) => g.value === v).nav)} />
         <p style={{ margin: 0, fontSize: 16, maxWidth: 420, textWrap: "pretty" }}>{cur.cap}</p>
-        <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>This popover is live. Click around.</p>
+        <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>{t("gal.live")}</p>
       </div>
       <div style={{ flex: "0 0 auto", padding: 6 }}>
         <ExtPopover dark={dark} signal>
@@ -99,9 +116,9 @@ function Gallery({ dark }) {
 function Privacy() {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0 32px" }}>
-      {SITE.privacy.map(([t, d]) => (
-        <div key={t} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "16px 0", borderTop: "1px solid var(--color-divider)" }}>
-          <span style={{ fontSize: 15, fontWeight: 600 }}>{t}</span>
+      {PRIVACY_KEYS.map((k) => [t("privacy." + k + ".t"), t("privacy." + k + ".d")]).map(([title, d]) => (
+        <div key={title} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "16px 0", borderTop: "1px solid var(--color-divider)" }}>
+          <span style={{ fontSize: 15, fontWeight: 600 }}>{title}</span>
           <span style={{ fontSize: 14, color: "var(--muted)", textWrap: "pretty" }}>{d}</span>
         </div>
       ))}
@@ -113,11 +130,11 @@ function Faq() {
   const [open, setOpen] = React.useState(0);
   return (
     <div style={{ display: "flex", flexDirection: "column" }}>
-      {SITE.faq.map(([q, a], i) => (
+      {FAQ_KEYS.map((k, i) => [t("faq." + k + ".q"), t("faq." + k + ".a")]).map(([q, a], i) => (
         <div key={q} style={{ borderTop: "1px solid var(--color-divider)" }}>
           <button className="ext-row-hover" onClick={() => setOpen(open === i ? -1 : i)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, padding: "14px 0", border: 0, background: "transparent", color: "var(--color-text)", textAlign: "left", fontFamily: "var(--font-body)", fontSize: 16, fontWeight: 600 }}>
             <span>{q}</span>
-            <span style={{ ...HEAD, fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--muted)", flex: "none" }}>{open === i ? "Close" : "−1.2k"}</span>
+            <span style={{ ...HEAD, fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--muted)", flex: "none" }}>{open === i ? t("faq.close") : t("faq.open")}</span>
           </button>
           {open === i && <p style={{ margin: "0 0 16px", fontSize: 15, maxWidth: 620, color: "var(--muted)", textWrap: "pretty" }}>{a}</p>}
         </div>
@@ -129,8 +146,8 @@ function Faq() {
 function SiteFooter() {
   return (
     <footer style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 16, padding: "20px 0 40px", borderTop: "1px solid var(--color-divider)", fontSize: 13, color: "var(--muted)" }}>
-      <span>Tokens go brrr · a usage meter for GNOME Shell · <a href={REL_URL} target="_blank">Releases</a></span>
-      <span>Provider names and marks belong to their owners and are used only to identify each service.</span>
+      <span>{t("foot.line")}<a href={REL_URL} target="_blank">{t("foot.releases")}</a></span>
+      <span>{t("foot.marks")}</span><LangSwitch />
     </footer>
   );
 }
@@ -139,10 +156,10 @@ function LimitModal({ b, dark, onDismiss }) {
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 100, background: "color-mix(in srgb, #1d1f20 55%, transparent)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <ExtPopover dark={dark} signal>
-        <ExtHeader kicker="429 · Rate limited" meta={"Resets in " + fmtDur(b.resetIn)} title="This page is out of tokens." sub="Your real tools are probably fine. The extension can tell you which." />
+        <ExtHeader kicker={t("modal.kicker")} meta={t("modal.meta", { dur: fmtDur(b.resetIn) })} title={t("modal.title")} sub={t("modal.sub")} />
         <div style={{ display: "flex", gap: 8, padding: "16px 18px 18px" }}>
-          <ExtButton variant="primary" block label="Download the extension" onClick={() => { onDismiss(); setTimeout(() => goTo("download"), 50); }} />
-          <ExtButton variant="secondary" label="Reset" onClick={b.reset} />
+          <ExtButton variant="primary" block label={t("modal.download")} onClick={() => { onDismiss(); setTimeout(() => goTo("download"), 50); }} />
+          <ExtButton variant="secondary" label={t("modal.reset")} onClick={b.reset} />
         </div>
       </ExtPopover>
     </div>

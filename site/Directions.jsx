@@ -3,35 +3,34 @@ function Sections({ b, dark }) {
   const rel = useReleases();
   return (<>
     <section id="download" style={sec} data-screen-label="Download">
-      <SectionHead n="01" kicker="Download" title={"Get " + rel.latest.tag + " for Linux."} b={b} />
+      <SectionHead n="01" kicker={t("sec.download.kicker")} title={t("sec.download.title", { tag: rel.latest.tag })} b={b} />
       <Downloads b={b} rel={rel} />
     </section>
     <section id="screens" style={sec} data-screen-label="What it does">
-      <SectionHead n="02" kicker="What it does" title="See which limit runs out first." b={b} />
+      <SectionHead n="02" kicker={t("sec.what.kicker")} title={t("sec.what.title")} b={b} />
       <Facts />
       <Gallery dark={dark} />
     </section>
     <section id="local" style={sec} data-screen-label="Local only">
-      <SectionHead n="03" kicker="Privacy" title="It only talks to your AI providers." b={b} />
+      <SectionHead n="03" kicker={t("sec.privacy.kicker")} title={t("sec.privacy.title")} b={b} />
       <Privacy />
     </section>
     <section id="faq" style={sec} data-screen-label="FAQ">
-      <SectionHead n="04" kicker="FAQ" title="Before you install." b={b} />
+      <SectionHead n="04" kicker={t("sec.faq.kicker")} title={t("sec.faq.title")} b={b} />
       <Faq />
     </section>
     <section id="releases" style={{ ...sec, paddingBottom: 72 }} data-screen-label="Releases">
-      <SectionHead n="05" kicker="Releases" title="Every release." b={b} />
+      <SectionHead n="05" kicker={t("sec.releases.kicker")} title={t("sec.releases.title")} b={b} />
       <Releases rel={rel} b={b} />
     </section>
     <SiteFooter />
   </>);
 }
 
-const HERO_SUB = "See which of your AI coding limits runs out first, from your top bar. Works with Cursor, Claude Code, OpenCode, Pi and Codex.";
 const HeroButtons = () => (
   <div style={{ display: "flex", flexWrap: "wrap", gap: 12, padding: 6 }}>
-    <ExtButton variant="primary" label="Download for Linux" onClick={() => goTo("download")} style={{ minWidth: 200 }} />
-    <ExtButton variant="secondary" label="See how it works" onClick={() => goTo("screens")} />
+    <ExtButton variant="primary" label={t("hero.download")} onClick={() => goTo("download")} style={{ minWidth: 200 }} />
+    <ExtButton variant="secondary" label={t("hero.how")} onClick={() => goTo("screens")} />
   </div>
 );
 
@@ -44,7 +43,7 @@ function Rail({ b }) {
       <span style={{ ...lab, bottom: 12 }}>200k</span>
       <div style={{ position: "absolute", top: 40, bottom: 40, left: 26, width: 6, background: "var(--track)" }}>
         <div style={{ position: "absolute", left: 0, top: 0, width: "100%", height: b.pct + "%", background: c, transition: "height 200ms ease-out, background-color 300ms" }}></div>
-        <div title="Even pace" style={{ position: "absolute", left: -5, width: 16, height: 1, top: b.elapsedPct + "%", background: "var(--color-text)" }}></div>
+        <div title={t("rail.pace")} style={{ position: "absolute", left: -5, width: 16, height: 1, top: b.elapsedPct + "%", background: "var(--color-text)" }}></div>
         <span style={{ ...HEAD, position: "absolute", left: 14, top: "calc(" + b.pct + "% - 9px)", fontSize: 15, fontVariantNumeric: "tabular-nums", color: "var(--color-text)", transition: "top 200ms ease-out" }}>{b.pct}</span>
       </div>
     </div>
@@ -57,9 +56,9 @@ function Readout({ b }) {
   return (
     <div className="blueprint" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
       <Corners />
-      <div style={{ ...cell, borderLeft: 0 }}><span style={KICK}>Tokens spent</span><span style={{ ...big, color: stColor(b.status) }}>{fmtFull(b.tokens)}</span><span style={{ fontSize: 13, color: "var(--muted)" }}>of 200,000</span></div>
-      <div style={cell}><span style={KICK}>Burning</span><span style={big}>{b.rate > 50 ? fmtTok(b.rate) + "/s" : "0/s"}</span><span style={{ fontSize: 13, color: "var(--muted)" }}>{b.eta ? "Out in ~" + fmtDur(b.eta) : "Idle"}</span></div>
-      <div style={cell}><span style={KICK}>Window</span><span style={big}>{fmtDur(b.resetIn)}</span><span style={{ fontSize: 13, color: "var(--muted)" }}>until it resets</span></div>
+      <div style={{ ...cell, borderLeft: 0 }}><span style={KICK}>{t("readout.spent")}</span><span style={{ ...big, color: stColor(b.status) }}>{fmtFull(b.tokens)}</span><span style={{ fontSize: 13, color: "var(--muted)" }}>{t("readout.of", { max: fmtFull(LIMIT) })}</span></div>
+      <div style={cell}><span style={KICK}>{t("readout.burning")}</span><span style={big}>{b.rate > 50 ? fmtTok(b.rate) + "/s" : "0/s"}</span><span style={{ fontSize: 13, color: "var(--muted)" }}>{b.eta ? t("readout.out", { dur: fmtDur(b.eta) }) : t("readout.idle")}</span></div>
+      <div style={cell}><span style={KICK}>{t("readout.window")}</span><span style={big}>{fmtDur(b.resetIn)}</span><span style={{ fontSize: 13, color: "var(--muted)" }}>{t("readout.reset")}</span></div>
     </div>
   );
 }
@@ -75,12 +74,12 @@ function DirB({ b }) {
       <div style={{ marginLeft: 76, position: "relative", zIndex: 1 }}>
         <div style={{ maxWidth: 980, padding: "0 clamp(20px, 5vw, 64px)" }}>
           <section data-screen-label="Hero" style={{ padding: "clamp(48px, 8vw, 96px) 0 24px", display: "flex", flexDirection: "column", gap: 32 }}>
-            <span style={KICK}>For GNOME Shell on Linux</span>
+            <span style={KICK}>{t("hero.kicker")}</span>
             <h1 style={{ ...HEAD, fontSize: "clamp(80px, 14vw, 220px)", lineHeight: 0.82, margin: 0, letterSpacing: "-0.015em" }}>Tokens<br />go <span style={{ color: stColor(b.status), transition: "color 300ms" }}>brrr.</span></h1>
             <Readout b={b} />
-            <p style={{ margin: 0, fontSize: 20, lineHeight: 1.45, maxWidth: 600, textWrap: "pretty" }}>{HERO_SUB}</p>
+            <p style={{ margin: 0, fontSize: 20, lineHeight: 1.45, maxWidth: 600, textWrap: "pretty" }}>{t("hero.sub")}</p>
             <HeroButtons />
-            <p style={{ margin: 0, fontSize: 14, color: "var(--muted)", maxWidth: 600 }}>The meter on the left is this page's own. Scrolling, clicking and copying spend it.</p>
+            <p style={{ margin: 0, fontSize: 14, color: "var(--muted)", maxWidth: 600 }}>{t("hero.rail")}</p>
           </section>
           <Sections b={b} dark />
         </div>
