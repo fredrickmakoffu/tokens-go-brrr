@@ -5,6 +5,7 @@ import signal
 import sqlite3
 import sys
 import threading
+import time
 from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any
@@ -20,6 +21,7 @@ from . import (
     notify_engine,
 )
 from . import llm_composer as llm
+from . import llm_budget, llm_log
 from .config import MonitorConfig, write_state
 from .dbus_service import UsageService
 from .instances import InstanceReport, scan, signature
@@ -54,6 +56,16 @@ def _now_ts() -> int:
 # more requests than the scheduled polling would.
 REFRESH_COOLDOWN_SECONDS = 60
 
+# The warm tier: how long the "catching up" line may stay up, and how soon after
+# a harvest another is not worth running.
+WARM_BUDGET_SECONDS = 4
+WARM_HARVEST_SPACING_SECONDS = 60
+# A warm note's model call has to fit the same budget as the line that says it is
+# coming; past it the template note stands.
+WARM_LLM_TIMEOUT_SECONDS = 4
+# After a 429 a provider is left alone this long, whatever it is asked for.
+LLM_BACKOFF_SECONDS = 15 * 60
+
 
 class UsageDaemon:
     """Polls providers, raises alerts, and publishes state over D-Bus for the shell extension."""
@@ -67,7 +79,30 @@ class UsageDaemon:
         # burn-rate fit needs. They fail independently and neither stops the
         # other, or the panel.
         self.ledger = ledger.LedgerRecorder(keep_days=config.ledger_days)
+        # Every call made to a language model, one file per day, readable from
+        # the panel. Independent of the stores above and just as fail-soft.
+        self.llm_log = llm_log.LlmLog(keep_days=config.llm_log_days)
+        # Ceiling on calls made because the panel was opened, and the providers
+        # that said 429 recently (monotonic deadline per provider id).
+        self.llm_budget = llm_budget.CallBudget(
+            config.live_llm_per_hour, config.live_llm_per_day
+        )
+        self._llm_backoff: dict[str, float] = {}
+        # Meter history for the warm note, read on the main loop (the history
+        # store's connection belongs to it) and handed to the worker.
+        self._warm_samples: dict[tuple[str, str], list[tuple[float, float]]] = {}
         self._harvesting = False
+        # When the panel was last opened (monotonic seconds), for the cold tier,
+        # and whether a cold note is already being made.
+        self._last_open: float | None = None
+        self._cold_running = False
+        # The warm tier: when its note was last made (monotonic), whether one is
+        # being made, whether the panel should say so, and when the ledger last
+        # finished a harvest, so an open does not re-read what was just read.
+        self._last_warm_at: float | None = None
+        self._warm_running = False
+        self._catching_up = False
+        self._last_harvest_at: float | None = None
         # The first harvest of a run may backfill (Cursor's previous cycle);
         # later ones are strictly incremental.
         self._harvest_full = True
@@ -93,9 +128,11 @@ class UsageDaemon:
         self.service = UsageService(
             version=__version__,
             get_state=self.state_payload,
-            on_refresh=self.poll,
+            on_refresh=self.panel_opened,
             on_set_primary=self.set_primary,
             on_acknowledge=self.acknowledge,
+            on_llm_log=self.llm_log_payload,
+            on_llm_log_clear=self.llm_log_clear,
             on_quit=self.quit,
             on_name_lost=self._name_lost,
         )
@@ -156,6 +193,199 @@ class UsageDaemon:
     def _tick(self) -> bool:
         self.poll(force=True)
         return True
+
+    def panel_opened(self, *args) -> bool:
+        """The panel asked for a refresh, which it does each time it opens.
+
+        Besides refreshing, an open after a long absence (or the first since the
+        daemon started) is the moment for a cold note: a trend or insight about
+        the shape of the person's usage, made while they are not waiting for it.
+        """
+        now = time.monotonic()
+        idle = None if self._last_open is None else now - self._last_open
+        self._last_open = now
+        tier = None
+        if self.config.live_notes:
+            warm_age = None if self._last_warm_at is None else now - self._last_warm_at
+            tier = notify_engine.tier_for(
+                idle,
+                cold_hours=self.config.live_cold_hours,
+                hot_minutes=self.config.live_hot_minutes,
+                last_warm_age=warm_age,
+            )
+        # Poll first: the warm worker waits for it, so it must already be running.
+        result = self.poll(*args)
+        if tier == notify_engine.COLD:
+            self._start_cold_note()
+        elif tier == notify_engine.WARM:
+            self._start_warm_note()
+        # A hot open does nothing more: the last warm note is still the answer.
+        return result
+
+    def _start_cold_note(self) -> None:
+        """Make a cold insight off the main loop, if the person wants one."""
+        if self._cold_running or self.ledger.connection is None:
+            return
+        if not self._wanted(notify_engine.INFORMATIVE):
+            return
+        self._cold_running = True
+        threading.Thread(
+            target=self._cold_worker, name="ai-usage-cold", daemon=True
+        ).start()
+
+    def _cold_worker(self) -> None:
+        stored = False
+        try:
+            with self.ledger.worker() as con:
+                if con is None:
+                    return
+                message = notify_engine.cold_note(con)
+                if message is not None:
+                    # No model and no desktop notification: the note waits on the
+                    # landing page for the next look, which is the whole point.
+                    stored = bool(
+                        notify_engine.keep(
+                            con,
+                            [message],
+                            cooldown_seconds=notify_engine.DEFAULT_COOLDOWN_SECONDS,
+                        )
+                    )
+        except sqlite3.Error as exc:
+            print(f"Could not build a cold note: {exc}", file=sys.stderr, flush=True)
+        finally:
+            self._cold_running = False
+        if stored:
+            GLib.idle_add(self._publish_cold)
+
+    def _start_warm_note(self) -> None:
+        """Catch the note up with the last couple of hours, behind the panel.
+
+        The panel already shows the best cached note. This reads what happened
+        since, and a changed picture arrives as a new note a moment later; an
+        unchanged one makes no note at all (the key is the fingerprint). The
+        "catching up" line is shown for at most WARM_BUDGET_SECONDS, however long
+        the harvest takes.
+        """
+        if self._warm_running or self.ledger.connection is None:
+            return
+        if not self._wanted(notify_engine.INFORMATIVE):
+            return
+        now = time.monotonic()
+        self._warm_running = True
+        self._last_warm_at = now
+        # The hourly harvest may be running; if not, and nothing was read in the
+        # last minute, read the tools' stores now. Claimed on the main loop so
+        # two harvests can never overlap.
+        recent = (
+            self._last_harvest_at is not None
+            and now - self._last_harvest_at < WARM_HARVEST_SPACING_SECONDS
+        )
+        harvest_here = self.ledger.active and not self._harvesting and not recent
+        if harvest_here:
+            self._harvesting = True
+        self._catching_up = True
+        self._warm_samples = self._collect_samples()
+        self._publish()
+        GLib.timeout_add_seconds(WARM_BUDGET_SECONDS, self._stop_catching_up)
+        threading.Thread(
+            target=self._warm_worker,
+            args=(harvest_here,),
+            name="ai-usage-warm",
+            daemon=True,
+        ).start()
+
+    def _collect_samples(self) -> dict[tuple[str, str], list[tuple[float, float]]]:
+        """The meter history for each rolling meter, for the "ran elsewhere" check."""
+        found: dict[tuple[str, str], list[tuple[float, float]]] = {}
+        for snap in self.snapshots:
+            for meter in snap.metrics:
+                if meter.kind == "rolling":
+                    found[(snap.provider_id, meter.key)] = self.history.window_samples(
+                        snap.provider_id, meter.key
+                    )
+        return found
+
+    def _warm_worker(self, harvest_here: bool) -> None:
+        deadline = time.monotonic() + WARM_BUDGET_SECONDS
+        stored = False
+        try:
+            with self.ledger.worker() as con:
+                if con is None:
+                    return
+                if harvest_here:
+                    try:
+                        self._run_readers(con, full=False)
+                    except Exception as exc:  # noqa: BLE001 - see _harvest_worker
+                        print(f"Warm harvest failed: {exc}", file=sys.stderr, flush=True)
+                # A poll started by this same open is the freshest meter there is.
+                while self._polling and time.monotonic() < deadline:
+                    time.sleep(0.1)
+                message = notify_engine.warm_note(
+                    con, list(self.snapshots), samples=self._warm_samples
+                )
+                if message is not None:
+                    message = self._warm_wording(con, message)
+                    stored = bool(
+                        notify_engine.keep(
+                            con,
+                            [message],
+                            cooldown_seconds=notify_engine.DEFAULT_COOLDOWN_SECONDS,
+                        )
+                    )
+        except sqlite3.Error as exc:
+            print(f"Could not build a warm note: {exc}", file=sys.stderr, flush=True)
+        finally:
+            if harvest_here:
+                self._last_harvest_at = time.monotonic()
+                self._harvesting = False
+            self._warm_running = False
+            GLib.idle_add(self._finish_warm, stored)
+
+    def _warm_wording(self, con: sqlite3.Connection, message: Any) -> Any:
+        """The warm note in a quick model's words, when that is allowed and new.
+
+        Only a note that would actually be stored is worth a call: an unchanged
+        picture has a stored note already. The call is capped (per hour and per
+        day), skips a provider that just said 429, and has the warm budget as its
+        timeout; every refusal leaves the template, which is a complete note.
+        """
+        if not self.config.llm_notifications:
+            return message
+        if not notify_engine.due(
+            con, message, cooldown_seconds=notify_engine.DEFAULT_COOLDOWN_SECONDS
+        ):
+            return message
+        composed = self._compose(
+            con,
+            [message],
+            trigger="open",
+            origin="open",
+            timeout=WARM_LLM_TIMEOUT_SECONDS,
+            budget=self.llm_budget,
+        )
+        return composed[0]
+
+    def _finish_warm(self, stored: bool) -> bool:
+        self._catching_up = False
+        con = self.ledger.connection
+        if con is not None and stored:
+            self._refresh_billboard(con)
+        self._publish()
+        return False
+
+    def _stop_catching_up(self) -> bool:
+        """Take the line down when the budget runs out, whatever is still running."""
+        if self._catching_up:
+            self._catching_up = False
+            self._publish()
+        return False
+
+    def _publish_cold(self) -> bool:
+        con = self.ledger.connection
+        if con is not None:
+            self._refresh_billboard(con)
+            self._publish()
+        return False
 
     def poll(self, *_args, force: bool = False) -> bool:
         """Fetch every provider, unless we just did.
@@ -358,6 +588,12 @@ class UsageDaemon:
         ).start()
         return True
 
+    def _run_readers(self, con: sqlite3.Connection, *, full: bool) -> None:
+        for reader in harvesters.build():
+            if not reader.available():
+                continue
+            reader.harvest(con, full=full)
+
     def _harvest_worker(self) -> None:
         try:
             # A worker thread needs its own connection: the ledger's belongs to
@@ -365,11 +601,9 @@ class UsageDaemon:
             with self.ledger.worker() as con:
                 if con is None:
                     return
-                for reader in harvesters.build():
-                    if not reader.available():
-                        continue
-                    reader.harvest(con, full=self._harvest_full)
+                self._run_readers(con, full=self._harvest_full)
                 ledger.prune(con, keep_days=self.config.ledger_days)
+                self.llm_log.prune()
             # Back to the main loop before touching D-Bus: this runs on a
             # worker thread, and the state signal is GLib's to emit.
             GLib.idle_add(self._publish_billboard_change)
@@ -378,6 +612,7 @@ class UsageDaemon:
         finally:
             self._harvest_full = False
             self._harvesting = False
+            self._last_harvest_at = time.monotonic()
 
     # -- notifications -------------------------------------------------------
 
@@ -457,7 +692,9 @@ class UsageDaemon:
                     self._last_slot.pop(slot, None)
                     return
                 messages = self._compose(
-                    con, notify_engine.scheduled_messages(con, slot=slot)
+                    con,
+                    notify_engine.scheduled_messages(con, slot=slot),
+                    origin=f"scheduled:{slot}",
                 )
                 fresh = notify_engine.keep(
                     con,
@@ -477,35 +714,86 @@ class UsageDaemon:
         GLib.idle_add(self._deliver, fresh, False)
 
     def _compose(
-        self, con: sqlite3.Connection, messages: list[Any], *, trigger: str = ""
+        self,
+        con: sqlite3.Connection,
+        messages: list[Any],
+        *,
+        trigger: str = "",
+        origin: str = "",
+        timeout: int | None = None,
+        budget: llm_budget.CallBudget | None = None,
     ) -> list[Any]:
         """The templates, reworded by a model when one has capacity to spare.
 
         Every failure -- no generator with enough headroom, a missing
-        credential, a refusal -- leaves the template in place. The LLM is an
-        upgrade, and an upgrade that can break the notification path is not one.
+        credential, a refusal, a spent budget -- leaves the template in place.
+        The LLM is an upgrade, and an upgrade that can break the notification
+        path is not one. A `budget` is spent per call, for the callers (an open
+        of the panel) that are not bounded by a schedule.
         """
         if not (self.config.llm_notifications and messages):
             return messages
+        now = time.monotonic()
+        resting = {p for p, until in self._llm_backoff.items() if until > now}
         generator = llm.choose(
-            self.snapshots,
+            [s for s in self.snapshots if s.provider_id not in resting],
             trigger=trigger,
             floor=self.config.llm_min_headroom,
             model=self.config.llm_generator_model,
             provider=self.config.llm_generator_provider,
         )
         if generator is None:
+            # Worth a line in the log: a person wondering why nothing was
+            # reworded can see that no provider had the room.
+            self._log_skipped(origin, messages[0], "no_generator")
             return messages
+        extra = {} if timeout is None else {"timeout": timeout}
         improved: list[Any] = []
         for message in messages:
+            if budget is not None:
+                refusal = budget.refusal()
+                if refusal:
+                    self._log_skipped(origin, message, refusal)
+                    improved.append(message)
+                    continue
+                budget.spend()
             rewritten = llm.rewrite(
                 message,
                 generator=generator,
                 facts=self._facts_for(con, message),
                 max_tokens=self.config.llm_max_output_tokens,
+                recorder=self._record_llm,
+                context={"trigger": origin},
+                **extra,
             )
             improved.append(rewritten or message)
         return improved
+
+    def _log_skipped(self, origin: str, message: Any, reason: str) -> None:
+        self.llm_log.record(
+            {
+                "trigger": origin,
+                "outcome": llm_log.SKIPPED,
+                "reason": reason,
+                "message_kind": message.kind,
+                "message_key": message.key,
+            }
+        )
+
+    def _record_llm(self, entry: dict[str, Any]) -> None:
+        """Log a call, and leave a provider alone for a while after a 429."""
+        self.llm_log.record(entry)
+        if entry.get("outcome") == llm_log.RATE_LIMITED and entry.get("provider"):
+            self._llm_backoff[str(entry["provider"])] = (
+                time.monotonic() + LLM_BACKOFF_SECONDS
+            )
+
+    def llm_log_payload(self, day: str = "") -> dict[str, Any]:
+        """One day of the LLM log for the Settings screen; newest day if none."""
+        return self.llm_log.payload(day or None)
+
+    def llm_log_clear(self) -> None:
+        self.llm_log.clear()
 
     def _facts_for(self, con: sqlite3.Connection, message: Any) -> dict[str, Any]:
         """The ranked providers the model may choose the featured AI from.
@@ -514,12 +802,18 @@ class UsageDaemon:
         message keeps its own period's numbers, which are already in the draft.
         """
         start, end = notify_engine.day_range(30)
-        return {
-            "period": str((message.meta or {}).get("period") or "last 30 days"),
+        meta = message.meta or {}
+        facts: dict[str, Any] = {
+            "period": str(meta.get("period") or "last 30 days"),
             "ranked": ledger.period_totals(
                 con, start_day=start, end_day=end, group_by="provider"
             ),
         }
+        if meta.get("period") == "warm":
+            # The fresh figures behind a warm note, so a rewording can use them
+            # and the rule "only the numbers in FACTS" has something to cite.
+            facts["now"] = dict((meta.get("tpl") or {}).get("p") or {})
+        return facts
 
     def _deliver(self, messages: list[Any], actionable: bool) -> bool:
         """Send what was composed and republish, back on the main loop."""
@@ -563,7 +857,9 @@ class UsageDaemon:
                     self.snapshots, wind_down_hours=self.config.wind_down_hours
                 )
                 trigger = messages[0].meta.get("trigger", "") if messages else ""
-                messages = self._compose(con, messages, trigger=trigger)
+                messages = self._compose(
+                    con, messages, trigger=trigger, origin=f"event:{trigger or 'meter'}"
+                )
                 fresh = notify_engine.keep(
                     con,
                     messages,
@@ -733,6 +1029,8 @@ class UsageDaemon:
             dict(self._latest_message) if self._latest_message else None
         )
         payload["recentMessages"] = [dict(m) for m in self._recent_messages]
+        # Additive, like the fields above: true while a warm note is being made.
+        payload["live"] = {"catchingUp": bool(self._catching_up)}
         return payload
 
     def _publish(self) -> None:

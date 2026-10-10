@@ -357,9 +357,55 @@ unparseable reply.
 {
   "llm_notifications": true,
   "llm_generator_model": "",   // "" = the cheap default for each provider
-  "llm_min_headroom": 15       // never spend capacity to warn about capacity
+  "llm_min_headroom": 15,      // never spend capacity to warn about capacity
+  "llm_log_days": 30           // days of the per-call LLM log to keep; 0 = off
 }
 ```
+
+**Cold notes.** The first time you open the panel after a few hours away (or
+after the daemon starts), it makes one trend or insight note from your own
+ledger -- cache-read share, week over week, your peak hour and busiest day,
+where your tokens go, your weekday rhythm. They rotate so none repeats before
+the rest have had a turn, never call a model, and wait on the landing page
+instead of popping a desktop notification.
+
+**Warm notes.** Open the panel again inside a working cycle and the daemon
+catches the note up with the last couple of hours: it reads the tools' stores
+once more, waits for the fresh meters, and -- only if the picture changed --
+adds a note like "Last 2h: 3 sessions, 480K tokens, mostly alpha. Claude Code
+5-hour limit is at 42%." A short "Catching up…" line shows while it works (never
+more than four seconds), then goes. Reopening within `live_hot_minutes` of the
+last one changes nothing; warm notes stop being shown two hours after the
+figures they describe were read. Wording is a template, translated like the
+rest.
+
+**Quick-model wording and "ran elsewhere".** With `llm_notifications` on, a
+warm note that is actually new is reworded by the cheapest model on whichever
+provider has the most room (Haiku for Claude), within the same four seconds; any
+refusal, timeout or spent cap leaves the template, which is a complete note.
+Open-time calls are capped (`live_llm_per_hour`, `live_llm_per_day`), a provider
+that answers 429 is left alone for 15 minutes, and every call -- and every skip,
+with its reason -- is in the LLM log. When a rolling meter has climbed over the
+last two hours while this machine recorded no session for that provider and none
+is running, the note says so first: that usage came from a phone, the web or
+another computer, which the local transcripts can never show.
+
+```jsonc
+{
+  "live_notes": true,        // false = scheduled digests only
+  "live_cold_hours": 4,      // idle hours before an open counts as cold
+  "live_hot_minutes": 10,    // a warm note this recent is simply served again
+  "live_llm_per_hour": 4,    // model calls made because the panel opened
+  "live_llm_per_day": 24     // 0 = never reword on open
+}
+```
+
+**Every model call is logged**, so you can see exactly what was sent and what
+came back. One file per local day under
+`~/.local/share/cursor-spend-monitor/llm-calls/YYYY-MM-DD.jsonl`, one JSON
+object per line: time, why it ran, provider and model, outcome (including
+refusals and skips), latency, tokens, the prompt and the reply. Open it in the
+panel from **About → LLM activity**. Credentials are never written.
 
 The reply names the AI it is about (`FEATURED:`), chosen from ranked provider
 facts sent in the prompt; the daemon validates it and falls back to the derived

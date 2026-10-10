@@ -25,6 +25,7 @@ The rules this module will not break:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from dataclasses import dataclass, field
@@ -52,6 +53,24 @@ DEFAULT_COOLDOWN_SECONDS = 6 * 3600
 # outranks a curiosity, and a stale digest stops nagging on its own.
 PRIORITY = {ACTIONABLE: 3, INFORMATIVE: 2, SHAREABLE: 1, FUN: 0}
 FRESHNESS_HOURS = {ACTIONABLE: 6, INFORMATIVE: 24, SHAREABLE: 24, FUN: 12}
+
+# The temperatures of the live-notes design (design/LIVE_NOTES_AND_LLM_LOG.md).
+# A cold note is a precomputed trend or digest, a warm one describes the last
+# hour or two and a hot one is the warm note served again. Only the cold tier
+# exists so far; the others are named here so provenance and expiry already
+# speak the vocabulary the later steps will fill in.
+COLD = "cold"
+WARM = "warm"
+HOT = "hot"
+
+# How long a note stays worth showing, counted from when its facts were read
+# (`as_of`), not from when it was stored. A warm note describes "now", so it
+# stops being true quickly; a cold one is a trend and ages slowly.
+TIER_FRESHNESS_HOURS = {COLD: 24, WARM: 2, HOT: 2}
+
+# Where a note's wording came from.
+SOURCE_TEMPLATE = "template"
+SOURCE_LLM = "llm"
 
 # A cheaper provider is only the story if it is doing real work. Without a
 # floor, one cheap session would outrank a month of heavy use.
@@ -137,10 +156,53 @@ def _featured_meta(featured: dict[str, str] | None, **extra: Any) -> dict[str, A
     return meta
 
 
-def expires_at_for(kind: str, created_at: int) -> int | None:
-    """When a message stops being worth interrupting for, or None."""
+def expires_at_for(
+    kind: str,
+    created_at: int,
+    *,
+    tier: str | None = None,
+    as_of: int | None = None,
+) -> int | None:
+    """When a message stops being worth interrupting for, or None.
+
+    The kind sets one limit (an actionable warning goes stale in hours, a digest
+    in a day). A message that knows its tier has a second, counted from when its
+    facts were read rather than when it was stored, and the sooner of the two
+    wins: a warm note about "the last hour" must not outlive the hour because it
+    happens to be an informative one.
+    """
+    limits: list[int] = []
     hours = FRESHNESS_HOURS.get(kind)
-    return created_at + _as_int(hours * 3600) if hours else None
+    if hours:
+        limits.append(created_at + _as_int(hours * 3600))
+    tier_hours = TIER_FRESHNESS_HOURS.get(tier or "")
+    if tier_hours:
+        limits.append((as_of if as_of else created_at) + _as_int(tier_hours * 3600))
+    return min(limits) if limits else None
+
+
+def provenance(
+    *, tier: str, as_of: int, fingerprint: str = "", source: str = SOURCE_TEMPLATE
+) -> dict[str, Any]:
+    """Where a note came from, for its `meta`.
+
+    `as_of` is when the facts were read, so the panel can say "as of 12 min ago"
+    and expiry can count from it. `fingerprint` identifies those facts: a later
+    refresh that hashes to the same value has nothing new to say. `source` is
+    whether a template or a model wrote the wording.
+    """
+    return {
+        "tier": tier,
+        "asOf": as_of,
+        "fingerprint": fingerprint,
+        "source": source,
+    }
+
+
+def fingerprint_of(*parts: Any) -> str:
+    """A short, stable hash of the figures a note was built from."""
+    encoded = json.dumps(parts, sort_keys=True, default=str, separators=(",", ":"))
+    return hashlib.sha1(encoded.encode("utf-8")).hexdigest()[:12]
 
 
 @dataclass
@@ -183,6 +245,16 @@ def month_range(now: datetime | None = None, *, offset: int = 0) -> tuple[str, s
     if offset == 0:
         last = today
     return first.isoformat(), last.isoformat()
+
+
+def rolling_range(hours: int, *, now: datetime | None = None) -> tuple[int, int]:
+    """The last `hours` hours as inclusive epoch seconds, ending now.
+
+    The calendar-day ranges above answer "this UTC day"; this answers "the last
+    24 hours", which is what a person means by recent.
+    """
+    until = _epoch(now)
+    return until - max(1, _as_int(hours)) * 3600, until
 
 
 # -- facts -------------------------------------------------------------------
@@ -229,6 +301,68 @@ def digest_facts(
         "shape": ledger.session_shape(con, start_day=start, end_day=end),
         "estimate_note": _estimate_note(con, start, end),
     }
+
+
+def rolling_facts(
+    con: sqlite3.Connection,
+    *,
+    hours: int,
+    period: str,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """`digest_facts` for the last `hours` hours instead of a day range.
+
+    The totals, ranking, top project and model, cache share and estimate note
+    come from the rolling window. Records, shape and streaks are about days, so
+    they keep reading the UTC days that cover the window.
+    """
+    since, until = rolling_range(hours, now=now)
+    start, end = day_range(hours // 24 + 2, now=now)
+    facts = digest_facts(con, start=start, end=end, period=period, now=now)
+    totals = ledger.rolling_totals(con, since=since, until=until)
+
+    def top(group_by: str) -> dict | None:
+        rows = ledger.rolling_period_totals(
+            con, since=since, until=until, group_by=group_by, limit=1
+        )
+        return rows[0] if rows else None
+
+    facts.update(
+        {
+            "since": since,
+            "until": until,
+            "totals": totals,
+            "ranked": ledger.rolling_period_totals(
+                con, since=since, until=until, group_by="provider"
+            ),
+            "top_project": top("project"),
+            "top_model": top("model"),
+            "cache": {
+                "tokens": totals["tokens"],
+                "cache_read_tokens": totals["cache_read_tokens"],
+                "share": (
+                    totals["cache_read_tokens"] / totals["tokens"]
+                    if totals["tokens"]
+                    else 0.0
+                ),
+            },
+            "estimate_note": (
+                " (includes an estimate)" if totals["estimated_sessions"] else ""
+            ),
+        }
+    )
+    return facts
+
+
+def digest_fingerprint(facts: dict[str, Any]) -> str:
+    """The figures a digest was built from, hashed."""
+    totals = facts["totals"]
+    return fingerprint_of(
+        facts["period"],
+        totals["sessions"],
+        totals["tokens"],
+        [(r["provider"], r["tokens"]) for r in facts["ranked"]],
+    )
 
 
 # -- wording -----------------------------------------------------------------
@@ -443,14 +577,19 @@ def render_actionable(
 def daily_digest(
     con: sqlite3.Connection, *, now: datetime | None = None
 ) -> Message | None:
-    start, end = day_range(1, now=now)
-    facts = digest_facts(con, start=start, end=end, period="today", now=now)
+    """The last 24 hours, not the calendar day.
+
+    A calendar day made work done at 17:00 "yesterday" by the next morning, so
+    the note read as old news; a rolling window keeps it true until it ages out.
+    """
+    facts = rolling_facts(con, hours=24, period="last 24 hours", now=now)
     if not facts["totals"]["sessions"]:
         return None
+    today = day_range(1, now=now)[0]
     return Message(
         kind=INFORMATIVE,
-        key=f"daily:{start}",
-        body=render_digest(facts, headline="Today"),
+        key=f"daily:{today}",
+        body=render_digest(facts, headline="Last 24h"),
         provider=featured["providerId"]
         if (featured := featured_provider(facts))
         else "",
@@ -458,6 +597,11 @@ def daily_digest(
             featured,
             period="daily",
             tpl=_tpl("digest", **digest_params(facts, period="daily")),
+            **provenance(
+                tier=COLD,
+                as_of=_epoch(now),
+                fingerprint=digest_fingerprint(facts),
+            ),
         ),
     )
 
@@ -480,6 +624,11 @@ def weekly_digest(
             featured,
             period="weekly",
             tpl=_tpl("digest", **digest_params(facts, period="weekly")),
+            **provenance(
+                tier=COLD,
+                as_of=_epoch(now),
+                fingerprint=digest_fingerprint(facts),
+            ),
         ),
     )
 
@@ -518,6 +667,11 @@ def monthly_digest(
                 **digest_params(
                     facts, period="monthly", vs_last_month=vs_last_month
                 ),
+            ),
+            **provenance(
+                tier=COLD,
+                as_of=_epoch(now),
+                fingerprint=digest_fingerprint(facts),
             ),
         ),
     )
@@ -587,6 +741,516 @@ def scheduled_messages(
         if message is not None:
             messages.append(message)
     return messages
+
+
+# -- tiers and the cold insight pool ----------------------------------------
+
+
+def tier_for(
+    idle_seconds: float | None,
+    *,
+    cold_hours: float = 4.0,
+    hot_minutes: float = 10.0,
+    last_warm_age: float | None = None,
+) -> str:
+    """Which temperature an open of the popover is.
+
+    `idle_seconds` is the time since the popover was last opened, or None when
+    it never has been in this daemon's life. A first open and a long absence are
+    both cold: what the person needs is the shape of their usage, not the last
+    hour of it. Inside a working cycle an open is warm, and hot when a warm note
+    was made `hot_minutes` ago or less -- the figures cannot have moved enough to
+    be worth another look, so the last warm note is served as it is.
+    """
+    if idle_seconds is None or idle_seconds >= max(0.0, cold_hours) * 3600:
+        return COLD
+    if last_warm_age is not None and 0 <= last_warm_age < max(0.0, hot_minutes) * 60:
+        return HOT
+    return WARM
+
+
+# The insights, in the order ties are broken. Each looks at a trailing window
+# and returns nothing when there is too little data for the claim to mean
+# anything: a percentage of three sessions is not an insight.
+INSIGHT_IDS = ("cache", "week", "peak", "focus", "rhythm")
+INSIGHT_WINDOW_DAYS = 30
+MIN_INSIGHT_TOKENS = 100_000
+MIN_INSIGHT_SESSIONS = 10
+HIGH_CACHE_SHARE = 60
+FLAT_WEEK_PCT = 5
+
+WEEKDAYS = (
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+)
+
+
+def _insight(
+    insight_id: str,
+    body: str,
+    params: dict[str, Any],
+    *,
+    now: datetime | None,
+    fingerprint_parts: Any,
+) -> Message:
+    """A cold-tier message for one insight, keyed by the day it was made."""
+    today = day_range(1, now=now)[0]
+    return Message(
+        kind=INFORMATIVE,
+        key=f"{INSIGHT_KEY_PREFIX}{insight_id}:{today}",
+        body=body,
+        meta={
+            "period": "insight",
+            "insight": insight_id,
+            "tpl": _tpl(f"insight.{insight_id}", **params),
+            **provenance(
+                tier=COLD,
+                as_of=_epoch(now),
+                fingerprint=fingerprint_of(insight_id, fingerprint_parts),
+            ),
+        },
+    )
+
+
+INSIGHT_KEY_PREFIX = "insight:"
+
+
+def insight_cache(con: sqlite3.Connection, *, now: datetime | None = None) -> Message | None:
+    start, end = day_range(INSIGHT_WINDOW_DAYS, now=now)
+    cache = ledger.cache_share(con, start_day=start, end_day=end)
+    if cache["tokens"] < MIN_INSIGHT_TOKENS:
+        return None
+    pct = _pct(100 * cache["share"])
+    high = pct >= HIGH_CACHE_SHARE
+    body = (
+        f"{pct}% of your tokens in the last {INSIGHT_WINDOW_DAYS} days were cache reads."
+    )
+    if high:
+        body += (
+            " That is the cheap kind, but a long thread re-reads its whole history"
+            " every turn; a fresh session per task keeps it down."
+        )
+    else:
+        body += " Staying on one task within a session lets the cache do more of the work."
+    return _insight(
+        "cache",
+        body,
+        {"pct": pct, "high": high, "days": INSIGHT_WINDOW_DAYS},
+        now=now,
+        fingerprint_parts=[pct, high],
+    )
+
+
+def insight_week(con: sqlite3.Connection, *, now: datetime | None = None) -> Message | None:
+    start, end = day_range(7, now=now)
+    before_end = (datetime.fromisoformat(start) - timedelta(days=1)).date().isoformat()
+    before_start = (
+        datetime.fromisoformat(start) - timedelta(days=7)
+    ).date().isoformat()
+    this = ledger.totals(con, start_day=start, end_day=end)["tokens"]
+    before = ledger.totals(con, start_day=before_start, end_day=before_end)["tokens"]
+    if before < MIN_INSIGHT_TOKENS // 10 or this <= 0:
+        return None
+    change = 100 * (this - before) / before
+    pct = abs(_pct(change))
+    if pct < FLAT_WEEK_PCT:
+        direction = "flat"
+        body = (
+            f"Your last 7 days were steady: within {FLAT_WEEK_PCT}% of the 7 before."
+            " Same rhythm as last week."
+        )
+    elif change > 0:
+        direction = "up"
+        body = (
+            f"You used {pct}% more tokens in the last 7 days than in the 7 before."
+            " Worth a glance at which project drove it."
+        )
+    else:
+        direction = "down"
+        body = (
+            f"You used {pct}% fewer tokens in the last 7 days than in the 7 before."
+            " A lighter week."
+        )
+    return _insight(
+        "week",
+        body,
+        {"dir": direction, "pct": pct, "limit": FLAT_WEEK_PCT},
+        now=now,
+        fingerprint_parts=[direction, pct],
+    )
+
+
+def insight_peak(con: sqlite3.Connection, *, now: datetime | None = None) -> Message | None:
+    start, end = day_range(INSIGHT_WINDOW_DAYS, now=now)
+    shape = ledger.session_shape(con, start_day=start, end_day=end)
+    if shape["sessions"] < MIN_INSIGHT_SESSIONS:
+        return None
+    hour = max(range(24), key=lambda h: (shape["hours"][h], -h))
+    counts = ledger.weekday_counts(con, start_day=start, end_day=end)
+    weekday = max(range(7), key=lambda d: (counts[d], -d))
+    return _insight(
+        "peak",
+        f"Most of your AI work happens around {hour:02d}:00, and {WEEKDAYS[weekday]}"
+        f" is your busiest day. Plan the heavy sessions for then."
+        ,
+        {"hour": hour, "weekday": weekday},
+        now=now,
+        fingerprint_parts=[hour, weekday],
+    )
+
+
+def insight_focus(con: sqlite3.Connection, *, now: datetime | None = None) -> Message | None:
+    start, end = day_range(INSIGHT_WINDOW_DAYS, now=now)
+    total = ledger.totals(con, start_day=start, end_day=end)["tokens"]
+    top = _top(con, start, end, "project")
+    if total < MIN_INSIGHT_TOKENS or not top or not top["project"]:
+        return None
+    pct = _pct(100 * _as_float(top["tokens"]) / total)
+    return _insight(
+        "focus",
+        f"{top['project']} took {pct}% of your tokens over the last"
+        f" {INSIGHT_WINDOW_DAYS} days. That is where your usage actually goes.",
+        {"project": top["project"], "pct": pct, "days": INSIGHT_WINDOW_DAYS},
+        now=now,
+        fingerprint_parts=[top["project"], pct],
+    )
+
+
+def insight_rhythm(con: sqlite3.Connection, *, now: datetime | None = None) -> Message | None:
+    start, end = day_range(INSIGHT_WINDOW_DAYS, now=now)
+    shape = ledger.session_shape(con, start_day=start, end_day=end)
+    if shape["sessions"] < MIN_INSIGHT_SESSIONS:
+        return None
+    pct = _pct(100 * shape["work_hours_share"])
+    return _insight(
+        "rhythm",
+        f"{pct}% of your sessions run on weekdays between 08:00 and 18:00."
+        " The rest is evenings and weekends.",
+        {"pct": pct},
+        now=now,
+        fingerprint_parts=[pct],
+    )
+
+
+_INSIGHT_BUILDERS = {
+    "cache": insight_cache,
+    "week": insight_week,
+    "peak": insight_peak,
+    "focus": insight_focus,
+    "rhythm": insight_rhythm,
+}
+
+
+def insight_candidates(
+    con: sqlite3.Connection, *, now: datetime | None = None
+) -> list[Message]:
+    """Every insight there is enough data to say, in tie-break order."""
+    found: list[Message] = []
+    for insight_id in INSIGHT_IDS:
+        message = _INSIGHT_BUILDERS[insight_id](con, now=now)
+        if message is not None:
+            found.append(message)
+    return found
+
+
+def next_insight(
+    con: sqlite3.Connection, *, now: datetime | None = None
+) -> Message | None:
+    """The insight that has waited longest, so none repeats before the rest.
+
+    Rotation is read from the messages table itself: each insight's key carries
+    the day it was made, and the newest one under its prefix says when it last
+    had a turn. One that never has, goes first.
+    """
+    candidates = insight_candidates(con, now=now)
+    if not candidates:
+        return None
+
+    def last_turn(message: Message) -> int:
+        prefix = f"{INSIGHT_KEY_PREFIX}{message.meta['insight']}:"
+        stamp = ledger.last_generated_at(
+            con, kind=message.kind, key_prefix=prefix
+        )
+        return -1 if stamp is None else stamp
+
+    # sorted() is stable, so equal turns keep INSIGHT_IDS order.
+    return sorted(candidates, key=last_turn)[0]
+
+
+def has_pending_insight(
+    rows: list[dict[str, Any]], *, now: datetime | None = None
+) -> bool:
+    """Whether an unread, still-fresh insight is already waiting on the page.
+
+    A person who has not read the last one does not need another, and without
+    this every open after a long absence would pile a new one on top.
+    """
+    now_ts = _epoch(now)
+    for row in rows:
+        if not str(row.get("key") or "").startswith(INSIGHT_KEY_PREFIX):
+            continue
+        expires = _expires_of(row)
+        if expires is None or expires > now_ts:
+            return True
+    return False
+
+
+def cold_note(
+    con: sqlite3.Connection, *, now: datetime | None = None
+) -> Message | None:
+    """The note for a cold open: the next insight, unless one is waiting unread."""
+    if has_pending_insight(ledger.pending_messages(con), now=now):
+        return None
+    return next_insight(con, now=now)
+
+
+# -- the warm note ----------------------------------------------------------
+
+# A warm note describes the last couple of hours. Its token count is bucketed
+# when fingerprinted so a few hundred tokens of drift is not "something new".
+WARM_WINDOW_HOURS = 2
+WARM_TOKEN_BUCKET = 10_000
+WARM_KEY_PREFIX = "warm:"
+
+# "Ran elsewhere": a meter that rose this many points over the window while this
+# machine recorded no session for that provider. The baseline must be at least
+# this old, or two polls a minute apart would read as movement.
+ELSEWHERE_MIN_POINTS = 8
+ELSEWHERE_MIN_AGE_SECONDS = 300
+
+
+def tightest_short_meter(snapshots: list[Any]) -> dict[str, Any] | None:
+    """The fullest rolling-window meter among providers that own one.
+
+    The 5-hour kind of limit is the one that moves within a working session, so
+    it is the meter a note about "now" can honestly mention. Borrowed meters are
+    skipped: they are another account's number shown on a harness.
+    """
+    best: dict[str, Any] | None = None
+    for snap in snapshots:
+        if snap.status != "ok" or snap.borrowed_from is not None:
+            continue
+        for meter in snap.metrics:
+            if meter.kind != "rolling":
+                continue
+            if best is None or meter.percent > best["raw"]:
+                best = {
+                    "raw": meter.percent,
+                    "providerId": snap.provider_id,
+                    "provider": snap.display_name,
+                    "key": meter.key,
+                    "label": meter.label,
+                    "kind": meter.kind,
+                }
+    if best is None:
+        return None
+    best["pct"] = _pct(best.pop("raw"))
+    return best
+
+
+def find_elsewhere(
+    con: sqlite3.Connection,
+    snapshots: list[Any],
+    samples: dict[tuple[str, str], list[tuple[float, float]]],
+    *,
+    now: datetime | None = None,
+    hours: int = WARM_WINDOW_HOURS,
+) -> dict[str, Any] | None:
+    """Usage that moved a meter without leaving a trace on this machine.
+
+    The transcripts only see this machine; the meters see every client. So a
+    rolling meter that climbed while the ledger recorded no session for that
+    provider is usage from somewhere else -- a phone, the web, another computer.
+    `samples` is the history series per (provider, meter), read by the caller
+    because the history store belongs to the main loop's connection.
+
+    Silent unless the claim is safe: the baseline must be a few minutes old, the
+    climb must be real, and no session of that provider may be live now (a
+    session still being written has not reached the ledger yet).
+    """
+    until = _epoch(now)
+    since = until - max(1, _as_int(hours)) * 3600
+    best: dict[str, Any] | None = None
+    for snap in snapshots:
+        if snap.status != "ok" or snap.borrowed_from is not None:
+            continue
+        instances = getattr(snap, "instances", None)
+        if instances is not None and getattr(instances, "active", None):
+            continue
+        for meter in snap.metrics:
+            if meter.kind != "rolling":
+                continue
+            series = [
+                (ts, pct)
+                for ts, pct in samples.get((snap.provider_id, meter.key), [])
+                if ts >= since
+            ]
+            if not series:
+                continue
+            base_ts, base_pct = series[0]
+            if until - base_ts < ELSEWHERE_MIN_AGE_SECONDS:
+                continue
+            points = _as_float(meter.percent) - base_pct
+            if points < ELSEWHERE_MIN_POINTS:
+                continue
+            local = ledger.rolling_period_totals(
+                con, since=int(base_ts), until=until, group_by="provider"
+            )
+            if any(
+                row["provider"] == snap.provider_id and row["sessions"] for row in local
+            ):
+                continue
+            if best is None or points > best["points"]:
+                best = {
+                    "providerId": snap.provider_id,
+                    "provider": snap.display_name,
+                    "label": meter.label,
+                    "points": points,
+                    "since": int(base_ts),
+                }
+    if best is not None:
+        best["points"] = _pct(best["points"])
+    return best
+
+
+def warm_facts(
+    con: sqlite3.Connection,
+    snapshots: list[Any],
+    *,
+    hours: int = WARM_WINDOW_HOURS,
+    samples: dict[tuple[str, str], list[tuple[float, float]]] | None = None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Every figure a warm note may use: the recent window and the live meter."""
+    since, until = rolling_range(hours, now=now)
+    totals = ledger.rolling_totals(con, since=since, until=until)
+    projects = ledger.rolling_period_totals(
+        con, since=since, until=until, group_by="project", limit=1
+    )
+    top = projects[0] if projects and projects[0]["project"] else None
+    return {
+        "hours": hours,
+        "sessions": _as_int(totals["sessions"]),
+        "tokens": _as_int(totals["tokens"]),
+        "project": top["project"] if top else None,
+        "meter": tightest_short_meter(snapshots),
+        "elsewhere": (
+            find_elsewhere(con, snapshots, samples, now=now, hours=hours)
+            if samples
+            else None
+        ),
+    }
+
+
+def warm_fingerprint(facts: dict[str, Any]) -> str:
+    """The figures a warm note was built from, bucketed to what is noticeable."""
+    meter = facts["meter"]
+    return fingerprint_of(
+        facts["sessions"],
+        facts["tokens"] // WARM_TOKEN_BUCKET,
+        facts["project"],
+        [meter["providerId"], meter["key"], meter["pct"]] if meter else None,
+        [facts["elsewhere"]["providerId"], facts["elsewhere"]["points"]]
+        if facts.get("elsewhere")
+        else None,
+    )
+
+
+def render_warm(facts: dict[str, Any]) -> str:
+    """The warm note's English wording, which is also the fallback text."""
+    hours = facts["hours"]
+    parts: list[str] = []
+    away = facts.get("elsewhere")
+    if away:
+        since = datetime.fromtimestamp(away["since"]).strftime("%H:%M")
+        parts.append(
+            f"About {away['points']} points of your {away['provider']} "
+            f"{away['label']} went somewhere other than this machine since "
+            f"{since}: phone or web, probably."
+        )
+    if facts["sessions"]:
+        body = (
+            f"Last {hours}h: {facts['sessions']} sessions, "
+            f"{ledger.format_tokens(facts['tokens'])} tokens"
+        )
+        if facts["project"]:
+            body += f", mostly {facts['project']}"
+        parts.append(body + ".")
+    else:
+        parts.append(f"No sessions in the last {hours}h.")
+    meter = facts["meter"]
+    if meter:
+        parts.append(f"{meter['provider']} {meter['label']} is at {meter['pct']}%.")
+    return " ".join(parts)
+
+
+def warm_note(
+    con: sqlite3.Connection,
+    snapshots: list[Any],
+    *,
+    samples: dict[tuple[str, str], list[tuple[float, float]]] | None = None,
+    now: datetime | None = None,
+) -> Message | None:
+    """A note about the last couple of hours, from the freshest figures there are.
+
+    Template wording only; nothing here reaches a model. None when there is
+    neither recent activity nor a meter to speak of.
+    """
+    facts = warm_facts(con, snapshots, samples=samples, now=now)
+    if not facts["sessions"] and not facts["meter"] and not facts["elsewhere"]:
+        return None
+    fingerprint = warm_fingerprint(facts)
+    meter = facts["meter"]
+    return Message(
+        kind=INFORMATIVE,
+        key=f"{WARM_KEY_PREFIX}{fingerprint}",
+        body=render_warm(facts),
+        provider=(
+            facts["elsewhere"]["providerId"]
+            if facts["elsewhere"]
+            else (meter["providerId"] if meter else "")
+        ),
+        meta={
+            "period": "warm",
+            "tpl": _tpl(
+                "warm",
+                hours=facts["hours"],
+                sessions=facts["sessions"],
+                tokens=facts["tokens"],
+                project=facts["project"],
+                elsewhere=(
+                    {
+                        "provider": facts["elsewhere"]["provider"],
+                        "label": facts["elsewhere"]["label"],
+                        "points": facts["elsewhere"]["points"],
+                        "since": facts["elsewhere"]["since"],
+                    }
+                    if facts["elsewhere"]
+                    else None
+                ),
+                meter=(
+                    {
+                        "provider": meter["provider"],
+                        "label": meter["label"],
+                        "kind": meter["kind"],
+                        "pct": meter["pct"],
+                    }
+                    if meter
+                    else None
+                ),
+            ),
+            **provenance(
+                tier=WARM,
+                as_of=_epoch(now),
+                fingerprint=fingerprint,
+            ),
+        },
+    )
 
 
 # -- events ------------------------------------------------------------------
@@ -696,6 +1360,17 @@ def _template_of(meta: dict[str, Any]) -> dict[str, Any] | None:
     return {"id": str(tpl["id"]), "params": dict(tpl.get("p") or {})}
 
 
+def _expires_of(row: dict[str, Any]) -> int | None:
+    """When a stored message stops being worth showing, from its own meta."""
+    meta = _meta_of(row)
+    return expires_at_for(
+        str(row.get("kind") or ""),
+        _as_int(row.get("created_at")),
+        tier=str(meta.get("tier") or "") or None,
+        as_of=_as_int(meta.get("asOf")) or None,
+    )
+
+
 def billboard_payload(row: dict[str, Any]) -> dict[str, Any]:
     """The state shape the panel renders for one stored message."""
     meta = _meta_of(row)
@@ -719,7 +1394,10 @@ def billboard_payload(row: dict[str, Any]) -> dict[str, Any]:
         "share": str(row.get("share") or ""),
         "featured": featured,
         "createdAt": created,
-        "expiresAt": expires_at_for(kind, created),
+        "expiresAt": _expires_of(row),
+        "tier": str(meta.get("tier") or ""),
+        "asOf": _as_int(meta.get("asOf")) or created,
+        "source": str(meta.get("source") or SOURCE_TEMPLATE),
         "reason": str(meta.get("reason") or ""),
         # What the panel renders in the user's language. Absent once a model has
         # reworded the message: its prose is the message, and there is nothing
@@ -741,7 +1419,7 @@ def choose_billboard(
     candidates: list[tuple[int, int, dict[str, Any]]] = []
     for row in rows:
         created = _as_int(row.get("created_at"))
-        expires = expires_at_for(str(row.get("kind") or ""), created)
+        expires = _expires_of(row)
         if expires is not None and expires <= now_ts:
             continue
         candidates.append((PRIORITY.get(str(row.get("kind")), 0), created, row))

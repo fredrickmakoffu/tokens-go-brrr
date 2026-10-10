@@ -339,12 +339,77 @@ def refresh():
     print("mock: Refresh", flush=True)
 
 
+LLM_LOG = [
+    {
+        "ts": "2026-09-13T09:02:11+00:00",
+        "trigger": "scheduled:daily",
+        "provider": "claude",
+        "model": "claude-haiku-4-5",
+        "outcome": "ok",
+        "latency_ms": 1180,
+        "tokens_in": 412,
+        "tokens_out": 61,
+        "message_kind": "informative",
+        "message_key": "daily:2026-09-13",
+        "prompt": "Reword this digest in one friendly sentence: Last 24h: 6 sessions, 1.2M tokens.",
+        "reply": "Six sessions and about 1.2M tokens in the last day -- a steady one.",
+    },
+    {
+        "ts": "2026-09-13T11:40:03+00:00",
+        "trigger": "event:meter",
+        "provider": "claude",
+        "model": "claude-haiku-4-5",
+        "outcome": "rate_limited",
+        "latency_ms": 240,
+        "error": "LlmRateLimited: api.anthropic.com rate limited",
+        "prompt": "Reword this warning: Claude 5-hour window is at 92%.",
+    },
+    {
+        "ts": "2026-09-13T14:05:50+00:00",
+        "trigger": "scheduled:weekly",
+        "outcome": "skipped",
+        "reason": "no_generator",
+        "message_kind": "informative",
+        "message_key": "weekly:2026-09-13",
+    },
+]
+
+
+def llm_log(day):
+    days = ["2026-09-13", "2026-09-12"]
+    chosen = day if day in days else days[0]
+    entries = LLM_LOG if chosen == days[0] else []
+    made = [e for e in entries if e["outcome"] != "skipped"]
+    return {
+        "enabled": True,
+        "keep_days": 30,
+        "directory": "~/.local/share/cursor-spend-monitor/llm-calls",
+        "days": days,
+        "day": chosen,
+        "summary": {
+            "day": chosen,
+            "calls": len(made),
+            "skipped": len(entries) - len(made),
+            "failures": sum(1 for e in made if e["outcome"] != "ok"),
+            "tokens_in": sum(e.get("tokens_in", 0) for e in made),
+            "tokens_out": sum(e.get("tokens_out", 0) for e in made),
+        },
+        "entries": entries,
+    }
+
+
+def llm_log_clear():
+    print("mock: ClearLlmLog", flush=True)
+
+
 svc = UsageService(
     version="0.4.0-mock",
     get_state=state,
     on_refresh=refresh,
     on_set_primary=set_primary,
     on_acknowledge=acknowledge,
+    on_llm_log=llm_log,
+    on_llm_log_clear=llm_log_clear,
     on_quit=loop.quit,
     on_name_lost=loop.quit,
 )

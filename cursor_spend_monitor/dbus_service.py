@@ -32,6 +32,11 @@ INTERFACE_XML = """
     <method name="Acknowledge">
       <arg type="u" direction="in" name="id"/>
     </method>
+    <method name="LlmLog">
+      <arg type="s" direction="in" name="day"/>
+      <arg type="s" direction="out" name="json"/>
+    </method>
+    <method name="ClearLlmLog"/>
     <method name="Quit"/>
     <signal name="StateChanged"><arg type="s" name="json"/></signal>
   </interface>
@@ -52,6 +57,8 @@ class UsageService:
         on_acknowledge: Callable[[int], None],
         on_quit: Callable[..., Any],
         on_name_lost: Callable[[], None],
+        on_llm_log: Callable[[str], dict[str, Any]] | None = None,
+        on_llm_log_clear: Callable[[], None] | None = None,
     ) -> None:
         self._version = version
         self._get_state = get_state
@@ -59,6 +66,8 @@ class UsageService:
         self._on_set_primary = on_set_primary
         self._on_acknowledge = on_acknowledge
         self._on_quit = on_quit
+        self._on_llm_log = on_llm_log
+        self._on_llm_log_clear = on_llm_log_clear
         self._on_name_lost = on_name_lost
         self._connection: Gio.DBusConnection | None = None
         self._registration = 0
@@ -100,6 +109,15 @@ class UsageService:
             (message_id,) = params.unpack()
             invocation.return_value(None)
             self._on_acknowledge(_as_int(message_id))
+        elif method == "LlmLog":
+            # Read-only: the extension never opens the log files itself.
+            (day,) = params.unpack()
+            payload = self._on_llm_log(str(day)) if self._on_llm_log else {}
+            invocation.return_value(GLib.Variant("(s)", (json.dumps(payload),)))
+        elif method == "ClearLlmLog":
+            if self._on_llm_log_clear:
+                self._on_llm_log_clear()
+            invocation.return_value(None)
         elif method == "Quit":
             invocation.return_value(None)
             GLib.idle_add(self._on_quit)
