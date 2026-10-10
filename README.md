@@ -1,4 +1,4 @@
-# AI usage
+# tokens-go-brrr
 
 GNOME Shell indicator for AI coding limits, plus a small daemon that fetches them.
 Cursor, Claude Code, OpenCode and Pi are all live.

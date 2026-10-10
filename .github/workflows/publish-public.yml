@@ -32,7 +32,7 @@ jobs:
         run: |
           gh release create "${{ github.event.release.tag_name }}" assets/* \
             --repo "$PUBLIC_REPO" --title "${{ github.event.release.tag_name }}" \
-            --notes "Installers for AI Usage. Verify with SHA256SUMS."
+            --notes "Installers for tokens-go-brrr. Verify with SHA256SUMS."
       - name: Build and push the site
         env:
           GH_TOKEN: ${{ secrets.TOKEN }}
