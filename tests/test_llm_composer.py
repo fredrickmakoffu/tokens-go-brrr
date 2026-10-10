@@ -507,6 +507,39 @@ class DaemonComposeTest(unittest.TestCase):
             result = self.compose(stub)
         self.assertEqual(result[0].body, "template body")
 
+    def test_a_skipped_rewrite_is_logged_with_its_origin(self):
+        stub = self.daemon(llm_notifications=True)
+        from cursor_spend_monitor.daemon import UsageDaemon
+
+        with mock.patch.object(llm, "choose", return_value=None):
+            UsageDaemon._compose(
+                stub, self.con, [self.message()], origin="scheduled:weekly"
+            )
+        (entry,) = [c.args[0] for c in stub.llm_log.record.call_args_list]
+        self.assertEqual(entry["outcome"], "skipped")
+        self.assertEqual(entry["reason"], "no_generator")
+        self.assertEqual(entry["trigger"], "scheduled:weekly")
+        self.assertEqual(entry["message_key"], "weekly:1")
+
+    def test_a_rewrite_is_given_the_log_and_its_origin(self):
+        stub = self.daemon(llm_notifications=True)
+        from cursor_spend_monitor.daemon import UsageDaemon
+
+        with (
+            mock.patch.object(llm, "choose", return_value=self.generator()),
+            mock.patch.object(llm, "rewrite", return_value=None) as rewrite,
+        ):
+            UsageDaemon._compose(
+                stub, self.con, [self.message()], origin="event:meter"
+            )
+        self.assertIs(rewrite.call_args.kwargs["recorder"], stub.llm_log.record)
+        self.assertEqual(rewrite.call_args.kwargs["context"], {"trigger": "event:meter"})
+
+    def test_nothing_is_logged_while_the_feature_is_off(self):
+        stub = self.daemon(llm_notifications=False)
+        self.compose(stub)
+        stub.llm_log.record.assert_not_called()
+
     def test_the_floor_and_the_pins_come_from_the_config(self):
         stub = self.daemon(
             llm_notifications=True,

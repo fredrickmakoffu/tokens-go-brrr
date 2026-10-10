@@ -357,9 +357,17 @@ unparseable reply.
 {
   "llm_notifications": true,
   "llm_generator_model": "",   // "" = the cheap default for each provider
-  "llm_min_headroom": 15       // never spend capacity to warn about capacity
+  "llm_min_headroom": 15,      // never spend capacity to warn about capacity
+  "llm_log_days": 30           // days of the per-call LLM log to keep; 0 = off
 }
 ```
+
+**Every model call is logged**, so you can see exactly what was sent and what
+came back. One file per local day under
+`~/.local/share/cursor-spend-monitor/llm-calls/YYYY-MM-DD.jsonl`, one JSON
+object per line: time, why it ran, provider and model, outcome (including
+refusals and skips), latency, tokens, the prompt and the reply. Open it in the
+panel from **About → LLM activity**. Credentials are never written.
 
 The reply names the AI it is about (`FEATURED:`), chosen from ranked provider
 facts sent in the prompt; the daemon validates it and falls back to the derived

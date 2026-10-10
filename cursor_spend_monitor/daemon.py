@@ -20,6 +20,7 @@ from . import (
     notify_engine,
 )
 from . import llm_composer as llm
+from . import llm_log
 from .config import MonitorConfig, write_state
 from .dbus_service import UsageService
 from .instances import InstanceReport, scan, signature
@@ -67,6 +68,9 @@ class UsageDaemon:
         # burn-rate fit needs. They fail independently and neither stops the
         # other, or the panel.
         self.ledger = ledger.LedgerRecorder(keep_days=config.ledger_days)
+        # Every call made to a language model, one file per day, readable from
+        # the panel. Independent of the stores above and just as fail-soft.
+        self.llm_log = llm_log.LlmLog(keep_days=config.llm_log_days)
         self._harvesting = False
         # The first harvest of a run may backfill (Cursor's previous cycle);
         # later ones are strictly incremental.
@@ -96,6 +100,8 @@ class UsageDaemon:
             on_refresh=self.poll,
             on_set_primary=self.set_primary,
             on_acknowledge=self.acknowledge,
+            on_llm_log=self.llm_log_payload,
+            on_llm_log_clear=self.llm_log_clear,
             on_quit=self.quit,
             on_name_lost=self._name_lost,
         )
@@ -370,6 +376,7 @@ class UsageDaemon:
                         continue
                     reader.harvest(con, full=self._harvest_full)
                 ledger.prune(con, keep_days=self.config.ledger_days)
+                self.llm_log.prune()
             # Back to the main loop before touching D-Bus: this runs on a
             # worker thread, and the state signal is GLib's to emit.
             GLib.idle_add(self._publish_billboard_change)
@@ -457,7 +464,9 @@ class UsageDaemon:
                     self._last_slot.pop(slot, None)
                     return
                 messages = self._compose(
-                    con, notify_engine.scheduled_messages(con, slot=slot)
+                    con,
+                    notify_engine.scheduled_messages(con, slot=slot),
+                    origin=f"scheduled:{slot}",
                 )
                 fresh = notify_engine.keep(
                     con,
@@ -477,7 +486,12 @@ class UsageDaemon:
         GLib.idle_add(self._deliver, fresh, False)
 
     def _compose(
-        self, con: sqlite3.Connection, messages: list[Any], *, trigger: str = ""
+        self,
+        con: sqlite3.Connection,
+        messages: list[Any],
+        *,
+        trigger: str = "",
+        origin: str = "",
     ) -> list[Any]:
         """The templates, reworded by a model when one has capacity to spare.
 
@@ -495,6 +509,17 @@ class UsageDaemon:
             provider=self.config.llm_generator_provider,
         )
         if generator is None:
+            # Worth a line in the log: a person wondering why nothing was
+            # reworded can see that no provider had the room.
+            self.llm_log.record(
+                {
+                    "trigger": origin,
+                    "outcome": llm_log.SKIPPED,
+                    "reason": "no_generator",
+                    "message_kind": messages[0].kind,
+                    "message_key": messages[0].key,
+                }
+            )
             return messages
         improved: list[Any] = []
         for message in messages:
@@ -503,9 +528,18 @@ class UsageDaemon:
                 generator=generator,
                 facts=self._facts_for(con, message),
                 max_tokens=self.config.llm_max_output_tokens,
+                recorder=self.llm_log.record,
+                context={"trigger": origin},
             )
             improved.append(rewritten or message)
         return improved
+
+    def llm_log_payload(self, day: str = "") -> dict[str, Any]:
+        """One day of the LLM log for the Settings screen; newest day if none."""
+        return self.llm_log.payload(day or None)
+
+    def llm_log_clear(self) -> None:
+        self.llm_log.clear()
 
     def _facts_for(self, con: sqlite3.Connection, message: Any) -> dict[str, Any]:
         """The ranked providers the model may choose the featured AI from.
@@ -563,7 +597,9 @@ class UsageDaemon:
                     self.snapshots, wind_down_hours=self.config.wind_down_hours
                 )
                 trigger = messages[0].meta.get("trigger", "") if messages else ""
-                messages = self._compose(con, messages, trigger=trigger)
+                messages = self._compose(
+                    con, messages, trigger=trigger, origin=f"event:{trigger or 'meter'}"
+                )
                 fresh = notify_engine.keep(
                     con,
                     messages,
