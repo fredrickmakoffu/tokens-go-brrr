@@ -26,7 +26,7 @@ cursor-spend-monitor setup
 systemctl --user enable --now cursor-spend-monitor.service
 ```
 
-Log out and back in so GNOME Shell picks up the extension. Needs GNOME Shell 45 or newer.
+`install.sh` also installs the Barlow fonts the popover is set in (to `~/.local/share/fonts/ai-usage/`); `./install-fonts.sh` does only that. Log out and back in so GNOME Shell picks up the extension. Needs GNOME Shell 45 or newer.
 
 ## Providers
 
