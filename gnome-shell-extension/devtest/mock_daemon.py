@@ -256,6 +256,53 @@ BILLBOARDS = [
         "reason": "8.4M tokens",
     },
 ]
+# The daemon sends seconds alongside its English label, and a template with its
+# values alongside the message text, so the panel can write both in the user's
+# language. Derived here rather than repeated beside every label above.
+def _seconds(text):
+    import re
+
+    days = re.search(r"(\d+) days", text)
+    if days:
+        return int(days.group(1)) * 86400
+    hm = re.search(r"(?:(\d+)h)?\s*(?:(\d+)m)?$", text.replace("Resets in ", ""))
+    return int(hm.group(1) or 0) * 3600 + int(hm.group(2) or 0) * 60
+
+
+for _tool in tools:
+    for _metric in _tool.get("metrics", []):
+        _metric["resetsSeconds"] = _seconds(_metric["resets"])
+
+BILLBOARDS[0]["template"] = {
+    "id": "actionable",
+    "params": {
+        "provider": "Claude Code",
+        "label": "5-hour limit",
+        "kind": "rolling",
+        "percent": 93,
+        "spent": False,
+        "etaSeconds": 2400,
+        "better": "OpenCode",
+    },
+}
+BILLBOARDS[1]["template"] = {
+    "id": "digest",
+    "params": {
+        "period": "weekly",
+        "sessions": 38,
+        "tokens": 1900000,
+        "leader": {"name": "OpenCode", "pct": 71},
+        "topProject": {"project": "api-server", "sessions": 14, "tokens": 820000},
+        "topModel": "deepseek-v4-flash",
+        "estimate": False,
+        "vsLastMonth": None,
+    },
+}
+BILLBOARDS[2]["template"] = {
+    "id": "share",
+    "params": {"sessions": 154, "tokens": 8400000, "model": "deepseek-v4-flash"},
+}
+
 _shown = 0
 loop = GLib.MainLoop()
 

@@ -197,6 +197,31 @@ and the entry only reveals them.
 Opening the menu replays the entry even when the screen has not changed, which is
 the usual case: the list is already up from last time.
 
+## Languages
+
+The popover speaks English, French and Brazilian Portuguese, picked from the
+session's locale (`LANGUAGE`, `LC_ALL`, `LC_MESSAGES`, `LANG`, in GLib's order);
+anything else is English. `AI_USAGE_LANG=fr` forces one, for screenshots.
+
+Strings live in `locales.js` and are looked up by `tr("key", {vars})` from
+`i18n.js`. It is a plain JS catalog rather than gettext, so the rpm and deb need
+no `msgfmt` step. A missing key falls back to English silently, which is why
+`tests/test_locales.py` checks that every locale has every key and the same
+`{placeholders}`.
+
+The daemon sends **numbers and template ids, not sentences**: `resetsSeconds` and
+`etaSeconds` on each meter, and `template: {id, params}` on each message the
+engine wrote. The extension writes the wording, so reset times, ETAs, digests and
+actionable messages follow the user's language. Three things stay English: a
+message a model reworded (its prose is the message, so the daemon omits
+`template`), technical diagnostics with a detail ("HTTP 429 from ..."), and the
+text of a daemon older than the extension, which has no seconds to format and
+falls back to its English labels.
+
+Dates ("Tue 6 Oct") come from GLib and follow the session's `LC_TIME`.
+
+Run the layout walk in another language with `AI_USAGE_LANG=fr .../layout-smoke.sh`.
+
 ## Light and dark
 
 The popover is dark by default and switches to a light variant when

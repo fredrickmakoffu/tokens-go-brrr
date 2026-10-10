@@ -13,6 +13,18 @@ import * as PanelMenu from "resource:///org/gnome/shell/ui/panelMenu.js";
 import * as PopupMenu from "resource:///org/gnome/shell/ui/popupMenu.js";
 import { Extension } from "resource:///org/gnome/shell/extensions/extension.js";
 
+import {
+    duration,
+    errorText,
+    formatTokens,
+    lcFirst,
+    metricLabel,
+    metricTag,
+    resetsText,
+    tr,
+    ucFirst,
+} from "./i18n.js";
+
 const BUS_NAME = "io.github.fredrickmakoffu.AIUsage";
 const OBJECT_PATH = "/io/github/fredrickmakoffu/AIUsage";
 const IFACE_XML = `
@@ -106,18 +118,27 @@ function statusTextColor(pct, muted = false) {
 // "5-hour limit" -> "5-hour": the tag sits beside the name, where "limit" is
 // already understood.
 function tagText(text) {
-    return (text ?? "\u2014").replace(/\s+limits?$/i, "");
+    return metricTag(text);
+}
+
+// How long until the meter runs out. The daemon sends seconds; a daemon older
+// than this extension sends only an English label, which stands in for it.
+function etaText(m) {
+    if (Number.isFinite(m?.etaSeconds) && m.etaSeconds > 0)
+        return duration(m.etaSeconds);
+    return m?.eta || "";
 }
 
 // "Out in ~40m · resets in 2h 15m", the line under every meter.
 function meterSub(m) {
     if (!m) return "";
-    const resets = (m.resets ?? "").replace(/^Resets/, "resets");
     const parts = [];
-    if (m.eta && clampPct(m.value) >= CAUTION_AT) parts.push(`Out in ~${m.eta}`);
-    if (resets && resets !== "—") parts.push(resets);
-    const text = parts.join(" · ");
-    return text ? text.charAt(0).toUpperCase() + text.slice(1) : "";
+    const eta = etaText(m);
+    if (eta && clampPct(m.value) >= CAUTION_AT)
+        parts.push(tr("meter.out", { dur: eta }));
+    const resets = resetsText(m);
+    if (resets) parts.push(parts.length ? lcFirst(resets) : resets);
+    return ucFirst(parts.join(" · "));
 }
 
 // Window names shortened for the list screen, where every row carries one chip
@@ -170,8 +191,8 @@ function sessionRows(tool) {
 
 function sessionLabel(session) {
     if (session?.project) return session.project;
-    if (session?.kind === "editor") return "Desktop";
-    return "Session";
+    if (session?.kind === "editor") return tr("session.desktop");
+    return tr("session.generic");
 }
 
 function titleMentionsProject(title, project) {
@@ -273,9 +294,9 @@ function readCtxtSwitches(pid) {
 // Cursor's spend on non-included models is not a window, so it is never
 // something to switch every row to.
 const WINDOW_KINDS = [
-    { kind: "rolling", label: "Rolling" },
-    { kind: "weekly", label: "Weekly" },
-    { kind: "monthly", label: "Monthly" },
+    { kind: "rolling", key: "win.rolling" },
+    { kind: "weekly", key: "win.weekly" },
+    { kind: "monthly", key: "win.monthly" },
 ];
 
 // A daemon that predates the kind field publishes none, and the daemon is a
@@ -357,17 +378,17 @@ function clampPct(value) {
 }
 
 function relativeTime(iso) {
-    if (!iso) return "never";
+    if (!iso) return tr("time.never");
     const then = GLib.DateTime.new_from_iso8601(iso, null);
-    if (!then) return "unknown";
+    if (!then) return tr("time.unknown");
     const secs = Math.max(
         0,
         Math.round(GLib.DateTime.new_now_utc().difference(then) / 1e6),
     );
-    if (secs < 60) return "just now";
-    if (secs < 3600) return `${Math.round(secs / 60)}m ago`;
-    if (secs < 86400) return `${Math.round(secs / 3600)}h ago`;
-    return `${Math.round(secs / 86400)}d ago`;
+    if (secs < 60) return tr("time.justNow");
+    if (secs < 3600) return tr("time.minAgo", { n: Math.round(secs / 60) });
+    if (secs < 86400) return tr("time.hourAgo", { n: Math.round(secs / 3600) });
+    return tr("time.dayAgo", { n: Math.round(secs / 86400) });
 }
 
 function label(text, styleClass, extra = {}) {
@@ -634,7 +655,7 @@ const Row = GObject.registerClass(
                 }),
             );
             const tag = via
-                ? `via ${via.name}`
+                ? tr("row.via", { via: via.name })
                 : metered
                   ? tagText(primary?.label)
                   : "";
@@ -666,11 +687,11 @@ const Row = GObject.registerClass(
             const sub = ok
                 ? metered
                     ? via?.borrowed
-                        ? `Shares ${via.name} limits`
+                        ? tr("row.shares", { via: via.name })
                         : meterSub(primary)
-                    : tool.error || tool.status || "No limits"
-                : tool.error || tool.status || "No limits";
-            const subText = [sub, running ? `${running} running` : ""]
+                    : errorText(tool.error) || tool.status || tr("row.noLimits")
+                : errorText(tool.error) || tool.status || tr("row.noLimits");
+            const subText = [sub, running ? tr("row.running", { n: running }) : ""]
                 .filter(Boolean)
                 .join(" · ");
             if (subText) {
@@ -785,12 +806,14 @@ const Row = GObject.registerClass(
 
 // What the featured AI's role means, in words the panel owns. The role itself
 // is decided by the daemon from the ledger, never here.
-const KIND_COPY = {
-    actionable: "Actionable",
-    informative: "Recap",
-    shareable: "Shareable",
-    fun: "Fun fact",
-};
+// "2 active · 1 paused", each count agreeing with its own number.
+function sessionCounts(active, paused) {
+    return `${tr("sessions.nActive", { n: active })} · ${tr("sessions.nPaused", { n: paused })}`;
+}
+
+function kindCopy(kind) {
+    return tr(`kind.${["actionable", "informative", "shareable", "fun"].includes(kind) ? kind : "other"}`);
+}
 
 // The first sentence of an insight is its title, the rest its sub line. The
 // daemon writes one block of prose; the design sets it as a headline and a body.
@@ -808,18 +831,104 @@ function insightWhen(epoch) {
     const now = GLib.DateTime.new_now_local();
     const time = at.format("%H:%M");
     const sameDay = at.format("%F") === now.format("%F");
-    if (sameDay) return `Today ${time}`;
+    if (sameDay) return tr("time.today", { time });
     const yesterday = now.add_days(-1);
-    if (at.format("%F") === yesterday.format("%F")) return `Yesterday ${time}`;
+    if (at.format("%F") === yesterday.format("%F"))
+        return tr("time.yesterday", { time });
     return `${at.format("%a %e %b")} ${time}`;
 }
 
-const ROLE_COPY = {
-    suggested: "has room — worth moving to",
-    leading: "doing the heavy lifting",
-    value: "most tokens for the least spend",
-    featured: "worth a look",
-};
+const ROLES = ["suggested", "leading", "value", "featured"];
+function roleCopy(role) {
+    return ROLES.includes(role) ? tr(`role.${role}`) : "";
+}
+
+// The message the way the daemon's template wrote it, in the user's language.
+// Null when there is nothing to render from (a model reworded it, or the
+// template is newer than this extension), and the stored English text is shown
+// as written instead.
+function templateText(template) {
+    const p = template?.params ?? {};
+    switch (template?.id) {
+        case "digest": {
+            const parts = [
+                tr("tpl.digest.main", {
+                    n: p.sessions ?? 0,
+                    head: tr(`tpl.digest.head.${p.period}`),
+                    tokens: formatTokens(p.tokens),
+                }),
+            ];
+            if (p.leader)
+                parts.push(tr("tpl.digest.leader", p.leader));
+            if (p.topProject)
+                parts.push(
+                    tr("tpl.digest.project", {
+                        n: p.topProject.sessions,
+                        project: p.topProject.project,
+                        tokens: formatTokens(p.topProject.tokens),
+                    }),
+                );
+            if (p.topModel) parts.push(tr("tpl.digest.model", { model: p.topModel }));
+            let text = `${parts.join(". ")}.`;
+            if (p.estimate) text += tr("tpl.digest.estimate");
+            if (p.vsLastMonth)
+                text += tr(`tpl.digest.${p.vsLastMonth.dir === "down" ? "down" : "up"}`, {
+                    pct: p.vsLastMonth.pct,
+                });
+            return text;
+        }
+        case "fun.cache":
+            return tr("tpl.fun.cache", { pct: p.pct, tokens: formatTokens(p.tokens) });
+        case "fun.streak":
+            return tr("tpl.fun.streak", { n: p.current, longest: p.longest });
+        case "fun.longest":
+            return tr(p.project ? "tpl.fun.longest" : "tpl.fun.longestAnon", {
+                dur: duration((p.minutes ?? 0) * 60),
+                project: p.project,
+            });
+        case "share":
+            return `${tr("tpl.share", {
+                sessions: p.sessions,
+                tokens: formatTokens(p.tokens),
+            })}${p.model ? tr("tpl.share.model", { model: p.model }) : ""}.`;
+        case "actionable": {
+            const vars = {
+                provider: p.provider,
+                label: metricLabel(p.label),
+                pct: p.percent,
+            };
+            let text = p.spent
+                ? tr("tpl.actionable.spent", vars)
+                : tr("tpl.actionable.at", vars) +
+                  (p.etaSeconds
+                      ? tr("tpl.actionable.eta", { dur: duration(p.etaSeconds) })
+                      : "") +
+                  ".";
+            if (p.better) text += tr("tpl.actionable.better", { better: p.better });
+            return text;
+        }
+        default:
+            return null;
+    }
+}
+
+function messageText(message) {
+    return (
+        (message?.template ? templateText(message.template) : null) ??
+        message?.text ??
+        ""
+    );
+}
+
+// What Copy puts on the clipboard. A template-built share line is the same
+// sentence as the message; otherwise the daemon's stored line is used.
+function shareText(message) {
+    if (message?.template?.id === "share") {
+        const text = templateText(message.template);
+        if (text) return text;
+    }
+    return message?.share ?? "";
+}
 
 const Indicator = GObject.registerClass(
     class AiUsageIndicator extends PanelMenu.Button {
@@ -858,7 +967,7 @@ const Indicator = GObject.registerClass(
         }
 
         _init(ext) {
-            super._init(0.5, "AI usage", false);
+            super._init(0.5, tr("brand"), false);
             this.add_style_class_name("ai-usage-panel-button");
             this._ext = ext;
             this._icons = ext.icons;
@@ -903,7 +1012,7 @@ const Indicator = GObject.registerClass(
             this._halo = new St.BoxLayout({
                 style_class: "ai-usage-dot-halo",
                 y_align: Clutter.ActorAlign.CENTER,
-                accessible_name: "AI usage",
+                accessible_name: tr("brand"),
             });
             this._halo.add_child(this._dot);
             this._halo.add_child(this._sessions);
@@ -1377,7 +1486,7 @@ const Indicator = GObject.registerClass(
                 const button = new St.Button({
                     style_class: "ai-usage-back",
                     can_focus: true,
-                    accessible_name: "Back",
+                    accessible_name: tr("ui.back"),
                     y_align: Clutter.ActorAlign.CENTER,
                     child: new St.Icon({
                         style_class: "ai-usage-back-icon",
@@ -1440,7 +1549,7 @@ const Indicator = GObject.registerClass(
                 bar.add_child(b);
             };
             for (const { label: text_, cb } of actions) add(text_, cb);
-            if (withSettings) add("Settings", () => this._openSettings());
+            if (withSettings) add(tr("ui.settings"), () => this._openSettings());
             return bar;
         }
 
@@ -1513,7 +1622,7 @@ const Indicator = GObject.registerClass(
         }
 
         _updatedText() {
-            return `Updated ${relativeTime(this._state?.updated_at)}`;
+            return tr("ui.updated", { ago: relativeTime(this._state?.updated_at) });
         }
 
         // The tightest meter across providers that own their numbers, with the
@@ -1539,42 +1648,59 @@ const Indicator = GObject.registerClass(
             const via = viaOf(tool);
             if (via?.borrowed) {
                 return {
-                    title: `${tool.name} spends ${via.name}.`,
-                    sub: `Its sessions meter against ${via.name}’s limits.`,
+                    title: tr("tool.spends", { name: tool.name, via: via.name }),
+                    sub: tr("tool.spendsSub", { via: via.name }),
                 };
             }
             const primary = metric ?? this._tightestMetric(tool);
             if (!hasMeters(tool) || !primary) {
                 return {
-                    title: `${tool.name} has no limits to show.`,
-                    sub: tool.error || "Nothing is metered for this tool.",
+                    title: tr("tool.noLimits", { name: tool.name }),
+                    sub: errorText(tool.error) || tr("tool.noLimitsSub"),
                 };
             }
             const pct = Math.round(clampPct(primary.value));
-            const resets = (primary.resets ?? "").replace(/^Resets/, "resets");
             const others = tool.metrics
                 .filter((m) => m.key !== primary.key)
                 .sort((a, b) => b.value - a.value)[0];
             const tail = others
-                ? ` ${others.label} is at ${Math.round(clampPct(others.value))}%.`
+                ? ` ${tr("sent.at", {
+                      label: metricLabel(others.label),
+                      pct: Math.round(clampPct(others.value)),
+                  })}`
                 : "";
-            const window = `${primary.label} is at ${pct}%${
-                resets && resets !== "—" ? ` and ${resets}` : ""
-            }.`;
-            if (primary.eta && pct >= CAUTION_AT)
+            const label = metricLabel(primary.label);
+            let window;
+            if (Number.isFinite(primary.resetsSeconds)) {
+                window =
+                    primary.resetsSeconds > 0
+                        ? tr("sent.atResets", {
+                              label,
+                              pct,
+                              dur: duration(primary.resetsSeconds),
+                          })
+                        : tr("sent.atSoon", { label, pct });
+            } else {
+                window = tr("sent.at", { label, pct });
+            }
+            const eta = etaText(primary);
+            if (eta && pct >= CAUTION_AT)
                 return {
-                    title: `${tool.name} runs out in ~${primary.eta}.`,
+                    title: tr("tool.runsOut", { name: tool.name, dur: eta }),
                     sub: `${window}${tail}`,
                 };
             if (pct >= CRITICAL_AT)
-                return { title: `${tool.name} is at ${pct}%.`, sub: `${window}${tail}` };
+                return {
+                    title: tr("tool.at", { name: tool.name, pct }),
+                    sub: `${window}${tail}`,
+                };
             if (pct >= CAUTION_AT)
                 return {
-                    title: `${tool.name} is getting close.`,
+                    title: tr("tool.close", { name: tool.name }),
                     sub: `${window}${tail}`,
                 };
             return {
-                title: `${tool.name} has plenty of room.`,
+                title: tr("tool.room", { name: tool.name }),
                 sub: `${window}${tail}`,
             };
         }
@@ -1608,7 +1734,11 @@ const Indicator = GObject.registerClass(
                         titleMentionsProject(w.get_title() ?? "", project),
                 );
             if (!win) {
-                this._note(`No window found for ${project ?? "this session"}`);
+                this._note(
+                    tr("session.noWindow", {
+                        project: project ?? tr("session.thisSession"),
+                    }),
+                );
                 return;
             }
             this.menu.close();
@@ -1618,10 +1748,15 @@ const Indicator = GObject.registerClass(
         _sessionMeta(session) {
             return [
                 session.backend?.model
-                    ? `${session.backend.model}${session.backend.name ? ` via ${session.backend.name}` : ""}`
+                    ? session.backend.name
+                        ? tr("session.via", {
+                              model: session.backend.model,
+                              via: session.backend.name,
+                          })
+                        : session.backend.model
                     : null,
                 session.tty || null,
-                session.paused ? "paused" : null,
+                session.paused ? tr("session.paused") : null,
             ]
                 .filter(Boolean)
                 .join(" · ");
@@ -1652,7 +1787,7 @@ const Indicator = GObject.registerClass(
             if (!session.paused && session.project) {
                 const focus = new St.Button({
                     style_class: "ai-usage-focus-btn",
-                    label: "Focus",
+                    label: tr("ui.focus"),
                     can_focus: true,
                     y_align: Clutter.ActorAlign.CENTER,
                 });
@@ -1671,7 +1806,7 @@ const Indicator = GObject.registerClass(
             const projects = new Set(
                 tools.flatMap((t) => t.instances?.projects ?? []),
             ).size;
-            let title = "AI usage";
+            let title = tr("brand");
             let sub = this._updatedText();
             if (tight) {
                 const s = this._meterSentence(tight.tool, tight.m);
@@ -1683,10 +1818,12 @@ const Indicator = GObject.registerClass(
                     .map((t) => ({ t, p: clampPct(primaryOf(t)?.value ?? 100) }))
                     .sort((a, b) => a.p - b.p)[0];
                 sub = [
-                    roomy && roomy.p < CAUTION_AT ? `${roomy.t.name} has room.` : "",
+                    roomy && roomy.p < CAUTION_AT
+                        ? tr("list.roomy", { name: roomy.t.name })
+                        : "",
                     running
-                        ? `${running} ${running === 1 ? "agent" : "agents"} running${
-                              projects ? ` across ${projects} ${projects === 1 ? "project" : "projects"}` : ""
+                        ? `${tr("list.agents", { n: running })}${
+                              projects ? ` ${tr("list.projects", { n: projects })}` : ""
                           }.`
                         : "",
                 ]
@@ -1695,12 +1832,14 @@ const Indicator = GObject.registerClass(
                 if (!sub) sub = s.sub;
             }
             screen.add_child(
-                this._screenHeader({ kicker: "AI usage", meta: this._clock(), title, sub }),
+                this._screenHeader({ kicker: tr("brand"), meta: this._clock(), title, sub }),
             );
             if (!tools.length) {
                 const text = this._state
-                    ? "No providers yet.\nSign in to Cursor and refresh."
-                    : "Daemon not running.\nStart it with:\nsystemctl --user start cursor-spend-monitor";
+                    ? tr("empty.noProviders")
+                    : tr("empty.noDaemon", {
+                          cmd: "systemctl --user start cursor-spend-monitor",
+                      });
                 screen.add_child(wrappedLabel(text, "ai-usage-empty"));
                 screen.add_child(this._footer("", [], true));
                 return;
@@ -1728,14 +1867,14 @@ const Indicator = GObject.registerClass(
             const actions = [];
             if (this._state?.latestMessage)
                 actions.push({
-                    label: "Latest",
+                    label: tr("ui.latest"),
                     cb: () => {
                         this._landingMode = "latest";
                         this._navigate("landing");
                     },
                 });
-            actions.push({ label: "Guide", cb: () => this._navigate("guide") });
-            actions.push({ label: "About", cb: () => this._navigate("about") });
+            actions.push({ label: tr("ui.guide"), cb: () => this._navigate("guide") });
+            actions.push({ label: tr("ui.about"), cb: () => this._navigate("about") });
             screen.add_child(this._footer(this._updatedText(), actions, true));
         }
 
@@ -1762,7 +1901,9 @@ const Indicator = GObject.registerClass(
             const bars = [];
             if (hasMeters(tool)) {
                 const limits = this._section(
-                    via?.borrowed ? `Limits · shared with ${via.name}` : "Limits",
+                    via?.borrowed
+                        ? tr("detail.limitsShared", { via: via.name })
+                        : tr("detail.limits"),
                 );
                 for (const m of tool.metrics) {
                     const pct = clampPct(m.value);
@@ -1777,13 +1918,13 @@ const Indicator = GObject.registerClass(
                         x_expand: true,
                     });
                     top.add_child(
-                        label(m.label, "ai-usage-name", {
+                        label(metricLabel(m.label), "ai-usage-name", {
                             y_align: Clutter.ActorAlign.CENTER,
                         }),
                     );
                     if (m === this._tightestMetric(tool) && tool.metrics.length > 1)
                         top.add_child(
-                            label("TIGHTEST", "ai-usage-tag", {
+                            label(tr("ui.tightest").toUpperCase(), "ai-usage-tag", {
                                 y_align: Clutter.ActorAlign.CENTER,
                             }),
                         );
@@ -1817,7 +1958,7 @@ const Indicator = GObject.registerClass(
                 });
                 note.add_child(
                     wrappedLabel(
-                        `${via.name}${via.model ? ` · ${via.model}` : ""} — ${tool.error || "no limits available"}`,
+                        `${via.name}${via.model ? ` · ${via.model}` : ""} — ${errorText(tool.error) || tr("tool.noLimitsAvailable")}`,
                         "ai-usage-sub",
                     ),
                 );
@@ -1828,14 +1969,16 @@ const Indicator = GObject.registerClass(
             const sessions = sessionRows(tool);
             if (sessions.length) {
                 const active = sessions.filter((s) => !s.paused);
-                const block = this._section(`Sessions · ${active.length} running`);
+                const block = this._section(
+                    tr("sessions.running", { n: active.length }),
+                );
                 for (const session of active)
                     block.add_child(this._sessionRow(session));
                 block.add_child(
                     this._listRow(
-                        "Sessions",
-                        "View all sessions",
-                        `${active.length} active · ${sessions.length - active.length} paused`,
+                        tr("sessions.kicker"),
+                        tr("sessions.viewAll"),
+                        sessionCounts(active.length, sessions.length - active.length),
                         () => this._navigate("sessions", tool.id),
                     ),
                 );
@@ -1846,7 +1989,7 @@ const Indicator = GObject.registerClass(
                     this._footerNote ?? this._updatedText(),
                     [
                         {
-                            label: "Open dashboard",
+                            label: tr("ui.openDashboard"),
                             cb: () =>
                                 this._openUri(
                                     tool.dashboardUrl ||
@@ -1872,9 +2015,9 @@ const Indicator = GObject.registerClass(
             screen.add_child(
                 this._screenHeader({
                     kicker: tool.name,
-                    meta: "Sessions",
-                    title: `${tool.name} has ${active.length} ${active.length === 1 ? "agent" : "agents"} running.`,
-                    sub: `${active.length} active · ${paused.length} paused · ${sessions.length} total`,
+                    meta: tr("sessions.kicker"),
+                    title: tr("sessions.title", { name: tool.name, n: active.length }),
+                    sub: `${sessionCounts(active.length, paused.length)} · ${tr("sessions.nTotal", { n: sessions.length })}`,
                     back: () => this._navigate("detail", tool.id),
                 }),
             );
@@ -1885,8 +2028,8 @@ const Indicator = GObject.registerClass(
                 x_expand: true,
             });
             for (const [key, text] of [
-                ["active", "Active"],
-                ["paused", "Paused"],
+                ["active", tr("sessions.active")],
+                ["paused", tr("sessions.paused")],
             ]) {
                 const selected = this._sessionsFilter === key;
                 const count = key === "active" ? active.length : paused.length;
@@ -1916,8 +2059,8 @@ const Indicator = GObject.registerClass(
                 list.add_child(
                     label(
                         this._sessionsFilter === "paused"
-                            ? "No paused sessions"
-                            : "No active sessions",
+                            ? tr("sessions.noPaused")
+                            : tr("sessions.noActive"),
                         "ai-usage-sessions-empty",
                     ),
                 );
@@ -1931,26 +2074,26 @@ const Indicator = GObject.registerClass(
         _renderGuide(screen) {
             screen.add_child(
                 this._screenHeader({
-                    kicker: "Guide",
-                    title: "Status colors",
-                    sub: "Every meter writes its percentage beside it. The colour says how close it is.",
+                    kicker: tr("ui.guide"),
+                    title: tr("guide.title"),
+                    sub: tr("guide.sub"),
                     back: () => this._navigate("list"),
                 }),
             );
-            const status = this._section("Status");
+            const status = this._section(tr("guide.status"));
             status.add_child(
-                this._guideItem(COLOR.ok, "Healthy", "Plenty of headroom — under 70% used."),
+                this._guideItem(COLOR.ok, tr("guide.ok.t"), tr("guide.ok.d")),
             );
             status.add_child(
-                this._guideItem(COLOR.wait, "Caution", "Getting close — 70 to 89% used."),
+                this._guideItem(COLOR.wait, tr("guide.warn.t"), tr("guide.warn.d")),
             );
             status.add_child(
-                this._guideItem(COLOR.crit, "Critical", "At or near your limit — 90% and up."),
+                this._guideItem(COLOR.crit, tr("guide.crit.t"), tr("guide.crit.d")),
             );
             screen.add_child(status);
-            const meter = this._section("Meter");
+            const meter = this._section(tr("guide.meter"));
             meter.add_child(
-                this._guideItem(null, "Pace tick", "The tick on each bar marks even pace.", "pace"),
+                this._guideItem(null, tr("guide.pace.t"), tr("guide.pace.d"), "pace"),
             );
             screen.add_child(meter);
             screen.add_child(this._footer(this._updatedText(), [], false));
@@ -1959,27 +2102,30 @@ const Indicator = GObject.registerClass(
         _renderAbout(screen) {
             screen.add_child(
                 this._screenHeader({
-                    kicker: "About",
-                    title: "AI usage",
-                    sub: "Local GNOME Shell indicator for AI coding limits.",
+                    kicker: tr("ui.about"),
+                    title: tr("brand"),
+                    sub: tr("about.sub"),
                     back: () => this._navigate("list"),
                 }),
             );
             const daemon = this._state
-                ? `Daemon v${this._state.version ?? "?"} · updated ${relativeTime(this._state.updated_at)}`
-                : "Daemon not running";
+                ? tr("about.daemon", {
+                      v: this._state.version ?? "?",
+                      ago: relativeTime(this._state.updated_at),
+                  })
+                : tr("about.daemonDown");
             const section = this._section();
             section.add_child(
                 this._guideItem(
                     null,
-                    `Extension v${this._ext.metadata.version}`,
+                    tr("about.ext", { v: this._ext.metadata.version }),
                     this._state?.error ? `${daemon}\n${this._state.error}` : daemon,
                 ),
             );
             screen.add_child(section);
             const refresh = new St.Button({
                 style_class: "ai-usage-secondary-btn ai-usage-about-refresh",
-                label: "Refresh now",
+                label: tr("ui.refresh"),
                 can_focus: true,
                 x_expand: true,
             });
@@ -2005,11 +2151,11 @@ const Indicator = GObject.registerClass(
                 this._renderList(screen);
                 return;
             }
-            const { title, sub } = splitInsight(billboard.text ?? "");
+            const { title, sub } = splitInsight(messageText(billboard));
             const fromEarlier = this._landingMode === "message";
             screen.add_child(
                 this._screenHeader({
-                    kicker: `Insight · ${KIND_COPY[billboard.kind] ?? "Update"}`,
+                    kicker: tr("insight.kicker", { kind: kindCopy(billboard.kind) }),
                     meta: insightWhen(billboard.createdAt),
                     title,
                     sub,
@@ -2031,7 +2177,7 @@ const Indicator = GObject.registerClass(
                         y_align: Clutter.ActorAlign.CENTER,
                     }),
                 );
-                const role = ROLE_COPY[featured.role];
+                const role = roleCopy(featured.role);
                 row.add_child(
                     label(
                         `${featured.name ?? featured.providerId ?? ""}${role ? ` · ${role}` : ""}`,
@@ -2048,7 +2194,7 @@ const Indicator = GObject.registerClass(
             });
             const cont = new St.Button({
                 style_class: "ai-usage-primary-btn",
-                label: "Continue to agents",
+                label: tr("ui.continue"),
                 can_focus: true,
                 x_expand: true,
             });
@@ -2057,7 +2203,7 @@ const Indicator = GObject.registerClass(
             if ((this._state?.recentMessages ?? []).length > 1) {
                 const earlier = new St.Button({
                     style_class: "ai-usage-secondary-btn",
-                    label: "Earlier",
+                    label: tr("ui.earlier"),
                     can_focus: true,
                 });
                 earlier.connect("clicked", () => this._navigate("earlier"));
@@ -2066,14 +2212,14 @@ const Indicator = GObject.registerClass(
             if (billboard.share) {
                 const copy = new St.Button({
                     style_class: "ai-usage-ghost-btn",
-                    label: "Copy",
+                    label: tr("ui.copy"),
                     can_focus: true,
                     y_align: Clutter.ActorAlign.CENTER,
                 });
                 copy.connect("clicked", () =>
                     St.Clipboard.get_default().set_text(
                         St.ClipboardType.CLIPBOARD,
-                        billboard.share,
+                        shareText(billboard),
                     ),
                 );
                 actions.add_child(copy);
@@ -2085,21 +2231,21 @@ const Indicator = GObject.registerClass(
             const messages = this._state?.recentMessages ?? [];
             screen.add_child(
                 this._screenHeader({
-                    kicker: "Insights",
-                    meta: `${messages.length} saved`,
-                    title: "Earlier insights",
-                    sub: "Written a few times a day from your token data.",
+                    kicker: tr("earlier.kicker"),
+                    meta: tr("earlier.meta", { n: messages.length }),
+                    title: tr("earlier.title"),
+                    sub: tr("earlier.sub"),
                     back: () => this._navigate("list"),
                 }),
             );
             const section = this._section();
             if (!messages.length)
-                section.add_child(label("Nothing saved yet", "ai-usage-sessions-empty"));
+                section.add_child(label(tr("earlier.empty"), "ai-usage-sessions-empty"));
             for (const m of messages) {
                 section.add_child(
                     this._listRow(
-                        `${KIND_COPY[m.kind] ?? "Update"} · ${insightWhen(m.createdAt)}`,
-                        splitInsight(m.text).title,
+                        `${kindCopy(m.kind)} · ${insightWhen(m.createdAt)}`,
+                        splitInsight(messageText(m)).title,
                         "",
                         () => {
                             this._pickedMessage = m;
@@ -2124,7 +2270,8 @@ const Indicator = GObject.registerClass(
                 style_class: "ai-usage-windowbar",
                 x_expand: true,
             });
-            for (const { kind, label: text } of offered) {
+            for (const { kind, key } of offered) {
+                const text = tr(key);
                 const active = kind === selectedKind;
                 const button = new St.Button({
                     style_class: active

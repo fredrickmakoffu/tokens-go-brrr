@@ -85,7 +85,7 @@ if (!i) {
             // between marks, and Latest is not offered from the page it opens.
             if (collect(root, 'ai-usage-title').length !== 1)
                 log('[layout-smoke] the landing page needs exactly one headline');
-            if (texts(root).includes('Latest'))
+            if (texts(root).includes('__LATEST__'))
                 log('[layout-smoke] the landing page offers Latest, which is itself');
             const cont = collect(root, 'ai-usage-primary-btn')[0];
             if (!cont) log('[layout-smoke] no Continue button on the landing page');
@@ -99,7 +99,7 @@ if (!i) {
     const checkList = () => {
         try {
             if (i._state && i._state.latestMessage
-                && !texts(i.menu.box).includes('Latest'))
+                && !texts(i.menu.box).includes('__LATEST__'))
                 log('[layout-smoke] Latest is missing from the list screen');
         } catch (e) {
             log('[layout-smoke] list check threw: ' + e.message);
@@ -141,6 +141,15 @@ if (!i) {
 }
 'started'
 JS
+
+# The one assertion that names a button by its label. AI_USAGE_LANG runs the walk
+# in another language, which is the point: French is the longest of the three.
+case "${AI_USAGE_LANG:-en}" in
+  fr) LATEST='Dernière' ;;
+  pt*) LATEST='Último' ;;
+  *) LATEST='Latest' ;;
+esac
+DRIVER="${DRIVER//__LATEST__/$LATEST}"
 
 export XDG_CONFIG_HOME="$RUNTIME/config" XDG_DATA_HOME="$RUNTIME/data" \
       XDG_CACHE_HOME="$RUNTIME/cache" GSETTINGS_BACKEND=keyfile
