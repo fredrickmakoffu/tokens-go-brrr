@@ -32,6 +32,8 @@ LOG="$RUNTIME/shell.log"
 
 mkdir -p "$RUNTIME"/config/glib-2.0/settings "$RUNTIME"/data/gnome-shell/extensions "$RUNTIME"/cache
 ln -sfn "$REPO/gnome-shell-extension/$UUID" "$RUNTIME/data/gnome-shell/extensions/$UUID"
+# The shell resolves Barlow through fontconfig, which reads $XDG_DATA_HOME/fonts.
+ln -sfn "$REPO/gnome-shell-extension/$UUID/fonts" "$RUNTIME/data/fonts"
 
 # A keyfile settings backend, so the test never touches the real session's
 # enabled-extensions.
@@ -47,7 +49,7 @@ const i = Main.panel.statusArea['ai-usage@fredrickmakoffu.github.io'];
 if (!i) {
     log('[layout-smoke] extension not loaded');
 } else {
-    const screens = ['list', 'guide', 'about', 'landing', 'detail', 'sessions'];
+    const screens = ['list', 'guide', 'about', 'landing', 'earlier', 'detail', 'sessions'];
     let n = 0;
 
     // Structure, not pixels. Each of these was a bug once, and each is a
@@ -76,25 +78,15 @@ if (!i) {
     const checkLanding = () => {
         try {
             const root = i.menu.box;
-            const marks = collect(root, 'ai-usage-landing-mark').length;
-            if (marks !== 2)
-                log('[layout-smoke] quote marks: expected 2, got ' + marks);
-            const rows = collect(root, 'ai-usage-landing-quote-row');
-            const children = rows.length ? rows[0].get_children().length : 0;
-            if (children !== 3)
-                log('[layout-smoke] quote row: expected mark, text, mark; got '
-                    + children + ' child(ren)');
+            // The insight is a headline and an optional body, not a quote
+            // between marks, and Latest is not offered from the page it opens.
+            if (collect(root, 'ai-usage-title').length !== 1)
+                log('[layout-smoke] the landing page needs exactly one headline');
             if (texts(root).includes('Latest'))
                 log('[layout-smoke] the landing page offers Latest, which is itself');
-            const cont = collect(root, 'ai-usage-landing-continue')[0];
+            const cont = collect(root, 'ai-usage-primary-btn')[0];
             if (!cont) log('[layout-smoke] no Continue button on the landing page');
-            else if (cont.x_expand) log('[layout-smoke] Continue is set to expand');
-            // Clutter.ActorAlign.CENTER is 2. The enum is not in Eval's scope --
-            // only GLib and Main are -- and GJS reads enum properties as numbers.
-            const centre = 2;
-            const actions = collect(root, 'ai-usage-landing-actions')[0];
-            if (actions && actions.x_align !== centre)
-                log('[layout-smoke] the actions row is not centred');
+            else if (!cont.x_expand) log('[layout-smoke] Continue should fill the row');
         } catch (e) {
             // A broken assertion must not take the walk down with it: reported
             // here, it still fails the run rather than passing quietly.
