@@ -539,6 +539,14 @@ class MessageTest(LedgerCase):
         assert found is not None
         self.assertEqual(found["body"], "second")
 
+    def test_recent_messages_are_newest_first_and_limited(self):
+        for day in range(1, 5):
+            ledger.store_message(
+                self.con, kind="daily", key=f"2026-10-0{day}", body=f"m{day}"
+            )
+        found = ledger.recent_messages(self.con, limit=3)
+        self.assertEqual([m["body"] for m in found], ["m4", "m3", "m2"])
+
     def test_a_stored_message_carries_its_share_line(self):
         ledger.store_message(
             self.con, kind="weekly", key="2026-W40", body="body", share="SHARE: hi"

@@ -276,6 +276,7 @@ class DaemonPayloadTest(unittest.TestCase):
             last_error=None,
             _billboard=None,
             _latest_message=None,
+            _recent_messages=[],
         )
 
         payload = UsageDaemon.state_payload(stub)
@@ -293,6 +294,7 @@ class DaemonPayloadTest(unittest.TestCase):
             last_error=None,
             _billboard=None,
             _latest_message=None,
+            _recent_messages=[],
         )
         self.assertIsNone(UsageDaemon.state_payload(stub)["updated_at"])
 
