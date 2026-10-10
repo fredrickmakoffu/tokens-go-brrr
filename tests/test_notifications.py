@@ -8,6 +8,7 @@ model is in the loop. The tests also pin the two things a message must never do
 
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -438,3 +439,164 @@ class CooldownTest(NotifyCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RollingWindowTest(NotifyCase):
+    def test_rolling_range_ends_now_and_spans_the_hours(self):
+        since, until = notify.rolling_range(24, now=NOW)
+        self.assertEqual(until, int(NOW.timestamp()))
+        self.assertEqual(until - since, 24 * 3600)
+
+    def test_a_session_from_last_evening_is_inside_the_last_24_hours(self):
+        # 21:00 the previous UTC day: "yesterday" by the calendar, 15h ago by the clock.
+        self.seed([make(started=NOW - timedelta(hours=15), duration_s=600)])
+        message = notify.daily_digest(self.con, now=NOW)
+        assert message is not None
+        self.assertIn("Last 24h: 1 sessions", message.body)
+
+    def test_a_session_older_than_24_hours_is_outside_it(self):
+        self.seed([make(started=NOW - timedelta(hours=30), duration_s=600)])
+        self.assertIsNone(notify.daily_digest(self.con, now=NOW))
+
+    def test_a_session_is_placed_by_when_it_ended(self):
+        # Started 25h ago but ran 2h, so it ended 23h ago: inside the window.
+        self.seed(
+            [make(started=NOW - timedelta(hours=25), duration_s=2 * 3600)]
+        )
+        message = notify.daily_digest(self.con, now=NOW)
+        assert message is not None
+        self.assertIn("1 sessions", message.body)
+
+    def test_rolling_totals_rank_providers_and_name_the_top_project(self):
+        self.seed(
+            [
+                make("claude", "c1", project="alpha", tin=5000,
+                     started=NOW - timedelta(hours=3)),
+                make("opencode", "o1", project="beta", tin=100,
+                     started=NOW - timedelta(hours=2)),
+            ]
+        )
+        facts = notify.rolling_facts(
+            self.con, hours=24, period="last 24 hours", now=NOW
+        )
+        self.assertEqual(facts["ranked"][0]["provider"], "claude")
+        self.assertEqual(facts["top_project"]["project"], "alpha")
+        self.assertEqual(facts["totals"]["sessions"], 2)
+
+    def test_a_rolling_window_with_an_estimate_says_so(self):
+        self.seed([make(source="estimate", started=NOW - timedelta(hours=2))])
+        message = notify.daily_digest(self.con, now=NOW)
+        assert message is not None
+        self.assertIn("includes an estimate", message.body)
+
+    def test_an_unknown_rolling_grouping_is_refused(self):
+        with self.assertRaises(ValueError):
+            ledger.rolling_period_totals(self.con, since=0, until=1, group_by="day")
+
+
+class ProvenanceTest(NotifyCase):
+    def test_a_digest_carries_its_provenance(self):
+        self.seed([make(started=NOW - timedelta(hours=2))])
+        message = notify.daily_digest(self.con, now=NOW)
+        assert message is not None
+        self.assertEqual(message.meta["tier"], notify.COLD)
+        self.assertEqual(message.meta["asOf"], int(NOW.timestamp()))
+        self.assertEqual(message.meta["source"], notify.SOURCE_TEMPLATE)
+        self.assertTrue(message.meta["fingerprint"])
+
+    def test_the_fingerprint_is_stable_and_follows_the_figures(self):
+        self.seed([make("s1", started=NOW - timedelta(hours=2))])
+        first = notify.daily_digest(self.con, now=NOW)
+        again = notify.daily_digest(self.con, now=NOW)
+        self.seed([make("s2", external_id="s2", started=NOW - timedelta(hours=1))])
+        changed = notify.daily_digest(self.con, now=NOW)
+        assert first and again and changed
+        self.assertEqual(first.meta["fingerprint"], again.meta["fingerprint"])
+        self.assertNotEqual(first.meta["fingerprint"], changed.meta["fingerprint"])
+
+    def test_weekly_and_monthly_digests_are_cold_too(self):
+        self.seed([make(started=NOW - timedelta(hours=2))])
+        for build in (notify.weekly_digest, notify.monthly_digest):
+            message = build(self.con, now=NOW)
+            assert message is not None
+            self.assertEqual(message.meta["tier"], notify.COLD)
+
+
+class TierExpiryTest(unittest.TestCase):
+    CREATED = int(NOW.timestamp())
+
+    def test_without_a_tier_the_kind_sets_the_limit(self):
+        self.assertEqual(
+            notify.expires_at_for(notify.INFORMATIVE, self.CREATED),
+            self.CREATED + 24 * 3600,
+        )
+
+    def test_a_warm_note_expires_sooner_than_its_kind(self):
+        self.assertEqual(
+            notify.expires_at_for(
+                notify.INFORMATIVE, self.CREATED, tier=notify.WARM
+            ),
+            self.CREATED + 2 * 3600,
+        )
+
+    def test_the_sooner_of_kind_and_tier_wins(self):
+        # Actionable is 6h by kind; a cold tier would allow 24h. Kind wins.
+        self.assertEqual(
+            notify.expires_at_for(
+                notify.ACTIONABLE, self.CREATED, tier=notify.COLD
+            ),
+            self.CREATED + 6 * 3600,
+        )
+
+    def test_the_tier_counts_from_when_the_facts_were_read(self):
+        as_of = self.CREATED - 3600
+        self.assertEqual(
+            notify.expires_at_for(
+                notify.INFORMATIVE, self.CREATED, tier=notify.WARM, as_of=as_of
+            ),
+            as_of + 2 * 3600,
+        )
+
+    def test_an_unknown_tier_falls_back_to_the_kind(self):
+        self.assertEqual(
+            notify.expires_at_for(notify.FUN, self.CREATED, tier="bogus"),
+            self.CREATED + 12 * 3600,
+        )
+
+    def test_a_stored_warm_note_stops_being_the_billboard(self):
+        meta = json.dumps({"tier": notify.WARM, "asOf": self.CREATED})
+        stored = {
+            "id": 1,
+            "kind": notify.INFORMATIVE,
+            "created_at": self.CREATED,
+            "body": "x",
+            "meta": meta,
+        }
+        later = NOW + timedelta(hours=3)
+        self.assertIsNone(notify.choose_billboard([stored], now=later))
+        self.assertIsNotNone(notify.choose_billboard([stored], now=NOW))
+
+    def test_the_payload_reports_tier_age_and_source(self):
+        meta = json.dumps(
+            {"tier": notify.COLD, "asOf": self.CREATED - 60, "source": "llm"}
+        )
+        payload = notify.billboard_payload(
+            {
+                "id": 1,
+                "kind": notify.INFORMATIVE,
+                "created_at": self.CREATED,
+                "body": "x",
+                "meta": meta,
+            }
+        )
+        self.assertEqual(payload["tier"], notify.COLD)
+        self.assertEqual(payload["asOf"], self.CREATED - 60)
+        self.assertEqual(payload["source"], "llm")
+
+    def test_a_message_without_provenance_still_renders(self):
+        payload = notify.billboard_payload(
+            {"id": 1, "kind": notify.FUN, "created_at": self.CREATED, "body": "x"}
+        )
+        self.assertEqual(payload["tier"], "")
+        self.assertEqual(payload["asOf"], self.CREATED)
+        self.assertEqual(payload["source"], notify.SOURCE_TEMPLATE)

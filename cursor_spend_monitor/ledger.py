@@ -1200,6 +1200,67 @@ def totals(con: sqlite3.Connection, *, start_day: str, end_day: str) -> dict[str
     }
 
 
+ROLLING_GROUPINGS = frozenset({"provider", "project", "model"})
+
+
+def rolling_period_totals(
+    con: sqlite3.Connection,
+    *,
+    since: int,
+    until: int,
+    group_by: str = "provider",
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    """Totals over an epoch-second window, grouped, largest first.
+
+    The day-range queries cannot answer "the last 24 hours": a day is the
+    smallest unit they know, so work done at 17:00 is "yesterday" by 08:00 and
+    reads as old news. This reads `sessions` directly and places each session by
+    when it last had activity (`ended_at`, else `started_at`). A session is
+    counted whole in the window it ended in; it is not apportioned across the
+    boundary. Cursor reports per billing cycle rather than per session, so it
+    has no rows here -- a rolling figure is a statement about sessions.
+    """
+    if group_by not in ROLLING_GROUPINGS:
+        known = ", ".join(sorted(ROLLING_GROUPINGS))
+        raise ValueError(f"Unknown rolling grouping {group_by!r}. Known: {known}")
+    column = {"provider": "provider", "project": "project", "model": "model"}[group_by]
+    row_limit = _as_int(limit) if limit else -1
+    cur = con.execute(
+        f"SELECT COALESCE({column}, '') AS {column}, COUNT(*) AS sessions,"
+        " COALESCE(SUM(duration_s), 0) / 60 AS minutes,"
+        " SUM(tokens_input + tokens_output + tokens_reasoning"
+        " + tokens_cache_read + tokens_cache_write) AS tokens,"
+        " SUM(tokens_cache_read) AS cache_read_tokens,"
+        " COALESCE(SUM(cost_usd), 0) AS cost_usd,"
+        " SUM(CASE WHEN source = 'estimate' THEN 1 ELSE 0 END)"
+        " AS estimated_sessions"
+        " FROM sessions"
+        " WHERE COALESCE(ended_at, started_at) IS NOT NULL"
+        " AND COALESCE(ended_at, started_at) BETWEEN ? AND ?"
+        f" GROUP BY {column} ORDER BY tokens DESC, {column} ASC LIMIT ?",
+        (since, until, row_limit),
+    )
+    return [dict(row) for row in cur]
+
+
+def rolling_totals(
+    con: sqlite3.Connection, *, since: int, until: int
+) -> dict[str, Any]:
+    """One line for a rolling window, shaped like `totals`."""
+    rows = rolling_period_totals(con, since=since, until=until, group_by="provider")
+    return {
+        "since": since,
+        "until": until,
+        "sessions": sum(r["sessions"] for r in rows),
+        "minutes": sum(r["minutes"] for r in rows),
+        "tokens": sum(r["tokens"] for r in rows),
+        "cache_read_tokens": sum(r["cache_read_tokens"] for r in rows),
+        "cost_usd": sum(r["cost_usd"] or 0 for r in rows),
+        "estimated_sessions": sum(r["estimated_sessions"] for r in rows),
+    }
+
+
 def sources_in(con: sqlite3.Connection, *, start_day: str, end_day: str) -> list[str]:
     """Which provenance labels contributed to a period.
 
