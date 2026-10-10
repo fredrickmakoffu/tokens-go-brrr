@@ -197,6 +197,23 @@ and the entry only reveals them.
 Opening the menu replays the entry even when the screen has not changed, which is
 the usual case: the list is already up from last time.
 
+## Light and dark
+
+The popover is dark by default and switches to a light variant when
+`org.gnome.desktop.interface color-scheme` is `prefer-light`, live, without
+reloading the shell. `default` counts as dark: most installs sit on it, it means
+no preference, and GNOME's own panel and popups stay dark in either mode.
+
+St's CSS has no `var()`, so the dark values stay as written and the light ones
+are a generated block at the end of `stylesheet.css`, scoped under
+`.ai-usage-light`. Edit a dark rule, then run `python3 scripts/gen_light_css.py`
+to bring the light block into step. Colours set from JS (status colours, number
+colour) live in `PALETTES` in `extension.js`. The top bar chips always use the
+dark palette because the panel is always dark.
+
+Preview a theme with `SCHEME=prefer-light gnome-shell-extension/devtest/capture-screens.sh <dir>`,
+and run the layout walk in either with `SCHEME=prefer-light .../layout-smoke.sh`.
+
 ## Surface and font
 
 > **Superseded by the AI Usage design system.** The popover now follows the

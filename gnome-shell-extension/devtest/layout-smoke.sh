@@ -42,6 +42,9 @@ cat >"$RUNTIME/config/glib-2.0/settings/keyfile" <<EOF
 enabled-extensions=['$UUID']
 disable-user-extensions=false
 welcome-dialog-last-shown-version='99.0'
+
+[org/gnome/desktop/interface]
+color-scheme='${SCHEME:-default}'
 EOF
 
 read -r -d '' DRIVER <<'JS'
