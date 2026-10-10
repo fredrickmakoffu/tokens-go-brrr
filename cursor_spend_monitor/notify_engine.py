@@ -116,6 +116,17 @@ def provider_label(provider_id: str) -> str:
     return str(getattr(cls, "display_name", provider_id))
 
 
+def _tpl(template_id: str, **params: Any) -> dict[str, Any]:
+    """Which template wrote a message, and the values it was filled with.
+
+    The body stays English text, which is what the CLI prints and what a model
+    rewrites. The panel renders from this instead when it can, so the same
+    message reads in the user's language; a message a model reworded has no
+    template to render from (see billboard_payload) and is shown as written.
+    """
+    return {"id": template_id, "p": params}
+
+
 def _featured_meta(featured: dict[str, str] | None, **extra: Any) -> dict[str, Any]:
     """Message meta carrying who the message is about, and why."""
     meta: dict[str, Any] = dict(extra)
@@ -286,6 +297,66 @@ def _provider_share(facts: dict[str, Any]) -> str:
     return f" {leader['provider']} carried {share}%"
 
 
+def digest_params(
+    facts: dict[str, Any], *, period: str, vs_last_month: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """The values render_digest puts in its sentence, for a translated rendering."""
+    totals = facts["totals"]
+    ranked = facts["ranked"]
+    leader = None
+    if ranked and totals["tokens"]:
+        leader = {
+            "name": provider_label(str(ranked[0]["provider"])),
+            "pct": _pct(100 * _as_float(ranked[0]["tokens"]) / totals["tokens"]),
+        }
+    project = facts["top_project"] if facts["top_project"] else None
+    model = facts["top_model"] if facts["top_model"] else None
+    return {
+        "period": period,
+        "sessions": _as_int(totals["sessions"]),
+        "tokens": _as_int(totals["tokens"]),
+        "leader": leader,
+        "topProject": (
+            {
+                "project": project["project"],
+                "sessions": _as_int(project["sessions"]),
+                "tokens": _as_int(project["tokens"]),
+            }
+            if project and project["project"]
+            else None
+        ),
+        "topModel": model["model"] if model and model["model"] else None,
+        "estimate": bool(facts["estimate_note"]),
+        "vsLastMonth": vs_last_month,
+    }
+
+
+def fun_params(facts: dict[str, Any]) -> dict[str, Any] | None:
+    """Which fun fact render_fun picked, and its values, as a template."""
+    cache = facts["cache"]
+    if cache["tokens"] and cache["share"] >= 0.5:
+        return _tpl(
+            "fun.cache",
+            pct=_pct(cache["share"] * 100),
+            tokens=_as_int(cache["cache_read_tokens"]),
+        )
+    streaks = facts["streaks"]
+    if streaks["current"] >= 3:
+        return _tpl(
+            "fun.streak",
+            current=_as_int(streaks["current"]),
+            longest=_as_int(streaks["longest"]),
+        )
+    longest = facts["records"].get("longest_session")
+    if longest and longest.get("duration_s"):
+        return _tpl(
+            "fun.longest",
+            minutes=_as_int(longest["duration_s"]) // 60,
+            project=longest.get("project") or "",
+        )
+    return None
+
+
 def render_digest(facts: dict[str, Any], *, headline: str) -> str:
     """The informative digest, in one or two sentences."""
     totals = facts["totals"]
@@ -383,7 +454,11 @@ def daily_digest(
         provider=featured["providerId"]
         if (featured := featured_provider(facts))
         else "",
-        meta=_featured_meta(featured, period="daily"),
+        meta=_featured_meta(
+            featured,
+            period="daily",
+            tpl=_tpl("digest", **digest_params(facts, period="daily")),
+        ),
     )
 
 
@@ -401,7 +476,11 @@ def weekly_digest(
         provider=featured["providerId"]
         if (featured := featured_provider(facts))
         else "",
-        meta=_featured_meta(featured, period="weekly"),
+        meta=_featured_meta(
+            featured,
+            period="weekly",
+            tpl=_tpl("digest", **digest_params(facts, period="weekly")),
+        ),
     )
 
 
@@ -416,12 +495,14 @@ def monthly_digest(
 
     previous_start, previous_end = month_range(now, offset=1)
     previous = ledger.totals(con, start_day=previous_start, end_day=previous_end)
+    vs_last_month = None
     if previous["tokens"]:
         change = (
             100 * (facts["totals"]["tokens"] - previous["tokens"]) / previous["tokens"]
         )
         direction = "up" if change >= 0 else "down"
         body += f" That is {direction} {abs(_pct(change))}% vs last month."
+        vs_last_month = {"dir": direction, "pct": abs(_pct(change))}
     return Message(
         kind=INFORMATIVE,
         key=f"monthly:{start}",
@@ -429,7 +510,16 @@ def monthly_digest(
         provider=featured["providerId"]
         if (featured := featured_provider(facts))
         else "",
-        meta=_featured_meta(featured, period="monthly"),
+        meta=_featured_meta(
+            featured,
+            period="monthly",
+            tpl=_tpl(
+                "digest",
+                **digest_params(
+                    facts, period="monthly", vs_last_month=vs_last_month
+                ),
+            ),
+        ),
     )
 
 
@@ -445,7 +535,7 @@ def fun_fact(con: sqlite3.Connection, *, now: datetime | None = None) -> Message
         key=f"fun:{end}",
         body=body,
         provider=featured["providerId"] if featured else "",
-        meta=_featured_meta(featured, period="fun"),
+        meta=_featured_meta(featured, period="fun", tpl=fun_params(facts)),
     )
 
 
@@ -465,7 +555,16 @@ def share_line(
         provider=featured["providerId"]
         if (featured := featured_provider(facts))
         else "",
-        meta=_featured_meta(featured, period="share"),
+        meta=_featured_meta(
+            featured,
+            period="share",
+            tpl=_tpl(
+                "share",
+                sessions=_as_int(facts["totals"]["sessions"]),
+                tokens=_as_int(facts["totals"]["tokens"]),
+                model=(facts["top_model"] or {}).get("model") or "",
+            ),
+        ),
     )
 
 
@@ -561,6 +660,16 @@ def event_messages(
                         meter=meter.key,
                         percent=round(_as_float(meter.percent), 1),
                         trigger=snap.provider_id,
+                        tpl=_tpl(
+                            "actionable",
+                            provider=snap.display_name,
+                            label=meter.label,
+                            kind=meter.kind,
+                            percent=_pct(meter.percent),
+                            spent=meter.percent >= SPENT_AT,
+                            etaSeconds=_as_int(eta_seconds) if eta_seconds else None,
+                            better=featured["name"] if featured else "",
+                        ),
                     ),
                 )
             )
@@ -578,6 +687,13 @@ def _eta_label(eta_seconds: float | None) -> str:
 
 
 # -- the landing page --------------------------------------------------------
+
+
+def _template_of(meta: dict[str, Any]) -> dict[str, Any] | None:
+    tpl = meta.get("tpl")
+    if not isinstance(tpl, dict) or not tpl.get("id") or meta.get("composed_by"):
+        return None
+    return {"id": str(tpl["id"]), "params": dict(tpl.get("p") or {})}
 
 
 def billboard_payload(row: dict[str, Any]) -> dict[str, Any]:
@@ -605,6 +721,10 @@ def billboard_payload(row: dict[str, Any]) -> dict[str, Any]:
         "createdAt": created,
         "expiresAt": expires_at_for(kind, created),
         "reason": str(meta.get("reason") or ""),
+        # What the panel renders in the user's language. Absent once a model has
+        # reworded the message: its prose is the message, and there is nothing
+        # to re-render from.
+        "template": _template_of(meta),
     }
 
 

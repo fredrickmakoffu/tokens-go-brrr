@@ -280,6 +280,113 @@ class EventTest(NotifyCase):
         self.assertNotIn("has room", messages[0].body)
 
 
+class TemplateTest(NotifyCase):
+    """Every template-built message says which template and with what values,
+    so the panel can render it in the user's language."""
+
+    def test_a_digest_carries_its_values(self):
+        self.seed(
+            [
+                make("claude", "c1", project="alpha", tin=1000),
+                make("opencode", "o1", project="beta", tin=9000, model="deepseek-v4-flash"),
+            ]
+        )
+        message = notify.weekly_digest(self.con, now=NOW)
+        assert message is not None
+        tpl = message.meta["tpl"]
+        self.assertEqual(tpl["id"], "digest")
+        params = tpl["p"]
+        self.assertEqual(params["period"], "weekly")
+        self.assertEqual(params["sessions"], 2)
+        self.assertEqual(params["leader"], {"name": "OpenCode", "pct": 88})
+        self.assertEqual(params["topProject"]["project"], "beta")
+        self.assertEqual(params["topModel"], "deepseek-v4-flash")
+        self.assertFalse(params["estimate"])
+
+    def test_the_monthly_digest_carries_the_change_against_last_month(self):
+        self.seed(
+            [
+                make("claude", "prev", started=datetime(2026, 9, 10, 9, tzinfo=timezone.utc), tin=1000),
+                make("claude", "now", started=NOW.replace(hour=9), tin=3000),
+            ]
+        )
+        message = notify.monthly_digest(self.con, now=NOW)
+        assert message is not None
+        change = message.meta["tpl"]["p"]["vsLastMonth"]
+        self.assertEqual(change["dir"], "up")
+        self.assertGreater(change["pct"], 0)
+
+    def test_a_first_month_has_no_change_to_report(self):
+        self.seed([make(started=NOW.replace(hour=9))])
+        message = notify.monthly_digest(self.con, now=NOW)
+        assert message is not None
+        self.assertIsNone(message.meta["tpl"]["p"]["vsLastMonth"])
+
+    def test_a_measured_period_is_not_marked_estimated(self):
+        self.seed([make(source="estimate", started=NOW.replace(hour=9))])
+        message = notify.daily_digest(self.con, now=NOW)
+        assert message is not None
+        self.assertTrue(message.meta["tpl"]["p"]["estimate"])
+
+    def test_each_fun_fact_names_its_template(self):
+        self.seed([make(tin=100, tout=0, tcr=900, started=NOW.replace(hour=9))])
+        message = notify.fun_fact(self.con, now=NOW)
+        assert message is not None
+        self.assertEqual(message.meta["tpl"]["id"], "fun.cache")
+        self.assertEqual(message.meta["tpl"]["p"]["pct"], 90)
+
+    def test_a_streak_template_carries_both_runs(self):
+        self.seed(
+            [
+                make("claude", f"s{i}", started=NOW.replace(hour=9) - timedelta(days=i))
+                for i in range(4)
+            ]
+        )
+        message = notify.fun_fact(self.con, now=NOW)
+        assert message is not None
+        self.assertEqual(message.meta["tpl"]["id"], "fun.streak")
+        self.assertEqual(message.meta["tpl"]["p"]["current"], 4)
+
+    def test_the_share_line_carries_its_values(self):
+        self.seed([make(started=NOW.replace(hour=9))])
+        message = notify.share_line(self.con, now=NOW)
+        assert message is not None
+        tpl = message.meta["tpl"]
+        self.assertEqual(tpl["id"], "share")
+        self.assertEqual(tpl["p"]["sessions"], 1)
+        self.assertEqual(tpl["p"]["model"], "claude-opus-5-5")
+
+    def test_an_actionable_message_carries_the_meter_and_the_better_provider(self):
+        messages = notify.event_messages(
+            [snap("claude", "Claude Code", percent=93), snap("opencode", "OpenCode", percent=5)]
+        )
+        params = messages[0].meta["tpl"]["p"]
+        self.assertEqual(messages[0].meta["tpl"]["id"], "actionable")
+        self.assertEqual(params["provider"], "Claude Code")
+        self.assertEqual(params["percent"], 93)
+        self.assertEqual(params["better"], "OpenCode")
+        self.assertFalse(params["spent"])
+
+    def test_the_payload_exposes_the_template_but_not_for_a_reworded_message(self):
+        row = {
+            "id": 1,
+            "kind": "informative",
+            "created_at": 100,
+            "provider": "",
+            "body": "b",
+            "share": "",
+            "meta": '{"tpl": {"id": "digest", "p": {"sessions": 2}}}',
+        }
+        self.assertEqual(
+            notify.billboard_payload(row)["template"],
+            {"id": "digest", "params": {"sessions": 2}},
+        )
+        row["meta"] = '{"tpl": {"id": "digest", "p": {}}, "composed_by": "claude"}'
+        self.assertIsNone(notify.billboard_payload(row)["template"])
+        row["meta"] = "{}"
+        self.assertIsNone(notify.billboard_payload(row)["template"])
+
+
 class MixerTest(NotifyCase):
     def test_the_daily_slot_is_a_digest_plus_a_fun_fact(self):
         self.seed([make(tin=100, tcr=900, started=NOW.replace(hour=9))])

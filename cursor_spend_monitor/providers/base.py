@@ -59,6 +59,17 @@ class Meter:
         remaining = (self.resets_at - datetime.now(timezone.utc)).total_seconds()
         return max(0, min(100, _as_int(round(100 * (1 - remaining / length)))))
 
+    def resets_in_seconds(self) -> int | None:
+        """Seconds until the window resets, or None if unknown. Zero once past.
+
+        The panel formats this itself so the wording follows the user's language;
+        resets_label stays for the CLI and for anything that wants English.
+        """
+        if self.resets_at is None:
+            return None
+        delta = self.resets_at - datetime.now(timezone.utc)
+        return max(0, _as_int(delta.total_seconds()))
+
     def resets_label(self) -> str:
         if self.resets_at is None:
             return "—"
@@ -161,6 +172,7 @@ class ProviderSnapshot:
                     "label": m.label,
                     "value": _as_int(round(m.percent)),
                     "resets": m.resets_label(),
+                    "resetsSeconds": m.resets_in_seconds(),
                     "kind": m.kind,
                     "eta": burn.eta_label(m.eta_seconds),
                     "etaSeconds": m.eta_seconds,

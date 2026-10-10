@@ -143,6 +143,29 @@ class MeterReadingTest(unittest.TestCase):
         self.assertIsNone(opencode._as_float({"percent": 1}))
 
 
+class MeterResetsInTest(unittest.TestCase):
+    def test_seconds_until_reset_are_reported(self):
+        from datetime import datetime, timedelta, timezone
+
+        from cursor_spend_monitor.providers.base import Meter
+
+        meter = Meter("k", "K", 10, datetime.now(timezone.utc) + timedelta(hours=2), kind="rolling")
+        self.assertAlmostEqual(meter.resets_in_seconds(), 7200, delta=2)
+
+    def test_a_reset_in_the_past_is_zero_not_negative(self):
+        from datetime import datetime, timedelta, timezone
+
+        from cursor_spend_monitor.providers.base import Meter
+
+        meter = Meter("k", "K", 10, datetime.now(timezone.utc) - timedelta(hours=1), kind="rolling")
+        self.assertEqual(meter.resets_in_seconds(), 0)
+
+    def test_an_unknown_reset_is_none(self):
+        from cursor_spend_monitor.providers.base import Meter
+
+        self.assertIsNone(Meter("k", "K", 10, None, kind="weekly").resets_in_seconds())
+
+
 class MeterElapsedTest(unittest.TestCase):
     def _meter(self, kind, hours_left):
         from datetime import datetime, timedelta, timezone
