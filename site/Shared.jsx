@@ -20,6 +20,7 @@ function TopBar({ b, onToggle, open }) {
       <button onClick={onToggle} title={t("bar.usage")} style={{ display: "flex", border: 0, padding: 0, background: open ? "color-mix(in srgb, var(--color-neutral-100) 14%, transparent)" : "transparent", cursor: "pointer" }} className={b.brrr ? "tgb-shake" : ""}>
         <ExtPanelIndicator variant={urgent ? "quiet" : "tightest"} urgent={urgent} name={t("bar.name")} value={b.limited ? t("bar.out") : b.eta ? "~" + fmtDur(b.eta) : b.pct + "%"} dot={b.status === "warn"} />
       </button>
+      <ThemeToggle />
       <LangSwitch bar />
       <ExtIcon name="wifi" size={15} /><ExtIcon name="battery" size={15} />
     </div>
@@ -70,6 +71,17 @@ const galleryItems = () => [
   { value: "sessions", label: t("gal.sessions"), nav: { screen: "sessions", prov: "cursor", filter: "active" }, cap: t("gal.sessions.cap") },
   { value: "guide", label: t("gal.guide"), nav: { screen: "guide" }, cap: t("gal.guide.cap") },
 ];
+
+function ThemeToggle() {
+  const dark = THEME.resolved() === "dark";
+  const p = { width: 15, height: 15, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
+  // The icon is the theme showing now; the label says what a click does.
+  const icon = dark
+    ? <svg {...p}><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" /></svg>
+    : <svg {...p}><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" /></svg>;
+  const label = t(dark ? "theme.toLight" : "theme.toDark");
+  return <button onClick={() => THEME.toggle()} title={label} aria-label={label} style={{ display: "flex", border: 0, background: "transparent", padding: 2, cursor: "pointer", color: "inherit" }}>{icon}</button>;
+}
 
 function LangSwitch({ bar }) {
   const cur = I18N.locale();
