@@ -1517,6 +1517,39 @@ def store_message(
     return _as_int(row[0]) if row is not None else 0
 
 
+def last_generated_at(
+    con: sqlite3.Connection, *, kind: str, key_prefix: str
+) -> int | None:
+    """When any message of this kind whose key starts with `key_prefix` was made.
+
+    A prefix, not a key: rotating messages carry the day in their key so that a
+    fresh one is a new row (acknowledging an old row would otherwise hide it for
+    good), and "when did this one last speak" has to look across those days.
+    """
+    row = con.execute(
+        "SELECT MAX(created_at) FROM messages"
+        " WHERE kind = ? AND substr(key, 1, ?) = ?",
+        (kind, len(key_prefix), key_prefix),
+    ).fetchone()
+    return _as_optional_int(row[0]) if row is not None else None
+
+
+def weekday_counts(
+    con: sqlite3.Connection, *, start_day: str, end_day: str
+) -> list[int]:
+    """Sessions per local weekday, Monday first, over a UTC day range."""
+    counts = [0] * 7
+    for row in con.execute(
+        "SELECT started_at FROM sessions WHERE started_at IS NOT NULL"
+        " AND date(started_at, 'unixepoch') BETWEEN ? AND ?",
+        (start_day, end_day),
+    ):
+        local = _local_from_epoch(row["started_at"])
+        if local is not None:
+            counts[local.weekday()] += 1
+    return counts
+
+
 def last_message_age(con: sqlite3.Connection, *, kind: str, key: str) -> int | None:
     """Seconds since this `(kind, key)` was last generated, or None."""
     row = con.execute(

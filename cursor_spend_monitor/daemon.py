@@ -5,6 +5,7 @@ import signal
 import sqlite3
 import sys
 import threading
+import time
 from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any
@@ -72,6 +73,10 @@ class UsageDaemon:
         # the panel. Independent of the stores above and just as fail-soft.
         self.llm_log = llm_log.LlmLog(keep_days=config.llm_log_days)
         self._harvesting = False
+        # When the panel was last opened (monotonic seconds), for the cold tier,
+        # and whether a cold note is already being made.
+        self._last_open: float | None = None
+        self._cold_running = False
         # The first harvest of a run may backfill (Cursor's previous cycle);
         # later ones are strictly incremental.
         self._harvest_full = True
@@ -97,7 +102,7 @@ class UsageDaemon:
         self.service = UsageService(
             version=__version__,
             get_state=self.state_payload,
-            on_refresh=self.poll,
+            on_refresh=self.panel_opened,
             on_set_primary=self.set_primary,
             on_acknowledge=self.acknowledge,
             on_llm_log=self.llm_log_payload,
@@ -162,6 +167,65 @@ class UsageDaemon:
     def _tick(self) -> bool:
         self.poll(force=True)
         return True
+
+    def panel_opened(self, *args) -> bool:
+        """The panel asked for a refresh, which it does each time it opens.
+
+        Besides refreshing, an open after a long absence (or the first since the
+        daemon started) is the moment for a cold note: a trend or insight about
+        the shape of the person's usage, made while they are not waiting for it.
+        """
+        now = time.monotonic()
+        idle = None if self._last_open is None else now - self._last_open
+        self._last_open = now
+        if self.config.live_notes and (
+            notify_engine.tier_for(idle, cold_hours=self.config.live_cold_hours)
+            == notify_engine.COLD
+        ):
+            self._start_cold_note()
+        return self.poll(*args)
+
+    def _start_cold_note(self) -> None:
+        """Make a cold insight off the main loop, if the person wants one."""
+        if self._cold_running or self.ledger.connection is None:
+            return
+        if not self._wanted(notify_engine.INFORMATIVE):
+            return
+        self._cold_running = True
+        threading.Thread(
+            target=self._cold_worker, name="ai-usage-cold", daemon=True
+        ).start()
+
+    def _cold_worker(self) -> None:
+        stored = False
+        try:
+            with self.ledger.worker() as con:
+                if con is None:
+                    return
+                message = notify_engine.cold_note(con)
+                if message is not None:
+                    # No model and no desktop notification: the note waits on the
+                    # landing page for the next look, which is the whole point.
+                    stored = bool(
+                        notify_engine.keep(
+                            con,
+                            [message],
+                            cooldown_seconds=notify_engine.DEFAULT_COOLDOWN_SECONDS,
+                        )
+                    )
+        except sqlite3.Error as exc:
+            print(f"Could not build a cold note: {exc}", file=sys.stderr, flush=True)
+        finally:
+            self._cold_running = False
+        if stored:
+            GLib.idle_add(self._publish_cold)
+
+    def _publish_cold(self) -> bool:
+        con = self.ledger.connection
+        if con is not None:
+            self._refresh_billboard(con)
+            self._publish()
+        return False
 
     def poll(self, *_args, force: bool = False) -> bool:
         """Fetch every provider, unless we just did.

@@ -362,6 +362,20 @@ unparseable reply.
 }
 ```
 
+**Cold notes.** The first time you open the panel after a few hours away (or
+after the daemon starts), it makes one trend or insight note from your own
+ledger -- cache-read share, week over week, your peak hour and busiest day,
+where your tokens go, your weekday rhythm. They rotate so none repeats before
+the rest have had a turn, never call a model, and wait on the landing page
+instead of popping a desktop notification.
+
+```jsonc
+{
+  "live_notes": true,        // false = scheduled digests only
+  "live_cold_hours": 4       // idle hours before an open counts as cold
+}
+```
+
 **Every model call is logged**, so you can see exactly what was sent and what
 came back. One file per local day under
 `~/.local/share/cursor-spend-monitor/llm-calls/YYYY-MM-DD.jsonl`, one JSON
