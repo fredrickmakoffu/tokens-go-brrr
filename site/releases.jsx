@@ -56,9 +56,9 @@ function PlatformCard({ p, asset, b }) {
       {soon ? (
         <div style={{ border: "1px dashed var(--color-divider)", padding: "11px 12px", textAlign: "center", fontSize: 14, fontWeight: 600, color: "var(--muted)" }}>Coming soon</div>
       ) : (<>
-        <ExtButton variant="primary" block label={"Download " + p.ext.slice(1)} onClick={() => window.open(asset.url, "_blank")} />
+        <ExtButton variant="primary" block label={"Download " + p.ext} onClick={() => window.open(asset.url, "_blank")} />
         <CopyLine text={p.cmd(asset.name)} b={b} dense />
-        <button onClick={() => setSha(!sha)} style={{ alignSelf: "flex-start", border: 0, background: "transparent", padding: 0, cursor: "pointer", fontSize: 13, color: "var(--muted)", fontFamily: "var(--font-body)" }}>{(sha ? "▾ " : "▸ ") + "SHA-256"}</button>
+        <button onClick={() => setSha(!sha)} style={{ alignSelf: "flex-start", border: 0, background: "transparent", padding: 0, cursor: "pointer", fontSize: 13, color: "var(--muted)", fontFamily: "var(--font-body)" }}>{(sha ? "▾ " : "▸ ") + "Checksum (SHA-256)"}</button>
         {sha && <code style={{ ...MONO, fontSize: 12, overflowWrap: "anywhere", color: "var(--muted)", marginTop: -6 }}>{asset.sha || "Listed in SHA256SUMS on the release page."}</code>}
       </>)}
     </div>
@@ -70,21 +70,19 @@ function Downloads({ b, rel }) {
   const find = (ext) => ext && r.assets.find((a) => a.name.endsWith(ext));
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
-      <span style={{ fontSize: 14, color: "var(--muted)" }}>{"Latest: " + r.tag + " · " + r.date}</span>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 16 }}>
         {PLATFORMS.map((p) => <PlatformCard key={p.id} p={p} asset={find(p.ext)} b={b} />)}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: "1px solid var(--color-divider)", paddingTop: 12 }}>
-          <span style={KICK}>After installing · 1</span>
-          <span style={{ fontSize: 15 }}>Log out and back in so GNOME Shell loads the extension. Needs GNOME Shell 45 or newer.</span>
+          <span style={KICK}>Then · 1</span>
+          <span style={{ fontSize: 15 }}>Log out and back in. GNOME Shell loads the extension at login.</span>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: "1px solid var(--color-divider)", paddingTop: 12 }}>
-          <span style={KICK}>After installing · 2</span>
+          <span style={KICK}>Then · 2</span>
           <CopyLine text="cursor-spend-monitor setup" b={b} />
         </div>
       </div>
-      <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>Always verify a download against its SHA-256 before installing.</p>
     </div>
   );
 }
@@ -211,9 +209,9 @@ function Releases({ rel, b }) {
 }
 
 const FACTS = [
-  ["In the top bar", "One indicator shows the tool closest to its limit, and how long it has left at the current pace."],
-  ["In the popover", "Every provider's 5-hour, weekly or monthly window, with the terminal sessions spending against it."],
-  ["Behind it", "A local daemon reads the logins your tools already keep on disk, then polls each provider's own usage route."],
+  ["Top bar", "The tool closest to its limit, and how long it has left at your current pace."],
+  ["Popover", "Every tool's 5-hour, weekly or monthly limit, and the terminal sessions using it."],
+  ["Insights", "Two or three times a day, one sentence on where to spend next."],
 ];
 function Facts() {
   return (
