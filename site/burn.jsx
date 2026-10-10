@@ -93,20 +93,19 @@ function useBurn(mult = 1) {
 
 const SITE = {
   privacy: [
-    ["No cookies, no scraping", "Each provider reuses a login already on disk: Cursor's IDE state, Claude Code's OAuth file, OpenCode's API key."],
-    ["Read, never written", "Claude Code owns its token refresh. The file is opened read-only, so the daemon cannot sign you out of the CLI."],
-    ["The extension holds nothing", "It has no credentials and makes no network calls. It reads state from the daemon over the session bus."],
-    ["History stays in ~/.local", "Polls and the usage ledger are kept in ~/.local/share/cursor-spend-monitor for 90 days. Set history_days to 0 to stop recording."],
-    ["Only numbers travel", "Insight wording is a template unless you turn on llm_notifications. When it is on, no transcript text, prompts or file contents are sent."],
+    ["Your logins, read-only", "It reuses logins your tools already keep on disk and never writes to them, so it cannot sign you out."],
+    ["The extension holds nothing", "No credentials and no network calls. It reads state from the local daemon."],
+    ["History stays on your machine", "Usage history is kept in ~/.local/share/cursor-spend-monitor for 90 days. Set history_days to 0 to stop recording."],
+    ["No prompts leave", "Insights are written from templates. If you turn on llm_notifications, a model rewrites them from token counts, never prompts, transcripts or file contents."],
   ],
   faq: [
-    ["Which tools does it track?", "Cursor, Claude Code, OpenCode and Codex report their own limits. Pi is a harness, so it borrows the meters of whichever account its sessions bill to."],
-    ["Why does a row sometimes show no bar?", "xAI publishes no usage endpoint and Cline reports a credit balance, not a window. An empty bar at 0% would read as plenty left, so the row shows its sessions and no percentage."],
-    ["Does a paused session count?", "No. A session suspended with Ctrl+Z spends nothing until you resume it, so it stays out of the top-bar count and shows as paused in the provider's detail screen."],
-    ["Does opening the popover hit five APIs every time?", "It asks for a refresh, and the daemon drops the request if it polled in the last 60 seconds. Anthropic returns 429 on its usage route long before any quota is spent."],
-    ["Can I use it from a status bar or a script?", "Yes. status prints the published state in about 0.1s with no network call. check exits non-zero when quota is low, and best names the provider with the most left."],
-    ["Which GNOME versions?", "GNOME Shell 45 or newer. Log out and back in after installing so the shell picks up the extension."],
-    ["Windows or macOS?", "Both are coming. Fedora and Debian/Ubuntu packages are available now."],
+    ["Which tools does it track?", "Cursor, Claude Code, OpenCode and Codex report their own limits. Pi borrows the limits of whichever account its sessions bill to."],
+    ["Why does a row sometimes have no bar?", "xAI publishes no usage endpoint and Cline reports a credit balance, not a limit. A bar at 0% would read as plenty left, so those rows show sessions and no percentage."],
+    ["Does a paused session count?", "No. A session paused with Ctrl+Z spends nothing, so it is left out of the top-bar count and shown as paused."],
+    ["How often does it poll?", "At most once a minute. Opening the popover asks for a refresh, and the daemon skips it if it polled in the last 60 seconds."],
+    ["Can I use it in a script?", "Yes. status prints the current state in about 0.1s with no network call. check exits non-zero when quota is low, and best names the provider with the most left."],
+    ["Which GNOME versions?", "GNOME Shell 45 or newer."],
+    ["Windows or macOS?", "Not yet. Fedora and Debian/Ubuntu packages are out now. Windows and macOS are planned."],
   ],
 };
 
