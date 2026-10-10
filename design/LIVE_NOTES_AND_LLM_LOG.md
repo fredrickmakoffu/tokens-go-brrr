@@ -2,7 +2,8 @@
 
 **Status:** in progress — step 1 (rolling windows, provenance, tier expiry) and
 step 2 (the LLM call log) and step 3 (the cold tier and insight pool) and step 4 (the warm tier, with
-template wording) are built; step 5 is not.
+template wording) and step 5 (quick-model wording, open-time caps and the
+"ran elsewhere" note) are built. All five steps are done.
 **Date:** 2026-10-10
 **Builds on:** `USAGE_ANALYTICS_AND_GUIDANCE.md` (ledger + notification engine) and
 `BILLBOARD_LANDING_PAGE.md` (the landing page).
@@ -91,6 +92,14 @@ Quick re-opens never wait.
 
 ### 2.2 The "something ran elsewhere" note
 
+*Built.* `find_elsewhere` compares a rolling meter now with the oldest history
+sample in the last two hours, and speaks only when the climb is at least 8
+points, the baseline is at least 5 minutes old, the ledger holds no session for
+that provider since the baseline, and no session of that provider is running.
+The history store belongs to the main loop, so the series is read there and
+handed to the worker. The sentence leads the warm note and joins its
+fingerprint.
+
 If a meter moved materially since the last `history.db` sample while no local
 session was live, the warm note says so, e.g. *"About 18% of your Claude 5h
 window went somewhere other than this machine — phone or web, probably."* This
@@ -143,6 +152,13 @@ model.
 ---
 
 ## 4. Guardrails for open-time LLM calls
+
+*Built.* `CallBudget` (a sliding hour and day window held in memory, so a
+restart forgives the count once) gates each call made on open, counts failed
+calls too, and a refusal is logged as `skipped` with `over_hour_cap` or
+`over_day_cap`. A 429 rests that provider for 15 minutes for every kind of
+message, not only warm ones. Not built: a durable counter; the log can be
+switched off, so it cannot be the source of truth for a cap.
 
 - Only call when the fingerprint changed and the tier is warm.
 - Cap calls per hour (`live_llm_per_hour`, default 4) and per day

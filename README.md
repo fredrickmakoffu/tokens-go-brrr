@@ -379,11 +379,24 @@ last one changes nothing; warm notes stop being shown two hours after the
 figures they describe were read. Wording is a template, translated like the
 rest.
 
+**Quick-model wording and "ran elsewhere".** With `llm_notifications` on, a
+warm note that is actually new is reworded by the cheapest model on whichever
+provider has the most room (Haiku for Claude), within the same four seconds; any
+refusal, timeout or spent cap leaves the template, which is a complete note.
+Open-time calls are capped (`live_llm_per_hour`, `live_llm_per_day`), a provider
+that answers 429 is left alone for 15 minutes, and every call -- and every skip,
+with its reason -- is in the LLM log. When a rolling meter has climbed over the
+last two hours while this machine recorded no session for that provider and none
+is running, the note says so first: that usage came from a phone, the web or
+another computer, which the local transcripts can never show.
+
 ```jsonc
 {
   "live_notes": true,        // false = scheduled digests only
   "live_cold_hours": 4,      // idle hours before an open counts as cold
-  "live_hot_minutes": 10     // a warm note this recent is simply served again
+  "live_hot_minutes": 10,    // a warm note this recent is simply served again
+  "live_llm_per_hour": 4,    // model calls made because the panel opened
+  "live_llm_per_day": 24     // 0 = never reword on open
 }
 ```
 

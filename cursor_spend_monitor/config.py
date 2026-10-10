@@ -81,6 +81,9 @@ class MonitorConfig:
     live_cold_hours: float = 4.0
     # A warm note made this recently is served again instead of rebuilt.
     live_hot_minutes: float = 10.0
+    # Ceilings on model calls made because the panel was opened. 0 = never.
+    live_llm_per_hour: int = 4
+    live_llm_per_day: int = 24
     # Days of the per-call LLM log to keep; 0 turns the log off.
     llm_log_days: int = 30
     # The landing page: one notification shown as a quote when the popover
@@ -147,6 +150,8 @@ class MonitorConfig:
             live_notes=bool(data.get("live_notes", True)),
             live_cold_hours=max(0.0, _as_float(data.get("live_cold_hours"), 4.0)),
             live_hot_minutes=max(0.0, _as_float(data.get("live_hot_minutes"), 10.0)),
+            live_llm_per_hour=max(0, _as_int(data.get("live_llm_per_hour"), 4)),
+            live_llm_per_day=max(0, _as_int(data.get("live_llm_per_day"), 24)),
             llm_log_days=max(0, _as_int(data.get("llm_log_days"), 30)),
             billboard_enabled=bool(
                 data.get("billboard_enabled", data.get("quote_panel", True))
@@ -186,6 +191,8 @@ class MonitorConfig:
             "live_notes": self.live_notes,
             "live_cold_hours": self.live_cold_hours,
             "live_hot_minutes": self.live_hot_minutes,
+            "live_llm_per_hour": self.live_llm_per_hour,
+            "live_llm_per_day": self.live_llm_per_day,
             "llm_log_days": self.llm_log_days,
             "billboard_enabled": self.billboard_enabled,
             "billboard_auto_advance_seconds": self.billboard_auto_advance_seconds,

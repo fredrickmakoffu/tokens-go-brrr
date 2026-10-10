@@ -21,7 +21,7 @@ from . import (
     notify_engine,
 )
 from . import llm_composer as llm
-from . import llm_log
+from . import llm_budget, llm_log
 from .config import MonitorConfig, write_state
 from .dbus_service import UsageService
 from .instances import InstanceReport, scan, signature
@@ -60,6 +60,11 @@ REFRESH_COOLDOWN_SECONDS = 60
 # a harvest another is not worth running.
 WARM_BUDGET_SECONDS = 4
 WARM_HARVEST_SPACING_SECONDS = 60
+# A warm note's model call has to fit the same budget as the line that says it is
+# coming; past it the template note stands.
+WARM_LLM_TIMEOUT_SECONDS = 4
+# After a 429 a provider is left alone this long, whatever it is asked for.
+LLM_BACKOFF_SECONDS = 15 * 60
 
 
 class UsageDaemon:
@@ -77,6 +82,15 @@ class UsageDaemon:
         # Every call made to a language model, one file per day, readable from
         # the panel. Independent of the stores above and just as fail-soft.
         self.llm_log = llm_log.LlmLog(keep_days=config.llm_log_days)
+        # Ceiling on calls made because the panel was opened, and the providers
+        # that said 429 recently (monotonic deadline per provider id).
+        self.llm_budget = llm_budget.CallBudget(
+            config.live_llm_per_hour, config.live_llm_per_day
+        )
+        self._llm_backoff: dict[str, float] = {}
+        # Meter history for the warm note, read on the main loop (the history
+        # store's connection belongs to it) and handed to the worker.
+        self._warm_samples: dict[tuple[str, str], list[tuple[float, float]]] = {}
         self._harvesting = False
         # When the panel was last opened (monotonic seconds), for the cold tier,
         # and whether a cold note is already being made.
@@ -270,6 +284,7 @@ class UsageDaemon:
         if harvest_here:
             self._harvesting = True
         self._catching_up = True
+        self._warm_samples = self._collect_samples()
         self._publish()
         GLib.timeout_add_seconds(WARM_BUDGET_SECONDS, self._stop_catching_up)
         threading.Thread(
@@ -278,6 +293,17 @@ class UsageDaemon:
             name="ai-usage-warm",
             daemon=True,
         ).start()
+
+    def _collect_samples(self) -> dict[tuple[str, str], list[tuple[float, float]]]:
+        """The meter history for each rolling meter, for the "ran elsewhere" check."""
+        found: dict[tuple[str, str], list[tuple[float, float]]] = {}
+        for snap in self.snapshots:
+            for meter in snap.metrics:
+                if meter.kind == "rolling":
+                    found[(snap.provider_id, meter.key)] = self.history.window_samples(
+                        snap.provider_id, meter.key
+                    )
+        return found
 
     def _warm_worker(self, harvest_here: bool) -> None:
         deadline = time.monotonic() + WARM_BUDGET_SECONDS
@@ -294,8 +320,11 @@ class UsageDaemon:
                 # A poll started by this same open is the freshest meter there is.
                 while self._polling and time.monotonic() < deadline:
                     time.sleep(0.1)
-                message = notify_engine.warm_note(con, list(self.snapshots))
+                message = notify_engine.warm_note(
+                    con, list(self.snapshots), samples=self._warm_samples
+                )
                 if message is not None:
+                    message = self._warm_wording(con, message)
                     stored = bool(
                         notify_engine.keep(
                             con,
@@ -311,6 +340,30 @@ class UsageDaemon:
                 self._harvesting = False
             self._warm_running = False
             GLib.idle_add(self._finish_warm, stored)
+
+    def _warm_wording(self, con: sqlite3.Connection, message: Any) -> Any:
+        """The warm note in a quick model's words, when that is allowed and new.
+
+        Only a note that would actually be stored is worth a call: an unchanged
+        picture has a stored note already. The call is capped (per hour and per
+        day), skips a provider that just said 429, and has the warm budget as its
+        timeout; every refusal leaves the template, which is a complete note.
+        """
+        if not self.config.llm_notifications:
+            return message
+        if not notify_engine.due(
+            con, message, cooldown_seconds=notify_engine.DEFAULT_COOLDOWN_SECONDS
+        ):
+            return message
+        composed = self._compose(
+            con,
+            [message],
+            trigger="open",
+            origin="open",
+            timeout=WARM_LLM_TIMEOUT_SECONDS,
+            budget=self.llm_budget,
+        )
+        return composed[0]
 
     def _finish_warm(self, stored: bool) -> bool:
         self._catching_up = False
@@ -667,17 +720,23 @@ class UsageDaemon:
         *,
         trigger: str = "",
         origin: str = "",
+        timeout: int | None = None,
+        budget: llm_budget.CallBudget | None = None,
     ) -> list[Any]:
         """The templates, reworded by a model when one has capacity to spare.
 
         Every failure -- no generator with enough headroom, a missing
-        credential, a refusal -- leaves the template in place. The LLM is an
-        upgrade, and an upgrade that can break the notification path is not one.
+        credential, a refusal, a spent budget -- leaves the template in place.
+        The LLM is an upgrade, and an upgrade that can break the notification
+        path is not one. A `budget` is spent per call, for the callers (an open
+        of the panel) that are not bounded by a schedule.
         """
         if not (self.config.llm_notifications and messages):
             return messages
+        now = time.monotonic()
+        resting = {p for p, until in self._llm_backoff.items() if until > now}
         generator = llm.choose(
-            self.snapshots,
+            [s for s in self.snapshots if s.provider_id not in resting],
             trigger=trigger,
             floor=self.config.llm_min_headroom,
             model=self.config.llm_generator_model,
@@ -686,28 +745,48 @@ class UsageDaemon:
         if generator is None:
             # Worth a line in the log: a person wondering why nothing was
             # reworded can see that no provider had the room.
-            self.llm_log.record(
-                {
-                    "trigger": origin,
-                    "outcome": llm_log.SKIPPED,
-                    "reason": "no_generator",
-                    "message_kind": messages[0].kind,
-                    "message_key": messages[0].key,
-                }
-            )
+            self._log_skipped(origin, messages[0], "no_generator")
             return messages
+        extra = {} if timeout is None else {"timeout": timeout}
         improved: list[Any] = []
         for message in messages:
+            if budget is not None:
+                refusal = budget.refusal()
+                if refusal:
+                    self._log_skipped(origin, message, refusal)
+                    improved.append(message)
+                    continue
+                budget.spend()
             rewritten = llm.rewrite(
                 message,
                 generator=generator,
                 facts=self._facts_for(con, message),
                 max_tokens=self.config.llm_max_output_tokens,
-                recorder=self.llm_log.record,
+                recorder=self._record_llm,
                 context={"trigger": origin},
+                **extra,
             )
             improved.append(rewritten or message)
         return improved
+
+    def _log_skipped(self, origin: str, message: Any, reason: str) -> None:
+        self.llm_log.record(
+            {
+                "trigger": origin,
+                "outcome": llm_log.SKIPPED,
+                "reason": reason,
+                "message_kind": message.kind,
+                "message_key": message.key,
+            }
+        )
+
+    def _record_llm(self, entry: dict[str, Any]) -> None:
+        """Log a call, and leave a provider alone for a while after a 429."""
+        self.llm_log.record(entry)
+        if entry.get("outcome") == llm_log.RATE_LIMITED and entry.get("provider"):
+            self._llm_backoff[str(entry["provider"])] = (
+                time.monotonic() + LLM_BACKOFF_SECONDS
+            )
 
     def llm_log_payload(self, day: str = "") -> dict[str, Any]:
         """One day of the LLM log for the Settings screen; newest day if none."""
@@ -723,12 +802,18 @@ class UsageDaemon:
         message keeps its own period's numbers, which are already in the draft.
         """
         start, end = notify_engine.day_range(30)
-        return {
-            "period": str((message.meta or {}).get("period") or "last 30 days"),
+        meta = message.meta or {}
+        facts: dict[str, Any] = {
+            "period": str(meta.get("period") or "last 30 days"),
             "ranked": ledger.period_totals(
                 con, start_day=start, end_day=end, group_by="provider"
             ),
         }
+        if meta.get("period") == "warm":
+            # The fresh figures behind a warm note, so a rewording can use them
+            # and the rule "only the numbers in FACTS" has something to cite.
+            facts["now"] = dict((meta.get("tpl") or {}).get("p") or {})
+        return facts
 
     def _deliver(self, messages: list[Any], actionable: bool) -> bool:
         """Send what was composed and republish, back on the main loop."""
