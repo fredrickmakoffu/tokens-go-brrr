@@ -1,10 +1,10 @@
 const REL_REPO = "fredrickmakoffu/cursor-spend-monitor-releases";
 const REL_URL = "https://github.com/" + REL_REPO + "/releases";
 const PLATFORMS = [
-  { id: "fedora", name: "Fedora", kind: "RPM · GNOME", ext: ".rpm", cmd: (f) => "sudo dnf install ./" + f },
-  { id: "debian", name: "Debian / Ubuntu", kind: "DEB · GNOME", ext: ".deb", cmd: (f) => "sudo apt install ./" + f },
-  { id: "windows", name: "Windows", kind: "Installer" },
-  { id: "macos", name: "macOS", kind: "Disk image" },
+  { id: "fedora", name: "Fedora", kindKey: "dl.kind.rpm", ext: ".rpm", cmd: (f) => "sudo dnf install ./" + f },
+  { id: "debian", name: "Debian / Ubuntu", kindKey: "dl.kind.deb", ext: ".deb", cmd: (f) => "sudo apt install ./" + f },
+  { id: "windows", name: "Windows", kindKey: "dl.kind.installer" },
+  { id: "macos", name: "macOS", kindKey: "dl.kind.dmg" },
 ];
 const FALLBACK_RELEASES = [{
   tag: "v0.6.1", date: "2026-10-09", url: REL_URL + "/tag/v0.6.1", notes: [],
@@ -13,7 +13,7 @@ const FALLBACK_RELEASES = [{
     { name: "cursor-spend-monitor_0.6.1_all.deb", size: 106000, url: REL_URL + "/download/v0.6.1/cursor-spend-monitor_0.6.1_all.deb", sha: null },
   ],
 }];
-const fmtSize = (b) => b >= 1e6 ? (b / 1e6).toFixed(1) + " MB" : Math.round(b / 1000) + " KB";
+const fmtSize = (b) => b >= 1e6 ? I18N.num(b / 1e6, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " MB" : Math.round(b / 1000) + " KB";
 const parseNotes = (body) => (body || "").split(/\r?\n/).map((l) => l.trim()).filter((l) => /^[-*] /.test(l)).map((l) => l.slice(2).replace(/\*\*|`/g, ""));
 
 function useReleases() {
@@ -38,7 +38,7 @@ function CopyLine({ text, b, dense }) {
   return (
     <div style={{ display: "flex", alignItems: "flex-start", gap: 8, border: "1px solid var(--color-divider)", padding: dense ? "8px 10px" : "10px 12px", background: "var(--color-surface, transparent)" }}>
       <code style={{ ...MONO, flex: 1, minWidth: 0, overflowWrap: "anywhere", lineHeight: 1.5 }}>{text}</code>
-      <button onClick={copy} className="ext-row-hover" style={{ flex: "none", border: 0, background: "transparent", padding: "2px 4px", cursor: "pointer", ...HEAD, fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase", color: done ? "var(--st-ok)" : "var(--muted)" }}>{done ? "Copied −4k" : "Copy"}</button>
+      <button onClick={copy} className="ext-row-hover" style={{ flex: "none", border: 0, background: "transparent", padding: "2px 4px", cursor: "pointer", ...HEAD, fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase", color: done ? "var(--st-ok)" : "var(--muted)" }}>{done ? t("copy.copied") : t("copy.copy")}</button>
     </div>
   );
 }
@@ -51,15 +51,15 @@ function PlatformCard({ p, asset, b }) {
       <Corners />
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         <span style={{ ...HEAD, fontSize: 24, textTransform: "uppercase", letterSpacing: "0.02em" }}>{p.name}</span>
-        <span style={{ fontSize: 13, color: "var(--muted)" }}>{p.kind + (asset ? " · " + fmtSize(asset.size) : "")}</span>
+        <span style={{ fontSize: 13, color: "var(--muted)" }}>{t(p.kindKey) + (asset ? " · " + fmtSize(asset.size) : "")}</span>
       </div>
       {soon ? (
-        <div style={{ border: "1px dashed var(--color-divider)", padding: "11px 12px", textAlign: "center", fontSize: 14, fontWeight: 600, color: "var(--muted)" }}>Coming soon</div>
+        <div style={{ border: "1px dashed var(--color-divider)", padding: "11px 12px", textAlign: "center", fontSize: 14, fontWeight: 600, color: "var(--muted)" }}>{t("dl.soon")}</div>
       ) : (<>
-        <ExtButton variant="primary" block label={"Download " + p.ext} onClick={() => window.open(asset.url, "_blank")} />
+        <ExtButton variant="primary" block label={t("dl.button", { ext: p.ext })} onClick={() => window.open(asset.url, "_blank")} />
         <CopyLine text={p.cmd(asset.name)} b={b} dense />
-        <button onClick={() => setSha(!sha)} style={{ alignSelf: "flex-start", border: 0, background: "transparent", padding: 0, cursor: "pointer", fontSize: 13, color: "var(--muted)", fontFamily: "var(--font-body)" }}>{(sha ? "▾ " : "▸ ") + "Checksum (SHA-256)"}</button>
-        {sha && <code style={{ ...MONO, fontSize: 12, overflowWrap: "anywhere", color: "var(--muted)", marginTop: -6 }}>{asset.sha || "Listed in SHA256SUMS on the release page."}</code>}
+        <button onClick={() => setSha(!sha)} style={{ alignSelf: "flex-start", border: 0, background: "transparent", padding: 0, cursor: "pointer", fontSize: 13, color: "var(--muted)", fontFamily: "var(--font-body)" }}>{(sha ? "▾ " : "▸ ") + t("dl.checksum")}</button>
+        {sha && <code style={{ ...MONO, fontSize: 12, overflowWrap: "anywhere", color: "var(--muted)", marginTop: -6 }}>{asset.sha || t("dl.checksumFallback")}</code>}
       </>)}
     </div>
   );
@@ -75,11 +75,11 @@ function Downloads({ b, rel }) {
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: "1px solid var(--color-divider)", paddingTop: 12 }}>
-          <span style={KICK}>Then · 1</span>
-          <span style={{ fontSize: 15 }}>Log out and back in. GNOME Shell loads the extension at login.</span>
+          <span style={KICK}>{t("dl.then1")}</span>
+          <span style={{ fontSize: 15 }}>{t("dl.then1.text")}</span>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: "1px solid var(--color-divider)", paddingTop: 12 }}>
-          <span style={KICK}>Then · 2</span>
+          <span style={KICK}>{t("dl.then2")}</span>
           <CopyLine text="cursor-spend-monitor setup" b={b} />
         </div>
       </div>
@@ -93,11 +93,11 @@ const fileKind = (n) => /\.rpm$/.test(n) ? "RPM" : /\.deb$/.test(n) ? "DEB" : /\
 const relAge = (d) => {
   const days = Math.floor((Date.now() - new Date(d + "T00:00:00Z").getTime()) / 864e5);
   if (!(days >= 0)) return "";
-  if (days === 0) return "today";
-  if (days === 1) return "yesterday";
-  if (days < 31) return days + " days ago";
+  if (days === 0) return t("age.today");
+  if (days === 1) return t("age.yesterday");
+  if (days < 31) return t("age.days", { n: days });
   const m = Math.round(days / 30.4);
-  return m < 12 ? m + " mo ago" : Math.round(m / 12) + " yr ago";
+  return m < 12 ? t("age.months", { n: m }) : t("age.years", { n: Math.round(m / 12) });
 };
 
 function Badge({ children, color }) {
@@ -112,13 +112,13 @@ function FileRow({ a, b }) {
       <Badge>{fileKind(a.name)}</Badge>
       <a href={a.url} style={{ ...MONO, fontSize: 12, flex: "1 1 220px", minWidth: 0, overflowWrap: "anywhere" }}>{a.name}</a>
       <span style={{ fontSize: 13, color: "var(--muted)", fontVariantNumeric: "tabular-nums", flex: "none" }}>{fmtSize(a.size)}</span>
-      {a.sha && <button onClick={copySha} className="ext-row-hover" title={a.sha} style={{ flex: "none", border: 0, background: "transparent", padding: "2px 4px", cursor: "pointer", ...HEAD, fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase", color: copied ? "var(--st-ok)" : "var(--muted)" }}>{copied ? "Copied" : "Copy SHA"}</button>}
+      {a.sha && <button onClick={copySha} className="ext-row-hover" title={a.sha} style={{ flex: "none", border: 0, background: "transparent", padding: "2px 4px", cursor: "pointer", ...HEAD, fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase", color: copied ? "var(--st-ok)" : "var(--muted)" }}>{copied ? t("rel.copied") : t("rel.copySha")}</button>}
     </div>
   );
 }
 
 function NoteList({ r }) {
-  if (!r.notes.length) return <p style={{ margin: 0, fontSize: 14, color: "var(--muted)" }}>No summary for this build. The release page has the full notes.</p>;
+  if (!r.notes.length) return <p style={{ margin: 0, fontSize: 14, color: "var(--muted)" }}>{t("rel.noNotes")}</p>;
   return (
     <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 8 }}>
       {r.notes.map((n) => (
@@ -136,7 +136,7 @@ function LatestRelease({ r, b }) {
       <Corners />
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", justifyContent: "space-between", gap: 12 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <span style={{ ...KICK, color: "var(--st-ok)" }}>Latest release</span>
+          <span style={{ ...KICK, color: "var(--st-ok)" }}>{t("rel.latest")}</span>
           <span style={{ ...HEAD, fontSize: "clamp(48px, 7vw, 84px)", lineHeight: 0.9, letterSpacing: "-0.01em" }}>{r.tag}</span>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
@@ -145,16 +145,16 @@ function LatestRelease({ r, b }) {
         </div>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        <span style={KICK}>What changed</span>
+        <span style={KICK}>{t("rel.changed")}</span>
         <NoteList r={r} />
       </div>
       <div style={{ display: "flex", flexDirection: "column" }}>
-        <span style={{ ...KICK, marginBottom: 8 }}>{"Files · " + r.assets.length}</span>
+        <span style={{ ...KICK, marginBottom: 8 }}>{t("rel.files", { n: r.assets.length })}</span>
         {r.assets.map((a) => <FileRow key={a.name} a={a} b={b} />)}
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
-        <ExtButton variant="secondary" label="Release page" onClick={() => window.open(r.url, "_blank")} />
-        <span style={{ fontSize: 13, color: "var(--muted)" }}>Verify each file against its SHA-256 before installing.</span>
+        <ExtButton variant="secondary" label={t("rel.page")} onClick={() => window.open(r.url, "_blank")} />
+        <span style={{ fontSize: 13, color: "var(--muted)" }}>{t("rel.verify")}</span>
       </div>
     </div>
   );
@@ -171,15 +171,15 @@ function PastRelease({ r, last, b }) {
       <div style={{ minWidth: 0, paddingBottom: last ? 0 : 6 }}>
         <button className="ext-row-hover" aria-expanded={open} onClick={() => setOpen(!open)} style={{ width: "100%", display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "4px 14px", padding: "12px 0", border: 0, background: "transparent", color: "var(--color-text)", textAlign: "left", cursor: "pointer" }}>
           <span style={{ ...HEAD, fontSize: 26, lineHeight: 1 }}>{r.tag}</span>
-          {r.prerelease && <Badge color="var(--st-warn)">Pre-release</Badge>}
+          {r.prerelease && <Badge color="var(--st-warn)">{t("rel.pre")}</Badge>}
           <span style={{ fontSize: 13, color: "var(--muted)", fontVariantNumeric: "tabular-nums", flex: 1 }}>{r.date + " · " + relAge(r.date)}</span>
-          <span style={{ ...HEAD, fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--muted)" }}>{open ? "Close" : r.assets.length + " files"}</span>
+          <span style={{ ...HEAD, fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--muted)" }}>{open ? t("rel.close") : t("rel.nFiles", { n: r.assets.length })}</span>
         </button>
         {open && (
           <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: "4px 0 20px" }}>
             <NoteList r={r} />
             <div>{r.assets.map((a) => <FileRow key={a.name} a={a} b={b} />)}</div>
-            <a href={r.url} target="_blank" style={{ fontSize: 13 }}>Release page</a>
+            <a href={r.url} target="_blank" style={{ fontSize: 13 }}>{t("rel.page")}</a>
           </div>
         )}
       </div>
@@ -196,29 +196,25 @@ function Releases({ rel, b }) {
       <LatestRelease r={head} b={b} />
       {past.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column" }}>
-          <span style={{ ...KICK, paddingBottom: 6 }}>Earlier builds</span>
+          <span style={{ ...KICK, paddingBottom: 6 }}>{t("rel.earlier")}</span>
           {shown.map((r, i) => <PastRelease key={r.tag} r={r} b={b} last={i === shown.length - 1 && (all || past.length <= 3)} />)}
           {past.length > 3 && (
-            <button className="ext-row-hover" onClick={() => setAll(!all)} style={{ alignSelf: "flex-start", marginLeft: 42, marginTop: 8, border: 0, background: "transparent", padding: "4px 0", cursor: "pointer", ...HEAD, fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--muted)" }}>{all ? "Show fewer" : "Show " + (past.length - 3) + " more"}</button>
+            <button className="ext-row-hover" onClick={() => setAll(!all)} style={{ alignSelf: "flex-start", marginLeft: 42, marginTop: 8, border: 0, background: "transparent", padding: "4px 0", cursor: "pointer", ...HEAD, fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--muted)" }}>{all ? t("rel.fewer") : t("rel.more", { n: past.length - 3 })}</button>
           )}
         </div>
       )}
-      <a href={REL_URL} target="_blank" style={{ fontSize: 14, paddingTop: 14, borderTop: "1px solid var(--color-divider)" }}>All releases on GitHub</a>
+      <a href={REL_URL} target="_blank" style={{ fontSize: 14, paddingTop: 14, borderTop: "1px solid var(--color-divider)" }}>{t("rel.all")}</a>
     </div>
   );
 }
 
-const FACTS = [
-  ["Top bar", "The tool closest to its limit, and how long it has left at your current pace."],
-  ["Popover", "Every tool's 5-hour, weekly or monthly limit, and the terminal sessions using it."],
-  ["Insights", "Two or three times a day, one sentence on where to spend next."],
-];
+const FACT_KEYS = ["bar", "popover", "insights"];
 function Facts() {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0 32px", marginBottom: 40 }}>
-      {FACTS.map(([t, d]) => (
-        <div key={t} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "14px 0", borderTop: "1px solid var(--color-divider)" }}>
-          <span style={{ fontSize: 15, fontWeight: 600 }}>{t}</span>
+      {FACT_KEYS.map((k) => [t("fact." + k + ".t"), t("fact." + k + ".d")]).map(([title, d]) => (
+        <div key={title} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "14px 0", borderTop: "1px solid var(--color-divider)" }}>
+          <span style={{ fontSize: 15, fontWeight: 600 }}>{title}</span>
           <span style={{ fontSize: 14, color: "var(--muted)", textWrap: "pretty" }}>{d}</span>
         </div>
       ))}
