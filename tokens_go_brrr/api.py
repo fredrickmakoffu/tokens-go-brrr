@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-import http.client
-import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+from .coerce import as_float_or_none
+from .coerce import as_int as _as_int
+from .coerce import parse_ms_or_iso as _parse_ms_or_iso
+from .http_json import HttpJsonError, request_json
 from .local_auth import resolve_access_token
 
 # The API host, kept apart from the scheme: requests below go over an
@@ -24,30 +26,17 @@ AGGREGATED_PATH = "/aiserver.v1.DashboardService/GetAggregatedUsageEvents"
 POLICY_PATH = "/aiserver.v1.DashboardService/GetUsageLimitPolicyStatus"
 
 
-def _as_int(value: Any) -> int:
-    """A spend figure as an int. The endpoint returns strings and nulls freely."""
-    try:
-        return int(value)
-    except (TypeError, ValueError, OverflowError):
-        return 0
-
-
-def _as_float(value: Any) -> float:
-    try:
-        return float(value)
-    except (TypeError, ValueError, OverflowError):
-        return 0.0
-
-
 @dataclass
 class UsageSummary:
     raw: dict[str, Any]
     membership_type: str
     billing_cycle_start: datetime | None
     billing_cycle_end: datetime | None
-    auto_percent: float
-    api_percent: float
-    total_percent: float
+    # Utilization fields are None when the dashboard omitted or garbled them —
+    # never a healthy 0% invented here (meter policy).
+    auto_percent: float | None
+    api_percent: float | None
+    total_percent: float | None
     auto_message: str
     api_message: str
     plan_used: int
@@ -83,9 +72,9 @@ class UsageSummary:
             or str(data.get("membershipType") or "unknown"),
             billing_cycle_start=_parse_ms_or_iso(data.get("billingCycleStart")),
             billing_cycle_end=_parse_ms_or_iso(data.get("billingCycleEnd")),
-            auto_percent=_as_float(plan.get("autoPercentUsed")),
-            api_percent=_as_float(plan.get("apiPercentUsed")),
-            total_percent=_as_float(plan.get("totalPercentUsed")),
+            auto_percent=as_float_or_none(plan.get("autoPercentUsed")),
+            api_percent=as_float_or_none(plan.get("apiPercentUsed")),
+            total_percent=as_float_or_none(plan.get("totalPercentUsed")),
             auto_message=str(data.get("autoModelSelectedDisplayMessage") or ""),
             api_message=str(data.get("namedModelSelectedDisplayMessage") or ""),
             plan_used=included,
@@ -94,7 +83,7 @@ class UsageSummary:
             on_demand_used=on_demand_used,
         )
 
-    def metric(self, name: str) -> float:
+    def metric(self, name: str) -> float | None:
         return {
             "auto_percent": self.auto_percent,
             "api_percent": self.api_percent,
@@ -115,21 +104,6 @@ class UsageSummary:
         if hours >= 1:
             return f"Resets in {hours}h {rem // 60}m"
         return f"Resets in {rem // 60}m"
-
-
-def _parse_ms_or_iso(value: Any) -> datetime | None:
-    if value is None or value == "":
-        return None
-    try:
-        # api2 returns unix ms as strings
-        if isinstance(value, (int, float)) or (
-            isinstance(value, str) and value.isdigit()
-        ):
-            ms = int(value)
-            return datetime.fromtimestamp(ms / 1000, tz=timezone.utc)
-        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except (ValueError, OSError, OverflowError):
-        return None
 
 
 class CursorUsageClient:
@@ -179,7 +153,7 @@ class CursorUsageClient:
         """
         try:
             return self._connect_json(path, access_token)
-        except (PermissionError, RuntimeError, OSError, ValueError):
+        except (PermissionError, RuntimeError, OSError, ValueError, HttpJsonError):
             return {}
 
     def _connect_json(self, path: str, access_token: str) -> dict[str, Any]:
@@ -193,38 +167,28 @@ class CursorUsageClient:
         Kept separate from `_connect_json` because some endpoints need a real
         body — the aggregated-usage query takes the range it should sum.
         """
-        # `HTTPSConnection` is TLS by construction — there is no scheme to get
-        # wrong and no URL to open, which is why this does not use urllib.
-        # Constructed outside the `try` so the `finally` below always has one to
-        # close. `HTTPSConnection` does not connect here, so it cannot fail.
-        connection = http.client.HTTPSConnection(API2_HOST, timeout=30)
         try:
-            connection.request(
+            return request_json(
                 "POST",
+                API2_HOST,
                 path,
-                body=json.dumps(body),
+                body=body,
                 headers={
                     "Authorization": f"Bearer {access_token}",
-                    "Content-Type": "application/json",
                     "Connect-Protocol-Version": "1",
-                    "User-Agent": "tokens-go-brrr/0.1",
                 },
             )
-            response = connection.getresponse()
-            status = int(response.status)
-            detail = response.read().decode("utf-8", errors="replace")
         except OSError as exc:
             raise RuntimeError(f"Cursor API unreachable: {exc}") from exc
-        finally:
-            connection.close()
-
-        if status in {401, 403}:
-            raise PermissionError(
-                "Cursor API rejected the IDE token. Open Cursor and sign in again."
-            )
-        if status >= 400:
-            raise RuntimeError(f"HTTP {status} from {path}: {detail[:200]}")
-        try:
-            return json.loads(detail)
-        except ValueError as exc:
-            raise RuntimeError(f"Cursor API returned invalid JSON for {path}") from exc
+        except HttpJsonError as exc:
+            if exc.status in {401, 403}:
+                raise PermissionError(
+                    "Cursor API rejected the IDE token. Open Cursor and sign in again."
+                ) from exc
+            raise RuntimeError(
+                f"HTTP {exc.status} from {path}: {exc.body[:200]}"
+            ) from exc
+        except RuntimeError as exc:
+            raise RuntimeError(
+                f"Cursor API returned invalid JSON for {path}"
+            ) from exc

@@ -33,6 +33,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from . import ledger
+from .coerce import as_float as _as_float
+from .coerce import as_int as _as_int
 
 # Message families, matching `notify.types` in the config.
 INFORMATIVE = "informative"
@@ -77,24 +79,7 @@ SOURCE_LLM = "llm"
 VALUE_SHARE_FLOOR = 0.20
 
 
-# -- coercion ----------------------------------------------------------------
-#
-# A meter's percentage and a rollup's totals come from JSON written by someone
-# else, so a figure is never trusted to be the type it should be.
-
-
-def _as_int(value: Any) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError, OverflowError):
-        return 0
-
-
-def _as_float(value: Any) -> float:
-    try:
-        return float(value)
-    except (TypeError, ValueError, OverflowError):
-        return 0.0
+# -- formatting --------------------------------------------------------------
 
 
 def _pct(value: Any) -> int:

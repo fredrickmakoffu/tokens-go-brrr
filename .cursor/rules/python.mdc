@@ -17,9 +17,9 @@ alwaysApply: false
 ## Fail-soft (product law)
 
 - Panel and daemon must stay up: catch at provider/harvester/ledger edges; `# noqa: BLE001` only with a one-line why.
-- **Meters / utilization:** unparsable → drop the meter or use `error_snapshot`, do **not** invent a healthy `0%`.
-- **Config coercion:** invalid → documented default; include `OverflowError` in `_as_int` / `_as_float`.
-- Reuse shared helpers — do not clone `_as_int`, `_parse_iso`, `_jwt_exp`, HTTP GET/POST. Put new shared coercion in one util module if none fits.
+- **Meters / utilization:** unparsable → drop the meter or use `error_snapshot`, do **not** invent a healthy `0%`. A real vendor `0` is fine.
+- **Config coercion:** invalid → documented default via `coerce.as_int(value, default)`.
+- Reuse `tokens_go_brrr.coerce` and `tokens_go_brrr.http_json` — do not clone `_as_int`, `_parse_iso`, `_jwt_exp`, or HTTPS GET/POST.
 
 ## Types and patterns
 

@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from . import config as _config
+from .coerce import parse_iso as _parse_iso
 
 # Bumped only when a field changes meaning or disappears. Consumers pin it:
 # a status-bar config that reads `tools[].metrics[].value` should be able to
@@ -100,19 +101,6 @@ def read_state(
     # daemon is a version behind the CLI reading its file.
     payload.setdefault("schema", SCHEMA_VERSION)
     return payload
-
-
-def _parse_iso(value: Any) -> datetime | None:
-    if not value:
-        return None
-    try:
-        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
-
-
-# -- reading one tool out of a payload ---------------------------------------
 
 
 def primary_metric(tool: dict[str, Any]) -> dict[str, Any]:

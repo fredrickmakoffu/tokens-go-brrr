@@ -8,6 +8,14 @@ GNOME Shell indicator + local daemon for AI coding usage limits (Cursor, Claude,
 2. Prefer the smallest change that preserves fail-soft behaviour and stdlib-only Python.
 3. Do not rename frozen install IDs (UUID, D-Bus, package, config dir). Display brand only.
 
+## Meter coercion policy
+
+Unparsable utilization → drop the meter or use `error_snapshot`; never publish a
+healthy `0%` for "unknown". A real vendor `0` / `"0"` is a reading. Config and
+non-meter figures may use an explicit default (`tokens_go_brrr.coerce`). Shared
+HTTPS JSON lives in `tokens_go_brrr.http_json` (`USER_AGENT` includes the package
+version).
+
 ## Verify
 
 ```bash

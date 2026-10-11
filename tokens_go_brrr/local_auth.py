@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import json
 import sqlite3
 import time
-import urllib.error
-import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from .coerce import jwt_exp
+from .http_json import USER_AGENT, HttpJsonError, request_json_url
 
 STATE_DB = Path.home() / ".config" / "Cursor" / "User" / "globalStorage" / "state.vscdb"
 # pi-lens-ignore: python-hardcoded-secrets  # public api2.cursor.sh endpoint
@@ -63,21 +63,8 @@ def read_local_auth() -> LocalCursorAuth | None:
         con.close()
 
 
-def _jwt_exp(token: str) -> int | None:
-    try:
-        import base64
-
-        payload = token.split(".")[1]
-        pad = "=" * (-len(payload) % 4)
-        data = json.loads(base64.urlsafe_b64decode(payload + pad))
-        exp = data.get("exp")
-        return int(exp) if exp is not None else None
-    except Exception:
-        return None
-
-
 def token_expired(token: str, *, skew_seconds: int = 120) -> bool:
-    exp = _jwt_exp(token)
+    exp = jwt_exp(token)
     if exp is None:
         return False
     return time.time() >= (exp - skew_seconds)
@@ -85,28 +72,25 @@ def token_expired(token: str, *, skew_seconds: int = 120) -> bool:
 
 def refresh_access_token(refresh_token: str) -> tuple[str, str]:
     """Return (access_token, refresh_token) from Cursor oauth refresh."""
-    body = json.dumps(
-        {
-            "grant_type": "refresh_token",
-            "client_id": OAUTH_CLIENT_ID,
-            "refresh_token": refresh_token,
-        }
-    ).encode()
-    req = urllib.request.Request(
-        OAUTH_TOKEN_URL,
-        data=body,
-        method="POST",
-        headers={
-            "Content-Type": "application/json",
-            "User-Agent": "tokens-go-brrr/0.1",
-        },
-    )
-    # pi-lens-ignore: S310  # request targets the https constant OAUTH_TOKEN_URL above
-    with urllib.request.urlopen(req, timeout=30) as response:
-        try:
-            data = json.loads(response.read().decode())
-        except ValueError as exc:
-            raise RuntimeError("Cursor OAuth refresh returned invalid JSON") from exc
+    try:
+        data = request_json_url(
+            "POST",
+            OAUTH_TOKEN_URL,
+            body={
+                "grant_type": "refresh_token",
+                "client_id": OAUTH_CLIENT_ID,
+                "refresh_token": refresh_token,
+            },
+            headers={"User-Agent": USER_AGENT},
+        )
+    except OSError as exc:
+        raise RuntimeError(f"Cursor OAuth refresh unreachable: {exc}") from exc
+    except HttpJsonError as exc:
+        raise RuntimeError(
+            f"Token refresh failed: HTTP {exc.status}: {exc.body[:200]}"
+        ) from exc
+    except RuntimeError as exc:
+        raise RuntimeError("Cursor OAuth refresh returned invalid JSON") from exc
     access = data.get("access_token") or data.get("accessToken")
     refresh = data.get("refresh_token") or data.get("refreshToken") or refresh_token
     if not access:

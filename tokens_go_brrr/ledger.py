@@ -56,6 +56,10 @@ from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
+from .coerce import as_float_or_none as _as_float
+from .coerce import as_int as _as_int
+from .coerce import as_int_or_none as _as_optional_int
+
 # Bumped when a column changes meaning or disappears. A store stamped newer
 # than this build is refused by `assert_writable` rather than written blind —
 # an older daemon that silently drops a column it does not understand is how
@@ -249,31 +253,6 @@ def _stamp(at: datetime | None = None) -> int:
         except (OSError, OverflowError, ValueError):
             return _epoch_now()
     return _epoch_now()
-
-
-def _as_int(value: Any) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError, OverflowError):
-        return 0
-
-
-def _as_optional_int(value: Any) -> int | None:
-    if value is None or value == "":
-        return None
-    try:
-        return int(value)
-    except (TypeError, ValueError, OverflowError):
-        return None
-
-
-def _as_float(value: Any) -> float | None:
-    if value is None or value == "":
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError, OverflowError):
-        return None
 
 
 def _as_json(value: Any) -> str | None:

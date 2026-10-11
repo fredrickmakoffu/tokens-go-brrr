@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-import base64
 import json
 import os
 import time
-import urllib.error
-import urllib.parse
-import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from ..coerce import jwt_exp as _jwt_exp
+from ..http_json import HttpJsonError, request_json_url
 from ..instances import ProcessSpec
 from .base import Meter, ProviderSnapshot
 
@@ -76,30 +74,6 @@ def _parse_epoch(value: Any) -> datetime | None:
     try:
         return datetime.fromtimestamp(value, tz=timezone.utc)
     except (OverflowError, OSError, ValueError):
-        return None
-
-
-def _jwt_exp(token: str) -> int | None:
-    """Exact JWT expiry (seconds) without verifying the signature.
-
-    Same trick the Cursor auth path uses: the access token is only read, never
-    written, so the CLI owns the refresh cycle and a stale token surfaces as
-    auth_needed instead of us risking signing the user out by rotating it.
-    """
-    if not token:
-        return None
-    try:
-        payload = token.split(".")[1]
-        pad = "=" * (-len(payload) % 4)
-        data = json.loads(base64.urlsafe_b64decode(payload + pad))
-    except (IndexError, ValueError, json.JSONDecodeError):
-        return None
-    exp = data.get("exp")
-    if not isinstance(exp, (int, float)):
-        return None
-    try:
-        return int(exp)
-    except (TypeError, ValueError, OverflowError):
         return None
 
 
@@ -245,34 +219,25 @@ class CodexProvider:
         )
 
     def _get_usage(self, access_token: str) -> dict[str, Any]:
-        if urllib.parse.urlsplit(USAGE_URL).scheme != "https":
-            raise RuntimeError(f"Unsupported usage URL scheme: {USAGE_URL}")
-        request = urllib.request.Request(
-            USAGE_URL,
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json",
-                "User-Agent": "tokens-go-brrr",
-            },
-        )
         try:
-            # pi-lens-ignore: S310
-            with urllib.request.urlopen(request, timeout=30) as response:
-                return json.loads(response.read().decode())
-        except urllib.error.HTTPError as exc:
-            if exc.code in {401, 403}:
+            return request_json_url(
+                "GET",
+                USAGE_URL,
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+        except OSError as exc:
+            raise RuntimeError(f"Codex usage unreachable: {exc}") from exc
+        except HttpJsonError as exc:
+            if exc.status in {401, 403}:
                 # chatgpt.com's edge intermittently answers non-browser clients
                 # with an HTML anti-bot challenge (403). That is a transient
                 # block, not a login problem — surface it as retryable, and only
                 # report a login failure for a real JSON rejection.
-                try:
-                    body = exc.read().decode("utf-8", errors="replace")
-                except (AttributeError, OSError, ValueError):
-                    body = ""
-                if _is_bot_challenge(exc.code, body):
+                if _is_bot_challenge(exc.status, exc.body):
                     raise RuntimeError(
                         "chatgpt.com blocked the request — retrying later"
                     ) from exc
                 raise PermissionError("Codex login rejected — run codex") from exc
-            detail = exc.read().decode("utf-8", errors="replace")[:200]
-            raise RuntimeError(f"HTTP {exc.code} from Codex usage: {detail}") from exc
+            raise RuntimeError(
+                f"HTTP {exc.status} from Codex usage: {exc.body[:200]}"
+            ) from exc

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import http.client
 import json
 import os
 import time
@@ -8,6 +7,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from ..coerce import as_float_or_none as _as_float
+from ..coerce import parse_iso as _parse_iso
+from ..http_json import HttpJsonError, request_json
 from ..instances import ProcessSpec
 from .base import Meter, ProviderSnapshot
 
@@ -15,18 +17,6 @@ from .base import Meter, ProviderSnapshot
 # where https is a property of the code and there is no scheme to get wrong.
 USAGE_HOST = "api.anthropic.com"
 USAGE_PATH = "/api/oauth/usage"
-
-
-def _as_float(value: Any) -> float | None:
-    """The number the API sent, or None.
-
-    A `Meter` is a claim about how much of a limit is used, so a reading that
-    will not parse drops the window instead of becoming a zero we invented.
-    """
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
 
 
 DASHBOARD_URL = "https://claude.ai/settings/usage"
@@ -41,16 +31,6 @@ WINDOWS: list[tuple[str, str, str]] = [
     ("seven_day_opus", "Opus weekly", "weekly"),
     ("seven_day_sonnet", "Sonnet weekly", "weekly"),
 ]
-
-
-def _parse_iso(value: Any) -> datetime | None:
-    if not value:
-        return None
-    try:
-        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
 class ClaudeAuthError(RuntimeError):
@@ -164,35 +144,25 @@ class ClaudeProvider:
 
     def _get_usage(self, access_token: str) -> dict[str, Any]:
         """Read the usage endpoint, mapping its failures onto ours."""
-        # `HTTPSConnection` rather than `urlopen`: TLS is a property of the code,
-        # with no URL to open and no scheme to get wrong. `api.py` does the same,
-        # for the same reason. Constructed outside the `try` so the `finally`
-        # always has one to close -- it does not connect here, so it cannot fail.
-        connection = http.client.HTTPSConnection(USAGE_HOST, timeout=30)
         try:
-            connection.request(
+            return request_json(
                 "GET",
+                USAGE_HOST,
                 USAGE_PATH,
                 headers={
                     "Authorization": f"Bearer {access_token}",
-                    "Content-Type": "application/json",
                     "anthropic-beta": OAUTH_BETA,
-                    "User-Agent": "tokens-go-brrr",
                 },
             )
-            response = connection.getresponse()
-            status = int(response.status)
-            detail = response.read().decode("utf-8", errors="replace")
         except OSError as exc:
             raise RuntimeError(f"Claude usage unreachable: {exc}") from exc
-        finally:
-            connection.close()
-
-        if status in {401, 403}:
-            raise PermissionError("Claude login rejected — run claude to refresh")
-        if status >= 400:
-            raise RuntimeError(f"HTTP {status} from Claude usage: {detail[:200]}")
-        try:
-            return json.loads(detail)
-        except ValueError as exc:
+        except HttpJsonError as exc:
+            if exc.status in {401, 403}:
+                raise PermissionError(
+                    "Claude login rejected — run claude to refresh"
+                ) from exc
+            raise RuntimeError(
+                f"HTTP {exc.status} from Claude usage: {exc.body[:200]}"
+            ) from exc
+        except RuntimeError as exc:
             raise RuntimeError("Claude usage returned invalid JSON") from exc

@@ -19,6 +19,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .coerce import as_float as _as_float
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS samples (
     ts        INTEGER NOT NULL,
@@ -69,14 +71,6 @@ def _epoch(moment: datetime | None = None) -> int:
         return int((moment or datetime.now(timezone.utc)).timestamp())
     except (OSError, OverflowError, ValueError):
         return int(time.time())
-
-
-def _as_float(value: Any) -> float:
-    """A meter's percentage is whatever the provider returned; treat junk as 0."""
-    try:
-        return float(value)
-    except (TypeError, ValueError, OverflowError):
-        return 0.0
 
 
 def _window_key(resets_at: datetime | None) -> str:

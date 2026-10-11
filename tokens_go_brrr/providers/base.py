@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import Any, Protocol
 
 from .. import burn
+from ..coerce import as_int as _as_int
 from ..instances import InstanceReport, ProcessSpec
 
 # The window a meter measures, in terms every provider can agree on. Providers
@@ -17,16 +18,6 @@ from ..instances import InstanceReport, ProcessSpec
 WINDOW_KINDS = ("rolling", "weekly", "monthly", "other")
 
 
-def _as_int(value: Any) -> int:
-    """A meter figure as an int. Providers return whatever their JSON held."""
-    try:
-        return int(value)
-    except (TypeError, ValueError, OverflowError):
-        return 0
-
-
-# Nominal window lengths, for pace. The monthly figure is a 30-day month, which
-# is close enough to place a tick and is never shown as a number.
 WINDOW_SECONDS = {"rolling": 5 * 3600, "weekly": 7 * 86400, "monthly": 30 * 86400}
 
 
