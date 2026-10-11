@@ -6,12 +6,30 @@
 # JavaScript caches modules by path, so reloading the same directory silently
 # re-runs the old code. Each revision is a copy under a new uuid, which gives the
 # import a path it has not seen.
+#
+# The script stays running after it prints the command, and restores the
+# canonical extension in enabled-extensions when it exits (Enter, Ctrl+C, or the
+# terminal closing). Otherwise a throwaway revision uuid can be left in that
+# list and the extension fails to load at the next login. Pass --no-wait to skip
+# this and clean up yourself with live-reload-reset.sh.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 UUID="tokens-go-brrr@fredrickmakoffu.github.io"
 EXT_HOME="$HOME/.local/share/gnome-shell/extensions"
+PIDFILE="${XDG_RUNTIME_DIR:-/tmp}/tokens-go-brrr-live-reload.pid"
+
+# A waiter from an earlier run would undo this run's revision when it exits, so
+# hand its job over: SIGUSR1 makes it quit without restoring anything.
+if [ -f "$PIDFILE" ]; then
+  old="$(cat "$PIDFILE" 2>/dev/null || true)"
+  if [ -n "$old" ] && [ "$old" != "$$" ] && kill -0 "$old" 2>/dev/null \
+     && grep -q live-reload /proc/"$old"/cmdline 2>/dev/null; then
+    kill -USR1 "$old" 2>/dev/null || true
+  fi
+  rm -f "$PIDFILE"
+fi
 
 # Keep the canonical install current too, so an ordinary logout is still correct
 # and every staged revision can be thrown away.
@@ -83,3 +101,23 @@ To go back to the canonical extension and delete every staged revision:
   ${HERE}/live-reload-reset.sh
 
 EOF
+
+if [ "${1:-}" = "--no-wait" ]; then
+  exit 0
+fi
+
+echo $$ > "$PIDFILE"
+RESTORE=1
+cleanup() {
+  rm -f "$PIDFILE"
+  if [ "$RESTORE" = 1 ]; then
+    echo
+    "$HERE/live-reload-reset.sh"
+  fi
+}
+trap cleanup EXIT
+trap 'exit 0' INT TERM HUP
+trap 'RESTORE=0; exit 0' USR1
+echo "Leave this running while you test. Press Enter (or Ctrl+C) when done to restore"
+echo "the canonical extension in enabled-extensions."
+read -r _ || true
