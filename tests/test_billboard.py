@@ -14,7 +14,7 @@ import sqlite3
 import tempfile
 import types
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
@@ -24,7 +24,7 @@ from tokens_go_brrr.config import MonitorConfig
 from tokens_go_brrr.llm_budget import CallBudget
 from tokens_go_brrr.providers.base import Meter, ProviderSnapshot
 
-NOW = datetime(2026, 10, 6, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 6, 12, 0, tzinfo=UTC)
 NOW_TS = int(NOW.timestamp())
 
 # A `messages` table as it existed before the landing page, without `seen_at`.
@@ -155,9 +155,7 @@ class RoutingTest(unittest.TestCase):
         self.assertEqual(self.chosen([fresh_digest])["id"], 2)
 
     def test_the_payload_carries_what_the_panel_renders(self):
-        chosen = self.chosen(
-            [row(7, notify.ACTIONABLE, provider="opencode", role="suggested")]
-        )
+        chosen = self.chosen([row(7, notify.ACTIONABLE, provider="opencode", role="suggested")])
         self.assertEqual(chosen["id"], 7)
         self.assertEqual(chosen["priority"], notify.PRIORITY[notify.ACTIONABLE])
         self.assertEqual(
@@ -407,7 +405,7 @@ class DaemonBillboardTest(unittest.TestCase):
             kind="fun",
             key="k",
             body="body",
-            at=datetime.now(timezone.utc) - timedelta(hours=2),
+            at=datetime.now(UTC) - timedelta(hours=2),
         )
         stub = self.daemon(billboard_freshness_hours=1)
         stub._refresh_billboard(self.con)
@@ -559,11 +557,16 @@ class DaemonColdNoteTest(unittest.TestCase):
     def seed(self):
         rows = [
             ledger.SessionRow(
-                provider="claude", source="local-transcript", external_id=f"s{i}",
-                model="m", project="alpha",
-                started_at=int(datetime.now(timezone.utc).timestamp()) - i * 86400,
-                ended_at=int(datetime.now(timezone.utc).timestamp()) - i * 86400 + 60,
-                duration_s=60, tokens_input=60_000, tokens_cache_read=60_000,
+                provider="claude",
+                source="local-transcript",
+                external_id=f"s{i}",
+                model="m",
+                project="alpha",
+                started_at=int(datetime.now(UTC).timestamp()) - i * 86400,
+                ended_at=int(datetime.now(UTC).timestamp()) - i * 86400 + 60,
+                duration_s=60,
+                tokens_input=60_000,
+                tokens_cache_read=60_000,
             )
             for i in range(4)
         ]
@@ -656,14 +659,20 @@ class WarmDaemonBase(unittest.TestCase):
         return stub
 
     def seed(self):
-        now = int(datetime.now(timezone.utc).timestamp())
+        now = int(datetime.now(UTC).timestamp())
         ledger.upsert_sessions(
             self.con,
             [
                 ledger.SessionRow(
-                    provider="claude", source="local-transcript", external_id="w1",
-                    model="m", project="alpha", started_at=now - 1800,
-                    ended_at=now - 1200, duration_s=600, tokens_input=50_000,
+                    provider="claude",
+                    source="local-transcript",
+                    external_id="w1",
+                    model="m",
+                    project="alpha",
+                    started_at=now - 1800,
+                    ended_at=now - 1200,
+                    duration_s=600,
+                    tokens_input=50_000,
                 )
             ],
         )
@@ -728,9 +737,7 @@ class DaemonWarmNoteTest(WarmDaemonBase):
         stub.poll = mock.Mock(side_effect=lambda *a: order.append("poll") or False)
         self.open_at(stub, 1000.0)
         stub._start_warm_note = mock.Mock(side_effect=lambda: order.append("warm"))
-        with mock.patch(
-            "tokens_go_brrr.daemon.time.monotonic", return_value=1000.0 + 1800
-        ):
+        with mock.patch("tokens_go_brrr.daemon.time.monotonic", return_value=1000.0 + 1800):
             stub.real_panel_opened()
         self.assertEqual(order[-2:], ["poll", "warm"])
 
@@ -767,9 +774,7 @@ class DaemonWarmNoteTest(WarmDaemonBase):
 
     def test_it_does_not_re_read_what_was_read_a_moment_ago(self):
         stub = self.daemon()
-        with mock.patch(
-            "tokens_go_brrr.daemon.time.monotonic", return_value=500.0
-        ):
+        with mock.patch("tokens_go_brrr.daemon.time.monotonic", return_value=500.0):
             stub._last_harvest_at = 480.0
             thread, _ = self.start(stub)
         self.assertEqual(thread.call_args.kwargs["args"], (False,))
@@ -794,8 +799,6 @@ class DaemonWarmNoteTest(WarmDaemonBase):
         thread.assert_not_called()
 
     # -- the worker -----------------------------------------------------------
-
-
 
     def test_the_worker_stores_a_warm_note_and_finishes(self):
         self.seed()
@@ -908,8 +911,12 @@ class DaemonWarmWordingTest(WarmDaemonBase):
         from tokens_go_brrr import llm_composer as llm
 
         return llm.Generator(
-            provider_id=provider, name=provider.title(), model="a-cheap-model",
-            short_headroom=60, monthly_headroom=None, reason="test",
+            provider_id=provider,
+            name=provider.title(),
+            model="a-cheap-model",
+            short_headroom=60,
+            monthly_headroom=None,
+            reason="test",
         )
 
     def reworded(self, message):
@@ -919,8 +926,11 @@ class DaemonWarmWordingTest(WarmDaemonBase):
         meta["composed_by"] = "claude"
         meta["source"] = "llm"
         return Message(
-            kind=message.kind, key=message.key, body="Model words.",
-            provider=message.provider, meta=meta,
+            kind=message.kind,
+            key=message.key,
+            body="Model words.",
+            provider=message.provider,
+            meta=meta,
         )
 
     def wording(self, stub, message, *, generator="default", rewrite="default"):
@@ -930,7 +940,8 @@ class DaemonWarmWordingTest(WarmDaemonBase):
         with (
             mock.patch.object(llm, "choose", return_value=gen) as choose,
             mock.patch.object(
-                llm, "rewrite",
+                llm,
+                "rewrite",
                 return_value=self.reworded(message) if rewrite == "default" else rewrite,
             ) as rewrite_mock,
         ):
@@ -960,7 +971,10 @@ class DaemonWarmWordingTest(WarmDaemonBase):
         stub = self.daemon(llm_notifications=True)
         message = self.warm_message()
         ledger.store_message(
-            self.con, kind=message.kind, key=message.key, body=message.body,
+            self.con,
+            kind=message.kind,
+            key=message.key,
+            body=message.body,
             meta=message.meta,
         )
         result, choose, rewrite = self.wording(stub, message)
@@ -1020,10 +1034,22 @@ class DaemonWarmWordingTest(WarmDaemonBase):
 
         stub = self.daemon(llm_notifications=True)
         stub.snapshots = [
-            ProviderSnapshot(provider_id="claude", display_name="Claude", icon="c",
-                             plan=None, metrics=[], primary_key=""),
-            ProviderSnapshot(provider_id="opencode", display_name="OC", icon="o",
-                             plan=None, metrics=[], primary_key=""),
+            ProviderSnapshot(
+                provider_id="claude",
+                display_name="Claude",
+                icon="c",
+                plan=None,
+                metrics=[],
+                primary_key="",
+            ),
+            ProviderSnapshot(
+                provider_id="opencode",
+                display_name="OC",
+                icon="o",
+                plan=None,
+                metrics=[],
+                primary_key="",
+            ),
         ]
         with mock.patch("tokens_go_brrr.daemon.time.monotonic", return_value=100.0):
             stub._llm_backoff = {"claude": 100.0 + 60}
@@ -1037,8 +1063,14 @@ class DaemonWarmWordingTest(WarmDaemonBase):
 
         stub = self.daemon(llm_notifications=True)
         stub.snapshots = [
-            ProviderSnapshot(provider_id="claude", display_name="Claude", icon="c",
-                             plan=None, metrics=[], primary_key=""),
+            ProviderSnapshot(
+                provider_id="claude",
+                display_name="Claude",
+                icon="c",
+                plan=None,
+                metrics=[],
+                primary_key="",
+            ),
         ]
         with mock.patch("tokens_go_brrr.daemon.time.monotonic", return_value=500.0):
             stub._llm_backoff = {"claude": 100.0}

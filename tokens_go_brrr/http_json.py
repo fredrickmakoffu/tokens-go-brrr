@@ -72,9 +72,7 @@ def request_json(
     except ValueError as exc:
         raise RuntimeError(f"invalid JSON from {host}{path}") from exc
     if not isinstance(parsed, dict):
-        raise RuntimeError(
-            f"{host}{path} returned {type(parsed).__name__}, not an object"
-        )
+        raise RuntimeError(f"{host}{path} returned {type(parsed).__name__}, not an object")
     return parsed
 
 

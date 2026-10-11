@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from ..instances import ProcessSpec
 from . import pi_backend
@@ -60,5 +60,5 @@ class PiProvider:
             dashboard_url=DASHBOARD_URL,
             status="ok",
             error=None,
-            fetched_at=datetime.now(timezone.utc),
+            fetched_at=datetime.now(UTC),
         )

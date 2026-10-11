@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import base64
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 
@@ -64,7 +64,7 @@ def parse_iso(value: Any) -> datetime | None:
         parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
     except (TypeError, ValueError):
         return None
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
 def parse_ms_or_iso(value: Any) -> datetime | None:
@@ -72,10 +72,8 @@ def parse_ms_or_iso(value: Any) -> datetime | None:
     if value is None or value == "":
         return None
     try:
-        if isinstance(value, (int, float)) or (
-            isinstance(value, str) and value.isdigit()
-        ):
-            return datetime.fromtimestamp(int(value) / 1000, tz=timezone.utc)
+        if isinstance(value, (int, float)) or (isinstance(value, str) and value.isdigit()):
+            return datetime.fromtimestamp(int(value) / 1000, tz=UTC)
         return parse_iso(value)
     except (ValueError, OSError, OverflowError, TypeError):
         return None

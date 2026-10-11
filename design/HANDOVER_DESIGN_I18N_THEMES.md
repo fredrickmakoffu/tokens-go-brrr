@@ -1,14 +1,8 @@
 # Handover — popover redesign, site copy, website i18n, light and dark
 
-**State:** #25–#31 shipped and merged; **#33 (extension i18n) and #34 (rename) are open**,
-#34 stacked on #33. `main` @ `440c2b3`, version **0.6.2** (no release cut for any of this
-yet). PRs [#25](https://github.com/fredrickmakoffu/cursor-spend-monitor/pull/25),
-[#26](https://github.com/fredrickmakoffu/cursor-spend-monitor/pull/26),
-[#27](https://github.com/fredrickmakoffu/cursor-spend-monitor/pull/27),
-[#29](https://github.com/fredrickmakoffu/cursor-spend-monitor/pull/29),
-[#30](https://github.com/fredrickmakoffu/cursor-spend-monitor/pull/30). **416 tests pass.**
-
-**Left:** merge #33 then #34, then the logo.
+**Historical.** Snapshot from the i18n / theme / rename series. Prefer the tree,
+`AGENTS.md`, and `.cursor/rules/` for current behaviour. Extension and site i18n
+(en/fr/pt-BR) and the `tokens-go-brrr` display rename are shipped.
 
 ---
 

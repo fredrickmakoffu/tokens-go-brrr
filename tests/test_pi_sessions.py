@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest import mock
 
@@ -20,7 +20,7 @@ from tokens_go_brrr.harvesters.pi_sessions import PiSessionHarvester
 from tokens_go_brrr.instances import Instance, InstanceReport
 from tokens_go_brrr.providers.pi_backend import Backend
 
-STARTED = datetime(2026, 10, 1, 10, tzinfo=timezone.utc)
+STARTED = datetime(2026, 10, 1, 10, tzinfo=UTC)
 
 
 def instance(
@@ -66,9 +66,7 @@ class PiCase(unittest.TestCase):
         )
 
     def rows(self) -> list:
-        return self.con.execute(
-            "SELECT * FROM sessions ORDER BY external_id"
-        ).fetchall()
+        return self.con.execute("SELECT * FROM sessions ORDER BY external_id").fetchall()
 
 
 class LifecycleTest(PiCase):

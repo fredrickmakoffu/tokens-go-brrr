@@ -9,6 +9,7 @@ replaced in place, so editing a dark rule and rerunning keeps both in step.
 
     python3 scripts/gen_light_css.py
 """
+
 import re
 from pathlib import Path
 
@@ -30,10 +31,18 @@ RGBA = {  # snow tint -> ink tint, steel tint -> darker steel tint
     "rgba(245, 245, 248,": "rgba(29, 31, 32,",
     "rgba(148, 188, 227,": "rgba(89, 128, 166,",
 }
-PRIMARY = {"#94bce3": "#416180", "#7fa6cc": "#375270", "#6890b5": "#2c455d", "#1d1f20": "#f2f2f3", "#f5f5f8": "#1d1f20"}
+PRIMARY = {
+    "#94bce3": "#416180",
+    "#7fa6cc": "#375270",
+    "#6890b5": "#2c455d",
+    "#1d1f20": "#f2f2f3",
+    "#f5f5f8": "#1d1f20",
+}
 SHADOW = ("rgba(0, 0, 0, 0.35)", "rgba(29, 31, 32, 0.22)")
 # Top-bar pieces sit on GNOME's own (always dark) panel, so they never change.
-TOPBAR = re.compile(r"\.tokens-go-brrr-(dot|session-(icon|pct|count|stack|via)\b|sessions\s*$|session\s*$)")
+TOPBAR = re.compile(
+    r"\.tokens-go-brrr-(dot|session-(icon|pct|count|stack|via)\b|sessions\s*$|session\s*$)"
+)
 
 HEX = re.compile(r"#[0-9a-fA-F]{6}\b|rgba?\([^)]*\)")
 
@@ -52,7 +61,7 @@ def light(decl: str, primary: bool) -> str | None:
             for a, b in RGBA.items():
                 if v.startswith(a):
                     changed = True
-                    return b + v[len(a):]
+                    return b + v[len(a) :]
             return v
         if v.lower() in table:
             changed = True
@@ -66,9 +75,9 @@ def light(decl: str, primary: bool) -> str | None:
 def scope(selector: str) -> str:
     sel = selector.strip()
     if sel.startswith(".tokens-go-brrr-menu .popup-menu-content"):
-        return ".tokens-go-brrr-menu.tokens-go-brrr-light" + sel[len(".tokens-go-brrr-menu"):]
+        return ".tokens-go-brrr-menu.tokens-go-brrr-light" + sel[len(".tokens-go-brrr-menu") :]
     if sel.startswith(".tokens-go-brrr-menu "):
-        sel = sel[len(".tokens-go-brrr-menu "):]
+        sel = sel[len(".tokens-go-brrr-menu ") :]
     return ".tokens-go-brrr-light " + sel
 
 
@@ -96,7 +105,10 @@ def main():
     block = (
         "\n\n" + BEGIN + "\n"
         "/* Applied by extension.js when GNOME's color-scheme is prefer-light. */\n"
-        + "\n".join(out) + "\n" + END + "\n"
+        + "\n".join(out)
+        + "\n"
+        + END
+        + "\n"
     )
     CSS.write_text(text + block)
     print(f"{len(out)} light rules written")

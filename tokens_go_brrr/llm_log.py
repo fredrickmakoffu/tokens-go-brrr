@@ -150,9 +150,7 @@ class LlmLog:
         """Delete day files older than `keep_days`. Returns how many went."""
         if not self.enabled:
             return 0
-        cutoff = (today or datetime.now()).astimezone().date().toordinal() - (
-            self.keep_days - 1
-        )
+        cutoff = (today or datetime.now()).astimezone().date().toordinal() - (self.keep_days - 1)
         removed = 0
         for day in self.days():
             try:

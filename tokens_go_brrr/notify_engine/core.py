@@ -29,12 +29,12 @@ import hashlib
 import json
 import sqlite3
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from . import ledger
-from .coerce import as_float as _as_float
-from .coerce import as_int as _as_int
+from .. import ledger
+from ..coerce import as_float as _as_float
+from ..coerce import as_int as _as_int
 
 # Message families, matching `notify.types` in the config.
 INFORMATIVE = "informative"
@@ -89,7 +89,7 @@ def _pct(value: Any) -> int:
 
 def _epoch(now: datetime | None = None) -> int:
     try:
-        return int((now or datetime.now(timezone.utc)).timestamp())
+        return int((now or datetime.now(UTC)).timestamp())
     except (OSError, OverflowError, ValueError):
         return 0
 
@@ -112,7 +112,7 @@ def provider_label(provider_id: str) -> str:
     Not a second copy of the names: the providers are already the source of
     truth for what each one is called.
     """
-    from .providers import PROVIDERS
+    from tokens_go_brrr.providers import PROVIDERS
 
     cls = PROVIDERS.get(provider_id)
     if cls is None:
@@ -206,7 +206,7 @@ class Message:
 
 
 def _utc_today(now: datetime | None = None) -> datetime:
-    return (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    return (now or datetime.now(UTC)).astimezone(UTC)
 
 
 def day_range(days: int, *, now: datetime | None = None) -> tuple[str, str]:
@@ -250,9 +250,7 @@ def _ranked_providers(con: sqlite3.Connection, start: str, end: str) -> list[dic
 
 
 def _top(con: sqlite3.Connection, start: str, end: str, group_by: str) -> dict | None:
-    rows = ledger.period_totals(
-        con, start_day=start, end_day=end, group_by=group_by, limit=1
-    )
+    rows = ledger.period_totals(con, start_day=start, end_day=end, group_by=group_by, limit=1)
     return rows[0] if rows else None
 
 
@@ -326,14 +324,10 @@ def rolling_facts(
                 "tokens": totals["tokens"],
                 "cache_read_tokens": totals["cache_read_tokens"],
                 "share": (
-                    totals["cache_read_tokens"] / totals["tokens"]
-                    if totals["tokens"]
-                    else 0.0
+                    totals["cache_read_tokens"] / totals["tokens"] if totals["tokens"] else 0.0
                 ),
             },
-            "estimate_note": (
-                " (includes an estimate)" if totals["estimated_sessions"] else ""
-            ),
+            "estimate_note": (" (includes an estimate)" if totals["estimated_sessions"] else ""),
         }
     )
     return facts
@@ -379,9 +373,7 @@ def featured_provider(facts: dict[str, Any]) -> dict[str, str] | None:
         if best_value is None or ratio > best_value[0]:
             best_value = (ratio, row)
 
-    if best_value is not None and best_value[1].get("provider") != leader.get(
-        "provider"
-    ):
+    if best_value is not None and best_value[1].get("provider") != leader.get("provider"):
         row = best_value[1]
         provider_id = str(row.get("provider") or "")
         return {
@@ -399,10 +391,7 @@ def featured_provider(facts: dict[str, Any]) -> dict[str, str] | None:
         "providerId": provider_id,
         "name": provider_label(provider_id),
         "role": "leading",
-        "reason": (
-            f"{_pct(100 * _as_int(leader.get('tokens')) / total)}% "
-            "of the period's tokens"
-        ),
+        "reason": (f"{_pct(100 * _as_int(leader.get('tokens')) / total)}% of the period's tokens"),
     }
 
 
@@ -540,9 +529,7 @@ def render_share(facts: dict[str, Any]) -> str | None:
     return lead + "."
 
 
-def render_actionable(
-    *, provider: str, label: str, percent: float, eta: str, better: str
-) -> str:
+def render_actionable(*, provider: str, label: str, percent: float, eta: str, better: str) -> str:
     """The wind-down message: what is nearly spent, and where to go instead."""
     if percent >= SPENT_AT:
         opening = f"{provider} {label} is spent."
@@ -559,9 +546,7 @@ def render_actionable(
 # -- digests -----------------------------------------------------------------
 
 
-def daily_digest(
-    con: sqlite3.Connection, *, now: datetime | None = None
-) -> Message | None:
+def daily_digest(con: sqlite3.Connection, *, now: datetime | None = None) -> Message | None:
     """The last 24 hours, not the calendar day.
 
     A calendar day made work done at 17:00 "yesterday" by the next morning, so
@@ -575,9 +560,7 @@ def daily_digest(
         kind=INFORMATIVE,
         key=f"daily:{today}",
         body=render_digest(facts, headline="Last 24h"),
-        provider=featured["providerId"]
-        if (featured := featured_provider(facts))
-        else "",
+        provider=featured["providerId"] if (featured := featured_provider(facts)) else "",
         meta=_featured_meta(
             featured,
             period="daily",
@@ -591,9 +574,7 @@ def daily_digest(
     )
 
 
-def weekly_digest(
-    con: sqlite3.Connection, *, now: datetime | None = None
-) -> Message | None:
+def weekly_digest(con: sqlite3.Connection, *, now: datetime | None = None) -> Message | None:
     start, end = day_range(7, now=now)
     facts = digest_facts(con, start=start, end=end, period="last 7 days", now=now)
     if not facts["totals"]["sessions"]:
@@ -602,9 +583,7 @@ def weekly_digest(
         kind=INFORMATIVE,
         key=f"weekly:{end}",
         body=render_digest(facts, headline="Last week"),
-        provider=featured["providerId"]
-        if (featured := featured_provider(facts))
-        else "",
+        provider=featured["providerId"] if (featured := featured_provider(facts)) else "",
         meta=_featured_meta(
             featured,
             period="weekly",
@@ -618,9 +597,7 @@ def weekly_digest(
     )
 
 
-def monthly_digest(
-    con: sqlite3.Connection, *, now: datetime | None = None
-) -> Message | None:
+def monthly_digest(con: sqlite3.Connection, *, now: datetime | None = None) -> Message | None:
     start, end = month_range(now)
     facts = digest_facts(con, start=start, end=end, period="this month", now=now)
     if not facts["totals"]["sessions"]:
@@ -631,9 +608,7 @@ def monthly_digest(
     previous = ledger.totals(con, start_day=previous_start, end_day=previous_end)
     vs_last_month = None
     if previous["tokens"]:
-        change = (
-            100 * (facts["totals"]["tokens"] - previous["tokens"]) / previous["tokens"]
-        )
+        change = 100 * (facts["totals"]["tokens"] - previous["tokens"]) / previous["tokens"]
         direction = "up" if change >= 0 else "down"
         body += f" That is {direction} {abs(_pct(change))}% vs last month."
         vs_last_month = {"dir": direction, "pct": abs(_pct(change))}
@@ -641,17 +616,13 @@ def monthly_digest(
         kind=INFORMATIVE,
         key=f"monthly:{start}",
         body=body,
-        provider=featured["providerId"]
-        if (featured := featured_provider(facts))
-        else "",
+        provider=featured["providerId"] if (featured := featured_provider(facts)) else "",
         meta=_featured_meta(
             featured,
             period="monthly",
             tpl=_tpl(
                 "digest",
-                **digest_params(
-                    facts, period="monthly", vs_last_month=vs_last_month
-                ),
+                **digest_params(facts, period="monthly", vs_last_month=vs_last_month),
             ),
             **provenance(
                 tier=COLD,
@@ -678,9 +649,7 @@ def fun_fact(con: sqlite3.Connection, *, now: datetime | None = None) -> Message
     )
 
 
-def share_line(
-    con: sqlite3.Connection, *, now: datetime | None = None
-) -> Message | None:
+def share_line(con: sqlite3.Connection, *, now: datetime | None = None) -> Message | None:
     start, end = month_range(now)
     facts = digest_facts(con, start=start, end=end, period="this month", now=now)
     share = render_share(facts)
@@ -691,9 +660,7 @@ def share_line(
         key=f"share:{start}",
         body=share.removeprefix("SHARE: ").strip(),
         share=share,
-        provider=featured["providerId"]
-        if (featured := featured_provider(facts))
-        else "",
+        provider=featured["providerId"] if (featured := featured_provider(facts)) else "",
         meta=_featured_meta(
             featured,
             period="share",
@@ -812,9 +779,7 @@ def insight_cache(con: sqlite3.Connection, *, now: datetime | None = None) -> Me
         return None
     pct = _pct(100 * cache["share"])
     high = pct >= HIGH_CACHE_SHARE
-    body = (
-        f"{pct}% of your tokens in the last {INSIGHT_WINDOW_DAYS} days were cache reads."
-    )
+    body = f"{pct}% of your tokens in the last {INSIGHT_WINDOW_DAYS} days were cache reads."
     if high:
         body += (
             " That is the cheap kind, but a long thread re-reads its whole history"
@@ -834,9 +799,7 @@ def insight_cache(con: sqlite3.Connection, *, now: datetime | None = None) -> Me
 def insight_week(con: sqlite3.Connection, *, now: datetime | None = None) -> Message | None:
     start, end = day_range(7, now=now)
     before_end = (datetime.fromisoformat(start) - timedelta(days=1)).date().isoformat()
-    before_start = (
-        datetime.fromisoformat(start) - timedelta(days=7)
-    ).date().isoformat()
+    before_start = (datetime.fromisoformat(start) - timedelta(days=7)).date().isoformat()
     this = ledger.totals(con, start_day=start, end_day=end)["tokens"]
     before = ledger.totals(con, start_day=before_start, end_day=before_end)["tokens"]
     if before < MIN_INSIGHT_TOKENS // 10 or this <= 0:
@@ -858,8 +821,7 @@ def insight_week(con: sqlite3.Connection, *, now: datetime | None = None) -> Mes
     else:
         direction = "down"
         body = (
-            f"You used {pct}% fewer tokens in the last 7 days than in the 7 before."
-            " A lighter week."
+            f"You used {pct}% fewer tokens in the last 7 days than in the 7 before. A lighter week."
         )
     return _insight(
         "week",
@@ -881,8 +843,7 @@ def insight_peak(con: sqlite3.Connection, *, now: datetime | None = None) -> Mes
     return _insight(
         "peak",
         f"Most of your AI work happens around {hour:02d}:00, and {WEEKDAYS[weekday]}"
-        f" is your busiest day. Plan the heavy sessions for then."
-        ,
+        f" is your busiest day. Plan the heavy sessions for then.",
         {"hour": hour, "weekday": weekday},
         now=now,
         fingerprint_parts=[hour, weekday],
@@ -931,9 +892,7 @@ _INSIGHT_BUILDERS = {
 }
 
 
-def insight_candidates(
-    con: sqlite3.Connection, *, now: datetime | None = None
-) -> list[Message]:
+def insight_candidates(con: sqlite3.Connection, *, now: datetime | None = None) -> list[Message]:
     """Every insight there is enough data to say, in tie-break order."""
     found: list[Message] = []
     for insight_id in INSIGHT_IDS:
@@ -943,9 +902,7 @@ def insight_candidates(
     return found
 
 
-def next_insight(
-    con: sqlite3.Connection, *, now: datetime | None = None
-) -> Message | None:
+def next_insight(con: sqlite3.Connection, *, now: datetime | None = None) -> Message | None:
     """The insight that has waited longest, so none repeats before the rest.
 
     Rotation is read from the messages table itself: each insight's key carries
@@ -958,18 +915,14 @@ def next_insight(
 
     def last_turn(message: Message) -> int:
         prefix = f"{INSIGHT_KEY_PREFIX}{message.meta['insight']}:"
-        stamp = ledger.last_generated_at(
-            con, kind=message.kind, key_prefix=prefix
-        )
+        stamp = ledger.last_generated_at(con, kind=message.kind, key_prefix=prefix)
         return -1 if stamp is None else stamp
 
     # sorted() is stable, so equal turns keep INSIGHT_IDS order.
     return sorted(candidates, key=last_turn)[0]
 
 
-def has_pending_insight(
-    rows: list[dict[str, Any]], *, now: datetime | None = None
-) -> bool:
+def has_pending_insight(rows: list[dict[str, Any]], *, now: datetime | None = None) -> bool:
     """Whether an unread, still-fresh insight is already waiting on the page.
 
     A person who has not read the last one does not need another, and without
@@ -985,9 +938,7 @@ def has_pending_insight(
     return False
 
 
-def cold_note(
-    con: sqlite3.Connection, *, now: datetime | None = None
-) -> Message | None:
+def cold_note(con: sqlite3.Connection, *, now: datetime | None = None) -> Message | None:
     """The note for a cold open: the next insight, unless one is waiting unread."""
     if has_pending_insight(ledger.pending_messages(con), now=now):
         return None
@@ -1086,9 +1037,7 @@ def find_elsewhere(
             local = ledger.rolling_period_totals(
                 con, since=int(base_ts), until=until, group_by="provider"
             )
-            if any(
-                row["provider"] == snap.provider_id and row["sessions"] for row in local
-            ):
+            if any(row["provider"] == snap.provider_id and row["sessions"] for row in local):
                 continue
             if best is None or points > best["points"]:
                 best = {
@@ -1125,9 +1074,7 @@ def warm_facts(
         "project": top["project"] if top else None,
         "meter": tightest_short_meter(snapshots),
         "elsewhere": (
-            find_elsewhere(con, snapshots, samples, now=now, hours=hours)
-            if samples
-            else None
+            find_elsewhere(con, snapshots, samples, now=now, hours=hours) if samples else None
         ),
     }
 
@@ -1268,9 +1215,7 @@ def _best_room(snapshots: list[Any], *, exclude: str) -> dict[str, str] | None:
     }
 
 
-def event_messages(
-    snapshots: list[Any], *, wind_down_hours: float = 2.0
-) -> list[Message]:
+def event_messages(snapshots: list[Any], *, wind_down_hours: float = 2.0) -> list[Message]:
     """Actionable messages for the meters that need one right now.
 
     Two triggers: a meter at or past the warning line, and a burn-rate ETA that
@@ -1285,8 +1230,7 @@ def event_messages(
         for meter in snap.metrics:
             eta_seconds = meter.eta_seconds
             burning_out = (
-                eta_seconds is not None
-                and eta_seconds <= max(0.0, wind_down_hours) * 3600
+                eta_seconds is not None and eta_seconds <= max(0.0, wind_down_hours) * 3600
             )
             if meter.percent < WARN_AT and not burning_out:
                 continue

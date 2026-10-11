@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -267,9 +267,7 @@ def scan(
         matched[pid] = hit
         details[pid] = (state, start_ticks, tty_nr)
 
-    raw_by_provider: dict[str, list[Instance]] = {
-        provider_id: [] for provider_id in specs
-    }
+    raw_by_provider: dict[str, list[Instance]] = {provider_id: [] for provider_id in specs}
     for pid, (provider_id, spec) in matched.items():
         if _has_matching_ancestor(pid, provider_id, parents, matched):
             continue  # a helper the session spawned, not a session of its own
@@ -277,7 +275,7 @@ def scan(
         project, directory = _project_of(proc_root, str(pid))
         started_at = None
         if boot and _CLOCK_TICKS:
-            started_at = datetime.fromtimestamp(boot, timezone.utc) + timedelta(
+            started_at = datetime.fromtimestamp(boot, UTC) + timedelta(
                 seconds=start_ticks / _CLOCK_TICKS
             )
         raw_by_provider[provider_id].append(

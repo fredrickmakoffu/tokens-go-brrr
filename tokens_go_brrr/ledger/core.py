@@ -51,14 +51,14 @@ import sqlite3
 import sys
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
-from .coerce import as_float_or_none as _as_float
-from .coerce import as_int as _as_int
-from .coerce import as_int_or_none as _as_optional_int
+from ..coerce import as_float_or_none as _as_float
+from ..coerce import as_int as _as_int
+from ..coerce import as_int_or_none as _as_optional_int
 
 # Bumped when a column changes meaning or disappears. A store stamped newer
 # than this build is refused by `assert_writable` rather than written blind —
@@ -240,7 +240,7 @@ class LedgerTooNewError(RuntimeError):
 
 def _epoch_now() -> int:
     try:
-        return int(datetime.now(timezone.utc).timestamp())
+        return int(datetime.now(UTC).timestamp())
     except (OSError, OverflowError, ValueError):
         return 0
 
@@ -266,7 +266,7 @@ def _as_json(value: Any) -> str | None:
 
 def _utc_from_epoch(value: Any) -> datetime | None:
     try:
-        return datetime.fromtimestamp(float(value), timezone.utc)
+        return datetime.fromtimestamp(float(value), UTC)
     except (TypeError, ValueError, OSError, OverflowError):
         return None
 
@@ -511,9 +511,7 @@ def _collapse_messages(con: sqlite3.Connection) -> None:
 
 
 def _stamp_format(con: sqlite3.Connection) -> None:
-    row = con.execute(
-        "SELECT value FROM ledger_meta WHERE key = 'format_version'"
-    ).fetchone()
+    row = con.execute("SELECT value FROM ledger_meta WHERE key = 'format_version'").fetchone()
     if row is None:
         con.execute(
             "INSERT INTO ledger_meta (key, value) VALUES ('format_version', ?)",
@@ -522,9 +520,7 @@ def _stamp_format(con: sqlite3.Connection) -> None:
 
 
 def stored_format_version(con: sqlite3.Connection) -> int:
-    row = con.execute(
-        "SELECT value FROM ledger_meta WHERE key = 'format_version'"
-    ).fetchone()
+    row = con.execute("SELECT value FROM ledger_meta WHERE key = 'format_version'").fetchone()
     found = _as_optional_int(row[0]) if row is not None else None
     return FORMAT_VERSION if found is None else found
 
@@ -569,9 +565,7 @@ def _content_key(*parts: Any) -> str:
         payload = json.dumps(parts, default=str)
     except (TypeError, ValueError):
         payload = repr(parts)
-    return hashlib.blake2b(
-        payload.encode("utf-8", "replace"), digest_size=8
-    ).hexdigest()
+    return hashlib.blake2b(payload.encode("utf-8", "replace"), digest_size=8).hexdigest()
 
 
 def _session_values(row: SessionRow, stamp: int) -> tuple:
@@ -748,9 +742,7 @@ def upsert_per_model(
     return con.total_changes - before
 
 
-def ingest_transcript_messages(
-    con: sqlite3.Connection, rows: Iterable[TranscriptMessage]
-) -> int:
+def ingest_transcript_messages(con: sqlite3.Connection, rows: Iterable[TranscriptMessage]) -> int:
     """Store transcript messages, ignoring ones already seen. Returns new rows.
 
     `INSERT OR IGNORE` on the message id is what makes re-reading a transcript
@@ -839,9 +831,7 @@ def recompute_transcript_sessions(
                     started_at=started,
                     ended_at=ended,
                     duration_s=(
-                        ended - started
-                        if started is not None and ended is not None
-                        else None
+                        ended - started if started is not None and ended is not None else None
                     ),
                     tokens_input=_as_int(agg[3]),
                     tokens_output=_as_int(agg[6]),
@@ -864,8 +854,7 @@ def record_check(
 ) -> None:
     """Record a cross-check outcome. A disagreement is kept, not corrected."""
     con.execute(
-        "INSERT INTO checks (checked_at, provider, kind, detail, ok)"
-        " VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO checks (checked_at, provider, kind, detail, ok) VALUES (?, ?, ?, ?, ?)",
         (_stamp(at), row.provider, row.kind, row.detail, 1 if row.ok else 0),
     )
     con.commit()
@@ -1223,9 +1212,7 @@ def rolling_period_totals(
     return [dict(row) for row in cur]
 
 
-def rolling_totals(
-    con: sqlite3.Connection, *, since: int, until: int
-) -> dict[str, Any]:
+def rolling_totals(con: sqlite3.Connection, *, since: int, until: int) -> dict[str, Any]:
     """One line for a rolling window, shaped like `totals`."""
     rows = rolling_period_totals(con, since=since, until=until, group_by="provider")
     return {
@@ -1258,7 +1245,7 @@ def sources_in(con: sqlite3.Connection, *, start_day: str, end_day: str) -> list
 
 def streaks(con: sqlite3.Connection, *, now: datetime | None = None) -> dict[str, Any]:
     """Consecutive days with at least one session, current and longest."""
-    today = (now or datetime.now(timezone.utc)).date()
+    today = (now or datetime.now(UTC)).date()
     days: list[date] = []
     for row in con.execute(
         "SELECT DISTINCT date(started_at, 'unixepoch') AS day FROM sessions"
@@ -1323,9 +1310,7 @@ def records(con: sqlite3.Connection, *, start_day: str, end_day: str) -> dict[st
     }
 
 
-def cache_share(
-    con: sqlite3.Connection, *, start_day: str, end_day: str
-) -> dict[str, Any]:
+def cache_share(con: sqlite3.Connection, *, start_day: str, end_day: str) -> dict[str, Any]:
     """How much of the period's token movement came from cache reads."""
     row = con.execute(
         "SELECT COALESCE(SUM(tokens), 0) AS total,"
@@ -1350,9 +1335,7 @@ _DURATION_BUCKETS = (
 )
 
 
-def session_shape(
-    con: sqlite3.Connection, *, start_day: str, end_day: str
-) -> dict[str, Any]:
+def session_shape(con: sqlite3.Connection, *, start_day: str, end_day: str) -> dict[str, Any]:
     """Duration buckets, hour-of-day counts, and the 8-5 weekday share.
 
     The hour buckets are local, because the question this answers — "when do I
@@ -1421,9 +1404,7 @@ def recent_messages(con: sqlite3.Connection, *, limit: int = 8) -> list[dict[str
     return [dict(row) for row in rows]
 
 
-def pending_messages(
-    con: sqlite3.Connection, *, limit: int = 20
-) -> list[dict[str, Any]]:
+def pending_messages(con: sqlite3.Connection, *, limit: int = 20) -> list[dict[str, Any]]:
     """Unacknowledged messages, newest first, for the landing page to choose from.
 
     Freshness is deliberately not applied here: how long a message stays worth
@@ -1496,9 +1477,7 @@ def store_message(
     return _as_int(row[0]) if row is not None else 0
 
 
-def last_generated_at(
-    con: sqlite3.Connection, *, kind: str, key_prefix: str
-) -> int | None:
+def last_generated_at(con: sqlite3.Connection, *, kind: str, key_prefix: str) -> int | None:
     """When any message of this kind whose key starts with `key_prefix` was made.
 
     A prefix, not a key: rotating messages carry the day in their key so that a
@@ -1506,16 +1485,13 @@ def last_generated_at(
     good), and "when did this one last speak" has to look across those days.
     """
     row = con.execute(
-        "SELECT MAX(created_at) FROM messages"
-        " WHERE kind = ? AND substr(key, 1, ?) = ?",
+        "SELECT MAX(created_at) FROM messages WHERE kind = ? AND substr(key, 1, ?) = ?",
         (kind, len(key_prefix), key_prefix),
     ).fetchone()
     return _as_optional_int(row[0]) if row is not None else None
 
 
-def weekday_counts(
-    con: sqlite3.Connection, *, start_day: str, end_day: str
-) -> list[int]:
+def weekday_counts(con: sqlite3.Connection, *, start_day: str, end_day: str) -> list[int]:
     """Sessions per local weekday, Monday first, over a UTC day range."""
     counts = [0] * 7
     for row in con.execute(
@@ -1564,6 +1540,13 @@ def format_cost(value: float | None) -> str:
     return f"${number:,.2f}"
 
 
+def _ledger_api():
+    """The public ``tokens_go_brrr.ledger`` package (patchable in tests)."""
+    from tokens_go_brrr import ledger as api
+
+    return api
+
+
 class LedgerRecorder:
     """Daemon-side wrapper that never lets a storage problem stop monitoring.
 
@@ -1574,13 +1557,14 @@ class LedgerRecorder:
     def __init__(self, path: Path | None = None, *, keep_days: int = 90) -> None:
         self.keep_days = keep_days
         # Kept so a worker thread can open its own connection to the same store.
-        self._path = path or default_path()
+        api = _ledger_api()
+        self._path = path or api.default_path()
         self._con: sqlite3.Connection | None = None
         self._failed = False
         try:
-            self._con = connect(self._path)
-            assert_writable(self._con)
-            prune(self._con, keep_days=keep_days)
+            self._con = api.connect(self._path)
+            api.assert_writable(self._con)
+            api.prune(self._con, keep_days=keep_days)
         except LedgerTooNewError as exc:
             self._disable(str(exc))
         except (sqlite3.Error, OSError) as exc:
@@ -1613,9 +1597,10 @@ class LedgerRecorder:
         if not self.active:
             yield None
             return
+        api = _ledger_api()
         con: sqlite3.Connection | None = None
         try:
-            con = connect(self._path, prepare=False)
+            con = api.connect(self._path, prepare=False)
         except LedgerTooNewError as exc:
             self._disable(str(exc))
         except (sqlite3.Error, OSError) as exc:
@@ -1642,63 +1627,18 @@ class LedgerRecorder:
             return fallback
 
     def upsert_sessions(self, rows: Iterable[SessionRow], **kwargs) -> int:
-        return self._guard(lambda con: upsert_sessions(con, rows, **kwargs), 0)
+        api = _ledger_api()
+        return self._guard(lambda con: api.upsert_sessions(con, rows, **kwargs), 0)
 
     def upsert_per_model(self, rows: Iterable[PerModelRow], **kwargs) -> int:
-        return self._guard(lambda con: upsert_per_model(con, rows, **kwargs), 0)
+        api = _ledger_api()
+        return self._guard(lambda con: api.upsert_per_model(con, rows, **kwargs), 0)
 
     def fold_days(self, days: Iterable[str]) -> int:
-        return self._guard(lambda con: fold_days(con, days), 0)
+        api = _ledger_api()
+        return self._guard(lambda con: api.fold_days(con, days), 0)
 
     def close(self) -> None:
         if self._con is not None:
             self._con.close()
             self._con = None
-
-
-__all__ = [
-    "BUSY_TIMEOUT_MS",
-    "FORMAT_VERSION",
-    "GROUPINGS",
-    "CheckRow",
-    "LedgerRecorder",
-    "LedgerTooNewError",
-    "PerModelRow",
-    "SessionRow",
-    "TranscriptMessage",
-    "affected_days",
-    "assert_writable",
-    "cache_share",
-    "connect",
-    "default_path",
-    "fold_all",
-    "fold_days",
-    "format_cost",
-    "format_tokens",
-    "ingest_transcript_messages",
-    "last_message_age",
-    "latest_message",
-    "mark_message_seen",
-    "model_family_of",
-    "pending_messages",
-    "period_totals",
-    "project_of",
-    "prune",
-    "reader_format",
-    "recent_checks",
-    "recompute_transcript_sessions",
-    "record_check",
-    "records",
-    "session_shape",
-    "set_reader_format",
-    "set_watermark",
-    "sources_in",
-    "store_message",
-    "stored_format_version",
-    "streaks",
-    "totals",
-    "upsert_per_model",
-    "upsert_sessions",
-    "utc_day_of",
-    "watermark",
-]

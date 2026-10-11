@@ -32,10 +32,13 @@ python3 scripts/gen_light_css.py
 
 | Path | Role |
 |------|------|
-| `tokens_go_brrr/` | Daemon, CLI, providers, harvesters, ledger, notify, LLM |
+| `tokens_go_brrr/` | Daemon, CLI (`cli/`), providers, harvesters |
+| `tokens_go_brrr/ledger/` | Usage DB (schema / sessions / messages / queries facades) |
+| `tokens_go_brrr/notify_engine/` | Digests, live notes, billboard |
+| `tokens_go_brrr/coerce.py` `http_json.py` | Shared parsing + HTTPS JSON |
 | `gnome-shell-extension/` | GJS popover + top bar |
 | `site/` | Marketing page (no bundler) |
-| `design/` | Product intent (check status lines — code may be ahead) |
+| `design/` | Product intent + `VISUAL_TRUTH.md` |
 | `tests/` | unittest suite |
 | `packaging/` `systemd/` | Distro install |
 

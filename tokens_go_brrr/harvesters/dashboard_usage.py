@@ -29,14 +29,19 @@ visible disagreement instead of a silently wrong number.
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from .. import ledger
-from ..api import AGGREGATED_PATH, POLICY_PATH, USAGE_PATH, CursorUsageClient
 from ..coerce import as_float_or_none as _as_float
 from ..coerce import as_int as _as_int
 from ..local_auth import read_local_auth
+from ..providers.cursor_api import (
+    AGGREGATED_PATH,
+    POLICY_PATH,
+    USAGE_PATH,
+    CursorUsageClient,
+)
 from .base import HarvestResult
 
 HARVESTER_ID = "cursor_api"
@@ -65,15 +70,13 @@ def _day_of_ms(value: Any) -> str | None:
     stamp = _ms(value)
     if stamp is None:
         return None
-    return datetime.fromtimestamp(stamp / 1000, tz=timezone.utc).strftime("%Y-%m-%d")
+    return datetime.fromtimestamp(stamp / 1000, tz=UTC).strftime("%Y-%m-%d")
 
 
 class _JsonClient(Protocol):
     """The one capability this reader needs, so a test can supply its own."""
 
-    def post_json(
-        self, path: str, body: dict[str, Any], access_token: str
-    ) -> dict[str, Any]: ...
+    def post_json(self, path: str, body: dict[str, Any], access_token: str) -> dict[str, Any]: ...
 
 
 class CursorApiHarvester:
@@ -154,9 +157,7 @@ class CursorApiHarvester:
 
         return resolve_access_token().access_token
 
-    def _rows(
-        self, payload: dict[str, Any], cycle_key: str
-    ) -> list[ledger.PerModelRow]:
+    def _rows(self, payload: dict[str, Any], cycle_key: str) -> list[ledger.PerModelRow]:
         aggregations = payload.get("aggregations")
         if not isinstance(aggregations, list):
             return []
@@ -196,9 +197,7 @@ class CursorApiHarvester:
         # first or full harvest also fetches the window before this cycle, and
         # summing both against one cycle's total is what made this check report a
         # ~30x "unit" disagreement that was really two cycles added together.
-        summed = (
-            sum(row.cost_usd or 0 for row in rows if row.cycle_key == cycle_key) * 100
-        )
+        summed = sum(row.cost_usd or 0 for row in rows if row.cycle_key == cycle_key) * 100
         reported = _as_float(payload.get("totalCostCents"))
         plan = period.get("planUsage") or {}
         limit = _as_int(plan.get("limit"))

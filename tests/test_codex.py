@@ -6,7 +6,7 @@ import base64
 import json
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest import mock
 
@@ -133,15 +133,13 @@ class ProviderTest(unittest.TestCase):
         self.assertEqual(snapshot.status, "ok")
         self.assertEqual(snapshot.plan, "ChatGPT Plus")
         self.assertEqual([m.key for m in snapshot.metrics], ["monthly", "window"])
-        self.assertEqual(
-            [m.label for m in snapshot.metrics], ["Monthly limit", "5-hour limit"]
-        )
+        self.assertEqual([m.label for m in snapshot.metrics], ["Monthly limit", "5-hour limit"])
         self.assertEqual([m.percent for m in snapshot.metrics], [42.0, 12.0])
         self.assertEqual(snapshot.primary_key, "monthly")
         self.assertEqual(snapshot.primary.percent, 42.0)
         resets = snapshot.primary.resets_at
         self.assertIsNotNone(resets)
-        self.assertEqual(resets, datetime.fromtimestamp(1792226711, tz=timezone.utc))
+        self.assertEqual(resets, datetime.fromtimestamp(1792226711, tz=UTC))
 
     def test_secondary_window_absent_still_yields_primary(self) -> None:
         payload = usage_payload()
@@ -257,4 +255,3 @@ class WindowKindTest(unittest.TestCase):
     def test_a_missing_or_absurd_duration_is_not_a_window(self):
         for value in (None, "soon", 0, -1, True):
             self.assertEqual(codex._window_kind(value), "other")
-

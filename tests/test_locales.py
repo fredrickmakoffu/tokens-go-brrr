@@ -22,10 +22,10 @@ SITE = ROOT / "site"
 # Strings that are the same in every language on purpose (brand and brand-like).
 SAME_EVERYWHERE = {"brand", "dl.kind.rpm", "dl.kind.deb"}
 
-EXT_SCRIPT = """
-import { CATALOGS } from "%s";
+EXT_SCRIPT = f"""
+import {{ CATALOGS }} from "{(EXT / "locales.js").as_uri()}";
 console.log(JSON.stringify(CATALOGS));
-""" % (EXT / "locales.js").as_uri()
+"""
 
 # The site's i18n.js is a browser IIFE; run it against a stub window and read the
 # catalogs back through t() by asking for every key in each locale.
@@ -37,12 +37,19 @@ const cats = {};
 const ctx = {
   window: {}, navigator: { languages: ["en"], language: "en" }, location: { search: "" },
   localStorage: { getItem() { return null; }, setItem() {} },
-  document: { documentElement: { setAttribute() {}, removeAttribute() {} }, querySelector() { return null; }, title: "" },
+  document: {
+    documentElement: { setAttribute() {}, removeAttribute() {} },
+    querySelector() { return null; },
+    title: "",
+  },
   Intl, URLSearchParams,
 };
 // Expose the catalogs: the script keeps them in closure variables, so hand them
 // out by patching the one line that builds CATALOGS.
-const patched = src.replace("var CATALOGS = { en: en, fr: fr, \"pt-BR\": pt };", "var CATALOGS = { en: en, fr: fr, \"pt-BR\": pt }; window.__CATALOGS = CATALOGS;");
+const patched = src.replace(
+  "var CATALOGS = { en: en, fr: fr, \"pt-BR\": pt };",
+  "var CATALOGS = { en: en, fr: fr, \"pt-BR\": pt }; window.__CATALOGS = CATALOGS;"
+);
 vm.runInNewContext(patched, ctx);
 console.log(JSON.stringify(ctx.window.__CATALOGS));
 """
@@ -62,11 +69,15 @@ class LocaleParityTest(unittest.TestCase):
     def setUpClass(cls) -> None:
         ext = subprocess.run(
             ["node", "--input-type=module", "-e", EXT_SCRIPT],
-            capture_output=True, text=True, check=True,
+            capture_output=True,
+            text=True,
+            check=True,
         )
         site = subprocess.run(
             ["node", "-e", SITE_SCRIPT, str(SITE / "i18n.js")],
-            capture_output=True, text=True, check=True,
+            capture_output=True,
+            text=True,
+            check=True,
         )
         cls.catalogs = {"extension": json.loads(ext.stdout), "site": json.loads(site.stdout)}
 
@@ -95,7 +106,8 @@ class LocaleParityTest(unittest.TestCase):
                 # Plural forms may drop {n} ("un jour"), but never invent one.
                 want = _placeholders(by_key[_normal(key)])
                 self.assertLessEqual(
-                    _placeholders(text), want | {"n"},
+                    _placeholders(text),
+                    want | {"n"},
                     f"{name} {code} {key}: unknown placeholder",
                 )
                 if _normal(key) == key:  # a single form must keep all of them

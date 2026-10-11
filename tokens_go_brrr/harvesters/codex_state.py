@@ -126,15 +126,11 @@ class CodexStateHarvester:
         """Column name → position, read straight from the store's own schema."""
         read = sqlite3.connect(f"file:{self.path}?mode=ro", uri=True, timeout=5)
         try:
-            return {
-                row[1]: row[0] for row in read.execute("PRAGMA table_info(threads)")
-            }
+            return {row[1]: row[0] for row in read.execute("PRAGMA table_info(threads)")}
         finally:
             read.close()
 
-    def _read(
-        self, index_of: dict[str, int], token_column: str
-    ) -> list[ledger.SessionRow]:
+    def _read(self, index_of: dict[str, int], token_column: str) -> list[ledger.SessionRow]:
         read = sqlite3.connect(f"file:{self.path}?mode=ro", uri=True, timeout=5)
         try:
             read.row_factory = sqlite3.Row
@@ -144,9 +140,7 @@ class CodexStateHarvester:
 
         rows: list[ledger.SessionRow] = []
         for position, entry in enumerate(raw):
-            identifier = (
-                _text(_pick(entry, index_of, ID_COLUMNS)) or f"thread-{position}"
-            )
+            identifier = _text(_pick(entry, index_of, ID_COLUMNS)) or f"thread-{position}"
             started = _seconds(_pick(entry, index_of, CREATED_COLUMNS))
             ended = _seconds(_pick(entry, index_of, UPDATED_COLUMNS))
             directory = _text(_pick(entry, index_of, DIRECTORY_COLUMNS))

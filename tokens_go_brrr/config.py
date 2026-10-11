@@ -11,10 +11,7 @@ from .coerce import as_float as _as_float
 from .coerce import as_int as _as_int
 from .providers import DEFAULT_PROVIDERS
 
-CONFIG_DIR = (
-    Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
-    / "tokens-go-brrr"
-)
+CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "tokens-go-brrr"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 STATE_FILE = Path(f"/run/user/{os.getuid()}/tokens-go-brrr/state.json")
 
@@ -40,16 +37,14 @@ class MonitorConfig:
     harvest_deep_seconds: int = 3600
     # Event trigger: a burn-rate ETA inside this many hours is worth a message.
     wind_down_hours: float = 2.0
-    # The notification engine. See `notifications.py` for what each family is.
+    # The notification engine. See `notify_engine` for what each family is.
     notify_enabled: bool = True
     notify_daily_hour: int = 18
     notify_weekly_day: str = "monday"
     notify_types: list[str] = field(default_factory=lambda: list(DEFAULT_NOTIFY_TYPES))
     notify_shareable_share: float = 0.25
     # [start, end] local hours during which nothing is delivered.
-    notify_silent_hours: list[int] = field(
-        default_factory=lambda: list(DEFAULT_SILENT_HOURS)
-    )
+    notify_silent_hours: list[int] = field(default_factory=lambda: list(DEFAULT_SILENT_HOURS))
     # The LLM is off until a generator is configured: templates are the whole
     # wording layer, and every trigger works without it.
     llm_notifications: bool = False
@@ -76,12 +71,8 @@ class MonitorConfig:
     billboard_enabled: bool = True
     billboard_auto_advance_seconds: int = 0
     billboard_freshness_hours: int = 24
-    primary_alerts: list[int] = field(
-        default_factory=lambda: list(DEFAULT_PRIMARY_ALERTS)
-    )
-    enabled_providers: list[str] = field(
-        default_factory=lambda: list(DEFAULT_PROVIDERS)
-    )
+    primary_alerts: list[int] = field(default_factory=lambda: list(DEFAULT_PRIMARY_ALERTS))
+    enabled_providers: list[str] = field(default_factory=lambda: list(DEFAULT_PROVIDERS))
     # provider_id → preferred primary metric key (chip swap)
     primary_overrides: dict[str, str] = field(default_factory=dict)
 
@@ -122,8 +113,7 @@ class MonitorConfig:
             notify_types=list(data.get("notify_types") or DEFAULT_NOTIFY_TYPES),
             notify_shareable_share=_as_float(data.get("notify_shareable_share"), 0.25),
             notify_silent_hours=[
-                _as_int(x, 0)
-                for x in (data.get("notify_silent_hours") or DEFAULT_SILENT_HOURS)
+                _as_int(x, 0) for x in (data.get("notify_silent_hours") or DEFAULT_SILENT_HOURS)
             ],
             llm_notifications=bool(data.get("llm_notifications", False)),
             llm_generator_provider=str(data.get("llm_generator_provider") or ""),
@@ -136,15 +126,9 @@ class MonitorConfig:
             live_llm_per_hour=max(0, _as_int(data.get("live_llm_per_hour"), 4)),
             live_llm_per_day=max(0, _as_int(data.get("live_llm_per_day"), 24)),
             llm_log_days=max(0, _as_int(data.get("llm_log_days"), 30)),
-            billboard_enabled=bool(
-                data.get("billboard_enabled", data.get("quote_panel", True))
-            ),
-            billboard_auto_advance_seconds=_as_int(
-                data.get("billboard_auto_advance_seconds"), 0
-            ),
-            billboard_freshness_hours=_as_int(
-                data.get("billboard_freshness_hours"), 24
-            ),
+            billboard_enabled=bool(data.get("billboard_enabled", data.get("quote_panel", True))),
+            billboard_auto_advance_seconds=_as_int(data.get("billboard_auto_advance_seconds"), 0),
+            billboard_freshness_hours=_as_int(data.get("billboard_freshness_hours"), 24),
             primary_alerts=[_as_int(x, 0) for x in (alerts or DEFAULT_PRIMARY_ALERTS)],
             enabled_providers=list(data.get("enabled_providers") or DEFAULT_PROVIDERS),
             primary_overrides=dict(data.get("primary_overrides") or {}),
@@ -193,5 +177,7 @@ class MonitorConfig:
 
 
 def write_state(state: dict[str, Any]) -> None:
-    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    STATE_FILE.write_text(json.dumps(state, indent=2) + "\n")
+    """Compatibility wrapper — prefer ``state.write_state``."""
+    from .state import write_state as _write
+
+    _write(state)

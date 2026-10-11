@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import unittest
 from dataclasses import dataclass
+from datetime import UTC
 from typing import Any
 from unittest import mock
 
@@ -133,6 +134,15 @@ class UsageFetchTest(unittest.TestCase):
                 self.sockets[-1].close.assert_called_once()
 
 
+class ProcessSpecsContractTest(unittest.TestCase):
+    def test_every_provider_declares_process_specs_as_a_tuple(self):
+        from tokens_go_brrr.providers import PROVIDERS
+
+        for provider_id, cls in PROVIDERS.items():
+            with self.subTest(provider=provider_id):
+                self.assertIsInstance(cls.process_specs, tuple)
+
+
 class MeterReadingTest(unittest.TestCase):
     def test_a_reading_that_will_not_parse_is_dropped(self):
         # A meter states how much of a limit is used. Defaulting an unreadable
@@ -158,8 +168,9 @@ class MeterReadingTest(unittest.TestCase):
         self.assertEqual(summary.api_percent, 12.0)
 
         provider = CursorProvider()
-        with mock.patch.object(provider, "available", return_value=True), mock.patch.object(
-            provider._client, "fetch", return_value=summary
+        with (
+            mock.patch.object(provider, "available", return_value=True),
+            mock.patch.object(provider._client, "fetch", return_value=summary),
         ):
             snap = provider.fetch()
         self.assertEqual([m.key for m in snap.metrics], ["other"])
@@ -168,19 +179,19 @@ class MeterReadingTest(unittest.TestCase):
 
 class MeterResetsInTest(unittest.TestCase):
     def test_seconds_until_reset_are_reported(self):
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         from tokens_go_brrr.providers.base import Meter
 
-        meter = Meter("k", "K", 10, datetime.now(timezone.utc) + timedelta(hours=2), kind="rolling")
+        meter = Meter("k", "K", 10, datetime.now(UTC) + timedelta(hours=2), kind="rolling")
         self.assertAlmostEqual(meter.resets_in_seconds(), 7200, delta=2)
 
     def test_a_reset_in_the_past_is_zero_not_negative(self):
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         from tokens_go_brrr.providers.base import Meter
 
-        meter = Meter("k", "K", 10, datetime.now(timezone.utc) - timedelta(hours=1), kind="rolling")
+        meter = Meter("k", "K", 10, datetime.now(UTC) - timedelta(hours=1), kind="rolling")
         self.assertEqual(meter.resets_in_seconds(), 0)
 
     def test_an_unknown_reset_is_none(self):
@@ -191,7 +202,7 @@ class MeterResetsInTest(unittest.TestCase):
 
 class MeterElapsedTest(unittest.TestCase):
     def _meter(self, kind, hours_left):
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         from tokens_go_brrr.providers.base import Meter
 
@@ -199,7 +210,7 @@ class MeterElapsedTest(unittest.TestCase):
             "k",
             "K",
             10,
-            datetime.now(timezone.utc) + timedelta(hours=hours_left),
+            datetime.now(UTC) + timedelta(hours=hours_left),
             kind=kind,
         )
 

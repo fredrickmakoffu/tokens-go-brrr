@@ -273,6 +273,7 @@ class BackendResolverHookTests(unittest.TestCase):
 
                 def to_dict(self):
                     return {"account": self.account, "model": self.model}
+
             return lambda _d: B()
 
         first = signature(scan(self._specs(resolver_for("glm-5.3")), proc=self.root))

@@ -1,6 +1,7 @@
 # The landing page — a quote at the top of the popover
 
-**Status:** design for audit. Nothing implemented.
+**Status:** implemented — daemon `choose_billboard` / `Acknowledge`, extension
+landing compare on `billboard.id`, covered by `tests/test_billboard.py`.
 **Supersedes:** `USAGE_ANALYTICS_AND_GUIDANCE.md` §9 ("quote-mode panel"), which
 described a simpler behaviour — a quote swapped in place of the list, dismissed
 by a chevron or a 4-second timer. It had no notion of which message deserved the

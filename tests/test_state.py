@@ -7,13 +7,13 @@ import json
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
-from tokens_go_brrr import __main__ as cli
 from tokens_go_brrr import config as config_module
 from tokens_go_brrr import state
+from tokens_go_brrr.cli import app as cli
 from tokens_go_brrr.config import MonitorConfig
 
 
@@ -58,7 +58,7 @@ def tool_dict(
 
 
 def payload_dict(tools: list[dict] | None = None, *, age_seconds: float = 0) -> dict:
-    stamp = datetime.now(timezone.utc) - timedelta(seconds=age_seconds)
+    stamp = datetime.now(UTC) - timedelta(seconds=age_seconds)
     return {
         "schema": state.SCHEMA_VERSION,
         "version": "0.4.0",
@@ -152,9 +152,7 @@ class PayloadReadingTest(unittest.TestCase):
         self.assertEqual(state.primary_metric({})["value"], 0)
 
     def test_header_names_the_backend_for_a_harness(self):
-        self.assertEqual(
-            state.header_of(tool_dict(borrowed=True)), "Claude Code · via OpenCode Go"
-        )
+        self.assertEqual(state.header_of(tool_dict(borrowed=True)), "Claude Code · via OpenCode Go")
 
     def test_header_uses_the_plan_otherwise(self):
         self.assertEqual(state.header_of(tool_dict()), "Claude Code · Max")
@@ -200,9 +198,7 @@ class StatusCommandTest(unittest.TestCase):
 
     def test_format_joins_providers_with_the_separator(self):
         payload = payload_dict([tool_dict("claude"), tool_dict("opencode", value=7)])
-        _, out, _, _ = self.run_status(
-            ["--format", "{pct}", "--separator", " | "], payload
-        )
+        _, out, _, _ = self.run_status(["--format", "{pct}", "--separator", " | "], payload)
         self.assertEqual(out.strip(), "42 | 7")
 
     def test_format_shows_a_dash_rather_than_zero_when_not_ok(self):
@@ -233,9 +229,7 @@ class StatusCommandTest(unittest.TestCase):
 
     def test_provider_filter_selects_one_row(self):
         payload = payload_dict([tool_dict("claude"), tool_dict("opencode", value=7)])
-        _, out, _, _ = self.run_status(
-            ["--format", "{id}", "--provider", "opencode"], payload
-        )
+        _, out, _, _ = self.run_status(["--format", "{id}", "--provider", "opencode"], payload)
         self.assertEqual(out.strip(), "opencode")
 
     def test_unmatched_provider_filter_is_its_own_exit_code(self):
@@ -272,7 +266,7 @@ class DaemonPayloadTest(unittest.TestCase):
         snapshot.to_panel_dict.return_value = tool_dict()
         stub = mock.Mock(
             snapshots=[snapshot],
-            last_fetch=datetime.now(timezone.utc),
+            last_fetch=datetime.now(UTC),
             last_error=None,
             _billboard=None,
             _latest_message=None,
@@ -358,20 +352,18 @@ class RefreshCooldownTest(unittest.TestCase):
         self.assertTrue(self.poll(self._daemon(None)))
 
     def test_a_second_poll_inside_the_cooldown_is_dropped(self):
-        just_now = datetime.now(timezone.utc) - timedelta(seconds=5)
+        just_now = datetime.now(UTC) - timedelta(seconds=5)
         self.assertFalse(self.poll(self._daemon(just_now)))
 
     def test_a_poll_after_the_cooldown_runs(self):
         from tokens_go_brrr.daemon import REFRESH_COOLDOWN_SECONDS
 
-        stale = datetime.now(timezone.utc) - timedelta(
-            seconds=REFRESH_COOLDOWN_SECONDS + 5
-        )
+        stale = datetime.now(UTC) - timedelta(seconds=REFRESH_COOLDOWN_SECONDS + 5)
         self.assertTrue(self.poll(self._daemon(stale)))
 
     def test_force_ignores_the_cooldown(self):
         # The scheduled tick is already spaced by the poll interval.
-        just_now = datetime.now(timezone.utc) - timedelta(seconds=5)
+        just_now = datetime.now(UTC) - timedelta(seconds=5)
         self.assertTrue(self.poll(self._daemon(just_now), force=True))
 
     def test_a_poll_already_in_flight_is_never_doubled(self):

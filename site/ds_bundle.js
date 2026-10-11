@@ -3406,7 +3406,7 @@ function ListScreen({
   const running = SESSIONS.filter(s => !s.paused);
   const projects = new Set(running.map(s => s.project)).size;
   return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(ExtHeader, {
-    kicker: "AI usage",
+    kicker: "tokens-go-brrr",
     meta: "15:00",
     title: "Claude Code runs out in ~40m.",
     sub: "OpenCode has room. " + running.length + " agents running across " + projects + " projects."
@@ -3598,7 +3598,7 @@ function AboutScreen({
 }) {
   return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(ExtHeader, {
     kicker: "About",
-    title: "AI usage",
+    title: "tokens-go-brrr",
     sub: "Local GNOME Shell indicator for AI coding limits.",
     onBack: () => go({
       screen: "list"
@@ -3873,7 +3873,7 @@ const WINDOWS = [{
   label: "Monthly"
 }];
 const ABOUT = {
-  version: "0.4.0",
+  version: "0.7.0",
   updated: "just now"
 };
 if (window.__AIU_KIT__) Object.assign(window, {

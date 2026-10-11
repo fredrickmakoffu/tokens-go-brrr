@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from tokens_go_brrr.coerce import (
     as_float,
@@ -56,13 +56,13 @@ class ParseIsoTests(unittest.TestCase):
     def test_z_suffix(self) -> None:
         stamp = parse_iso("2024-01-02T03:04:05Z")
         assert stamp is not None
-        self.assertEqual(stamp.tzinfo, timezone.utc)
+        self.assertEqual(stamp.tzinfo, UTC)
         self.assertEqual(stamp.hour, 3)
 
     def test_naive_gets_utc(self) -> None:
         stamp = parse_iso("2024-01-02T03:04:05")
         assert stamp is not None
-        self.assertEqual(stamp.tzinfo, timezone.utc)
+        self.assertEqual(stamp.tzinfo, UTC)
 
     def test_junk(self) -> None:
         self.assertIsNone(parse_iso(None))
@@ -73,7 +73,7 @@ class ParseIsoTests(unittest.TestCase):
 class ParseMsOrIsoTests(unittest.TestCase):
     def test_ms_int_and_digit_string(self) -> None:
         ms = 1_700_000_000_000
-        expected = datetime.fromtimestamp(ms / 1000, tz=timezone.utc)
+        expected = datetime.fromtimestamp(ms / 1000, tz=UTC)
         self.assertEqual(parse_ms_or_iso(ms), expected)
         self.assertEqual(parse_ms_or_iso(str(ms)), expected)
 
@@ -85,9 +85,11 @@ class ParseMsOrIsoTests(unittest.TestCase):
 
 class JwtExpTests(unittest.TestCase):
     def test_reads_exp(self) -> None:
-        payload = base64.urlsafe_b64encode(
-            json.dumps({"exp": 1_700_000_000}).encode()
-        ).decode().rstrip("=")
+        payload = (
+            base64.urlsafe_b64encode(json.dumps({"exp": 1_700_000_000}).encode())
+            .decode()
+            .rstrip("=")
+        )
         token = f"x.{payload}.y"
         self.assertEqual(jwt_exp(token), 1_700_000_000)
 

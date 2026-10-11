@@ -15,7 +15,7 @@ import os
 import sqlite3
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -68,7 +68,7 @@ def _epoch(moment: datetime | None = None) -> int:
     `prune`, where a zero cutoff means "delete everything".
     """
     try:
-        return int((moment or datetime.now(timezone.utc)).timestamp())
+        return int((moment or datetime.now(UTC)).timestamp())
     except (OSError, OverflowError, ValueError):
         return int(time.time())
 
@@ -86,9 +86,7 @@ def _window_key(resets_at: datetime | None) -> str:
     return resets_at.isoformat() if resets_at else ""
 
 
-def record(
-    con: sqlite3.Connection, snapshots: list[Any], *, at: datetime | None = None
-) -> int:
+def record(con: sqlite3.Connection, snapshots: list[Any], *, at: datetime | None = None) -> int:
     """Store one row per meter. Returns how many rows were written.
 
     Only providers that own their meters are recorded. A harness row holds a
@@ -100,8 +98,7 @@ def record(
     # never a query composed at runtime.
     before = con.total_changes
     con.executemany(
-        "INSERT INTO samples (ts, provider, metric, percent, resets_at)"
-        " VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO samples (ts, provider, metric, percent, resets_at) VALUES (?, ?, ?, ?, ?)",
         [
             (
                 stamp,

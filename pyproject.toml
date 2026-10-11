@@ -23,11 +23,10 @@ target-version = "py311"
 src = ["tokens_go_brrr", "tests", "scripts"]
 
 [tool.ruff.lint]
-# Baseline enforced in CI. Widen later (UP, B, SIM, BLE, E501) once cleaned up.
-select = ["E", "F", "I"]
+select = ["E", "F", "I", "UP"]
 ignore = [
-    "E501",  # line length — target 100; many legacy lines remain
     "E741",  # ambiguous name (e.g. loop var `l`) — fix opportunistically
+    "UP042", # StrEnum — leave as-is where readability prefers str constants
 ]
 
 [tool.ruff.format]

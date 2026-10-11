@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from .. import ledger
@@ -74,7 +74,7 @@ class PiSessionHarvester:
         report = reports.get(PiProvider.id)
         instances = report.all if report is not None else []
         previous = self._load(con)
-        now = int(datetime.now(timezone.utc).timestamp())
+        now = int(datetime.now(UTC).timestamp())
 
         rows: list[ledger.SessionRow] = []
         seen: dict[str, dict[str, Any]] = {}
@@ -86,9 +86,7 @@ class PiSessionHarvester:
                 started = remembered.get("started_at")
             backend = instance.backend
             model = backend.model if backend is not None else remembered.get("model")
-            account = (
-                backend.account if backend is not None else remembered.get("account")
-            )
+            account = backend.account if backend is not None else remembered.get("account")
             rows.append(
                 ledger.SessionRow(
                     provider=self.provider,

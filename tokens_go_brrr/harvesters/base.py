@@ -20,6 +20,10 @@ The rules it must follow are what make the ledger trustworthy:
 
 * **Say where a number came from.** `source` is `local-db`, `local-transcript`,
   `api` or `estimate` — never blank, and never a guess dressed as a measurement.
+
+* **``failed`` vs skip.** Set ``HarvestResult.failed=True`` when the store could
+  not be read (locked DB, HTTP error). Increment skip / scanned counts when a
+  single row is bad but the run continues — do not mark the whole harvest failed.
 """
 
 from __future__ import annotations

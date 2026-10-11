@@ -187,8 +187,7 @@ def _healthy_windows(snapshots: list[Any], provider_id: str) -> int:
         return sum(
             1
             for meter in snapshot.metrics
-            if meter.kind in ("rolling", "weekly")
-            and (100.0 - _as_float(meter.percent)) >= 50
+            if meter.kind in ("rolling", "weekly") and (100.0 - _as_float(meter.percent)) >= 50
         )
     return 0
 
@@ -308,11 +307,7 @@ def parse_reply(text: str) -> tuple[str, str, str]:
 
 def known_provider_ids(facts: dict[str, Any]) -> set[str]:
     """The ids the model was allowed to pick from."""
-    return {
-        str(row.get("provider"))
-        for row in (facts.get("ranked") or [])
-        if row.get("provider")
-    }
+    return {str(row.get("provider")) for row in (facts.get("ranked") or []) if row.get("provider")}
 
 
 # -- talking to a provider ---------------------------------------------------
@@ -349,9 +344,7 @@ def _post_json(
 def _claude_token() -> str:
     """Claude Code's OAuth token, read and never written."""
     path = Path(
-        os.environ.get(
-            "CLAUDE_CREDENTIALS_FILE", Path.home() / ".claude" / ".credentials.json"
-        )
+        os.environ.get("CLAUDE_CREDENTIALS_FILE", Path.home() / ".claude" / ".credentials.json")
     )
     try:
         creds = json.loads(path.read_text())
@@ -499,9 +492,7 @@ def generate(
             print(f"LLM log recorder failed: {exc}", file=sys.stderr, flush=True)
 
     try:
-        text, usage = _complete(
-            generator, prompt, max_tokens=max_tokens, timeout=timeout
-        )
+        text, usage = _complete(generator, prompt, max_tokens=max_tokens, timeout=timeout)
     except LlmError as exc:
         record(_outcome_of(exc), error=f"{type(exc).__name__}: {exc}")
         raise

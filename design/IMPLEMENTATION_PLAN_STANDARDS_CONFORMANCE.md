@@ -2,9 +2,9 @@
 
 **Implements:** `.cursor/rules/*`, `AGENTS.md` (coding standards established 2026-10-11)
 **Baseline commit:** `4fc490b` (Cursor rules + Ruff E/F/I in CI)
-**Status:** Phase 0 done; Phase 1 done — shared `coerce` / `http_json`, meter policy,
-User-Agent versioned. Next: Phase 2 (identity / docs / packaging).
-**Baseline checks:** `make test` green; `make lint` green; stdlib-only; Python ≥ 3.11
+**Status:** Phases 0–8 complete for in-scope work. Remaining backlog: B23 LICENSE,
+B24 `AI_USAGE_LANG` rename (out of band).
+**Baseline checks:** `make test` / `make lint` / `make format-check` green; stdlib-only
 **Tracking:** `design/STANDARDS_BACKLOG.md`
 
 This plan turns the audit into ordered, independently shippable steps. Each
@@ -85,6 +85,8 @@ single place that names every known smell so PRs can close rows.
 
 ## Phase 2 — Identity, docs, and packaging truth (½–1 day)
 
+**Status:** ✅ **done.**
+
 **Why:** agents and humans trust README / design status / package blurbs; several
 still lie or lag the rename.
 
@@ -115,6 +117,8 @@ matches README provider table.
 
 ## Phase 3 — Provider / harvester contract alignment (1–2 days)
 
+**Status:** ✅ **done.**
+
 **Depends on:** Phase 1.
 
 **Do**
@@ -140,6 +144,8 @@ parity test if cheap (string/fixture compare), else manual checklist in PR.
 ---
 
 ## Phase 4 — Ruff tighten + format pass (1 day)
+
+**Status:** ✅ **done.**
 
 **Depends on:** Phase 1 mostly done (less churn on helpers).
 
