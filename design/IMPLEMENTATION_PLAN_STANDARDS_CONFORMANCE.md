@@ -168,6 +168,8 @@ parity test if cheap (string/fixture compare), else manual checklist in PR.
 
 ## Phase 5 — State I/O and Cursor API placement (½–1 day)
 
+**Status:** ✅ **done.**
+
 **Do**
 
 1. Colocate `write_state` with `read_state` / `build_payload` (move out of
@@ -185,6 +187,9 @@ parity test if cheap (string/fixture compare), else manual checklist in PR.
 ---
 
 ## Phase 6 — Split god modules along existing seams (multi-PR, opportunistic)
+
+**Status:** ✅ **done** — `notify_engine/` and `ledger/` packages with seam
+facades over `core.py`; `borrowing.py` extracted; CLI in `cli/app.py`.
 
 **Rule:** extract only when a feature or bug forces you into the file, **or** as
 dedicated extract PRs that are behaviour-preserving with identical tests.
@@ -209,6 +214,8 @@ manual smoke: panel opens, harvest, billboard path if touched.
 
 ## Phase 7 — Extension and site hygiene (1–2 days)
 
+**Status:** ✅ **done.**
+
 **Do**
 
 1. Extension README: sample state schema current (`billboard`, camelCase fields,
@@ -229,6 +236,8 @@ manual smoke: panel opens, harvest, billboard path if touched.
 ---
 
 ## Phase 8 — Observability and debt burn-down (ongoing)
+
+**Status:** ✅ **done** for this pass (`logutil.py`; P0/P1 backlog closed).
 
 **Do opportunistically**
 
