@@ -71,6 +71,12 @@ class MonitorConfig:
     billboard_enabled: bool = True
     billboard_auto_advance_seconds: int = 0
     billboard_freshness_hours: int = 24
+    # Look for a newer published release every `update_check_hours`. The check
+    # only reads one small public file; nothing is downloaded or installed
+    # until the user asks. An empty `update_manifest_url` means the default.
+    update_check: bool = True
+    update_check_hours: int = 6
+    update_manifest_url: str = ""
     primary_alerts: list[int] = field(default_factory=lambda: list(DEFAULT_PRIMARY_ALERTS))
     enabled_providers: list[str] = field(default_factory=lambda: list(DEFAULT_PROVIDERS))
     # provider_id → preferred primary metric key (chip swap)
@@ -129,6 +135,9 @@ class MonitorConfig:
             billboard_enabled=bool(data.get("billboard_enabled", data.get("quote_panel", True))),
             billboard_auto_advance_seconds=_as_int(data.get("billboard_auto_advance_seconds"), 0),
             billboard_freshness_hours=_as_int(data.get("billboard_freshness_hours"), 24),
+            update_check=bool(data.get("update_check", True)),
+            update_check_hours=max(1, _as_int(data.get("update_check_hours"), 6)),
+            update_manifest_url=str(data.get("update_manifest_url") or ""),
             primary_alerts=[_as_int(x, 0) for x in (alerts or DEFAULT_PRIMARY_ALERTS)],
             enabled_providers=list(data.get("enabled_providers") or DEFAULT_PROVIDERS),
             primary_overrides=dict(data.get("primary_overrides") or {}),
@@ -164,6 +173,9 @@ class MonitorConfig:
             "billboard_enabled": self.billboard_enabled,
             "billboard_auto_advance_seconds": self.billboard_auto_advance_seconds,
             "billboard_freshness_hours": self.billboard_freshness_hours,
+            "update_check": self.update_check,
+            "update_check_hours": self.update_check_hours,
+            "update_manifest_url": self.update_manifest_url,
             "primary_alerts": self.primary_alerts,
             "enabled_providers": self.enabled_providers,
             "primary_overrides": self.primary_overrides,

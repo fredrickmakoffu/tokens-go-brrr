@@ -50,6 +50,11 @@ const IFACE_XML = `
     </method>
     <method name="ClearLlmLog"/>
     <method name="LlmLogReport"><arg type="s" direction="out" name="path"/></method>
+    <method name="InstallUpdate"/>
+    <method name="RestartDaemon"/>
+    <method name="SkipUpdate">
+      <arg type="s" direction="in" name="version"/>
+    </method>
     <method name="Quit"/>
     <signal name="StateChanged"><arg type="s" name="json"/></signal>
   </interface>
@@ -2015,6 +2020,8 @@ const Indicator = GObject.registerClass(
             // note may arrive; an unchanged picture simply makes the line vanish.
             if (this._state?.live?.catchingUp)
                 screen.add_child(label(tr("live.catchingUp"), "tokens-go-brrr-sessions-empty"));
+            const updateBar = this._updateBar();
+            if (updateBar) screen.add_child(updateBar);
             if (!tools.length) {
                 const text = this._state
                     ? tr("empty.noProviders")
@@ -2057,6 +2064,79 @@ const Indicator = GObject.registerClass(
             actions.push({ label: tr("ui.guide"), cb: () => this._navigate("guide") });
             actions.push({ label: tr("ui.about"), cb: () => this._navigate("about") });
             screen.add_child(this._footer(this._updatedText(), actions, true));
+        }
+
+        // A strip under the header while a release is on offer. Daemon decides
+        // what is on offer and how far it has got; this only says it and
+        // offers the next step (states: available, downloading, installing,
+        // installed, error). Words carry the state, not colour.
+        _updateBar() {
+            const update = this._state?.update;
+            const loaded = this._ext.loadedVersion;
+            const daemonVersion = this._state?.version;
+            let text = "";
+            const buttons = [];
+            if (update) {
+                const v = update.version;
+                const install = { label: tr("ui.update"), cb: () => this._ext.installUpdate() };
+                const skip = { label: tr("ui.skip"), cb: () => this._ext.skipUpdate(v) };
+                switch (update.status) {
+                    case "downloading":
+                        text = tr("update.downloading", { version: v });
+                        break;
+                    case "installing":
+                        text = tr("update.installing", { version: v });
+                        break;
+                    case "installed":
+                        if (update.requires === "relogin") {
+                            text = tr("update.relogin", { version: v });
+                        } else {
+                            text = tr("update.installed", { version: v });
+                            buttons.push({
+                                label: tr("ui.restart"),
+                                cb: () => this._ext.restartDaemon(),
+                            });
+                        }
+                        break;
+                    case "error":
+                        text = tr("update.error", { error: update.error ?? "" });
+                        if (update.installable)
+                            buttons.push({ ...install, label: tr("ui.retry") });
+                        buttons.push(skip);
+                        break;
+                    default:
+                        if (update.installable) {
+                            text = tr("update.available", { version: v });
+                            buttons.push(install);
+                        } else {
+                            text = tr("update.source", { version: v });
+                        }
+                        buttons.push(skip);
+                }
+            } else if (loaded && daemonVersion && loaded !== daemonVersion) {
+                // The daemon already runs the new release but the shell still
+                // holds the old extension code.
+                text = tr("update.stale");
+            }
+            if (!text) return null;
+            const bar = new St.BoxLayout({
+                style_class: "tokens-go-brrr-update-bar",
+                x_expand: true,
+            });
+            bar.add_child(
+                wrappedLabel(text, "tokens-go-brrr-update-text", { x_expand: true }),
+            );
+            for (const { label: text_, cb } of buttons) {
+                const b = new St.Button({
+                    style_class: "tokens-go-brrr-ghost-btn",
+                    label: text_,
+                    can_focus: true,
+                    y_align: Clutter.ActorAlign.CENTER,
+                });
+                b.connect("clicked", cb);
+                bar.add_child(b);
+            }
+            return bar;
         }
 
         _renderDetail(screen) {
@@ -2758,6 +2838,38 @@ export default class TokensGoBrrrExtension extends Extension {
             console.error(`[tokens-go-brrr] LLM log report failed: ${e.message}`);
             callback("");
         }
+    }
+
+    // Update buttons. The daemon does the work; these only ask. Defensive like
+    // the calls above: an older daemon lacks the methods, and that must not
+    // break the panel.
+    _call(method, ...args) {
+        if (!this._proxy?.g_name_owner) return;
+        const fn = this._proxy[`${method}Remote`];
+        if (typeof fn !== "function") return;
+        try {
+            fn.call(this._proxy, ...args, () => { });
+        } catch (e) {
+            console.error(`[tokens-go-brrr] ${method} failed: ${e.message}`);
+        }
+    }
+
+    installUpdate() {
+        this._call("InstallUpdate");
+    }
+
+    restartDaemon() {
+        this._call("RestartDaemon");
+    }
+
+    skipUpdate(version) {
+        this._call("SkipUpdate", version);
+    }
+
+    // The version of the extension code this session loaded. GNOME Shell keeps
+    // it until the next login, so it can lag the daemon after an update.
+    get loadedVersion() {
+        return String(this.metadata?.["version-name"] ?? "");
     }
 
     acknowledge(messageId) {

@@ -3,6 +3,10 @@ name: Release
 # Push a tag like v0.6.0 on main. The build lands as a DRAFT release: audit the
 # artifacts, then press "Publish" on GitHub. Nothing is public until you do.
 #
+# Merging to main starts the same build when the version in the code has no tag
+# yet, so shipping is: bump the version, merge, then press "Publish" on the
+# draft. A merge that leaves the version alone releases nothing.
+#
 # No terminal? Open Actions > Release > Run workflow on main. It reads the
 # version from the code, builds and tests exactly as for a tag, and only then
 # creates the v<version> tag on that commit and the draft release. Nothing is
@@ -10,39 +14,65 @@ name: Release
 on:
   push:
     tags: ['v*']
+    branches: [main]
   workflow_dispatch:
+
+# Two merges in quick succession must not race to tag the same version.
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 permissions:
   contents: write
 
 jobs:
-  linux:
+  # A tag push names its own tag. A manual run or a merge to main has none yet,
+  # so it derives one from the code, and only from main: anyone who can run
+  # workflows must not be able to release a feature branch. A merge whose
+  # version is already tagged is not a release and stops here.
+  plan:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
+      skip: ${{ steps.tag.outputs.skip }}
     steps:
       - uses: actions/checkout@v4
-
-      # A tag push names its own tag. A manual run has none yet, so it derives
-      # one from the code, and only from main: anyone who can run workflows must
-      # not be able to release a feature branch.
+        with:
+          fetch-depth: 0
       - name: Work out the tag
         id: tag
         run: |
-          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+          skip=false
+          if [ "${GITHUB_EVENT_NAME}" = "push" ] && [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            tag="${GITHUB_REF_NAME}"
+          else
             test "${GITHUB_REF}" = "refs/heads/main" \
               || { echo "run this workflow from main, not ${GITHUB_REF}"; exit 1; }
             tag="v$(python3 scripts/bump_version.py --print)"
-          else
-            tag="${GITHUB_REF_NAME}"
+            if [ "${GITHUB_EVENT_NAME}" = "push" ] \
+               && git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+              skip=true
+              echo "${tag} is already tagged: nothing to release" >> "$GITHUB_STEP_SUMMARY"
+            fi
           fi
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
-          echo "Releasing ${tag} from ${GITHUB_SHA}"
+          echo "skip=${skip}" >> "$GITHUB_OUTPUT"
+          echo "Releasing ${tag} from ${GITHUB_SHA} (skip=${skip})"
+
+  linux:
+    needs: [plan]
+    if: needs.plan.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # Full history: make_manifest.py diffs against the previous tag.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Tag must match the version in the code
         env:
-          TAG: ${{ steps.tag.outputs.tag }}
+          TAG: ${{ needs.plan.outputs.tag }}
         run: |
           test "v$(python3 scripts/bump_version.py --print)" = "${TAG}" \
             || { echo "tag ${TAG} != pyproject version"; exit 1; }
@@ -70,10 +100,10 @@ jobs:
   # macOS minutes count 10x against the monthly allowance.
 
   draft-release:
-    needs: [linux]
+    needs: [plan, linux]
     runs-on: ubuntu-latest
     env:
-      TAG: ${{ needs.linux.outputs.tag }}
+      TAG: ${{ needs.plan.outputs.tag }}
     steps:
       # The commit that was built and tested, not whatever main has moved to.
       - uses: actions/checkout@v4
@@ -84,12 +114,12 @@ jobs:
           path: dist
           merge-multiple: true
 
-      # Manual runs create the tag here, after the build and tests have passed,
+      # Merges and manual runs create the tag here, after the build and tests have passed,
       # so a broken build leaves no tag behind. A tag pushed with the workflow's
       # own token does not start another run. Re-running is safe: a tag already
       # on this commit is kept, one on any other commit stops the release.
-      - name: Create the tag (manual runs only)
-        if: github.event_name == 'workflow_dispatch'
+      - name: Create the tag (merges and manual runs)
+        if: github.ref_type != 'tag'
         run: |
           git fetch --tags --quiet origin
           if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
