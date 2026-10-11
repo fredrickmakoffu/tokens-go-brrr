@@ -5,7 +5,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
-UUID="ai-usage@fredrickmakoffu.github.io"
+UUID="tokens-go-brrr@fredrickmakoffu.github.io"
 RUNTIME="${AI_USAGE_NESTED_DIR:-$(mktemp -d)}"
 DURATION="${1:-60}"
 

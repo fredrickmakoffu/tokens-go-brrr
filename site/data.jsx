@@ -12,7 +12,7 @@ const SESSIONS = [
 ];
 const INSIGHTS = [];
 const WINDOWS = [];
-const ABOUT = { version: "0.4.0" };
+const ABOUT = { version: "0.7.0" };
 
 function loadData() {
   const win = (key, kind, value, elapsed, sub, status, label) => ({ key, kind, label: label || t("win." + kind), value, elapsed, sub, status });

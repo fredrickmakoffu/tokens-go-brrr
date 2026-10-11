@@ -15,14 +15,14 @@ import tempfile
 import threading
 import unittest
 from contextlib import redirect_stdout
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
-from cursor_spend_monitor import __main__ as cli
-from cursor_spend_monitor import ledger
+from tokens_go_brrr import ledger
+from tokens_go_brrr.cli import app as cli
 
-NOW = datetime(2026, 10, 6, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 6, 12, 0, tzinfo=UTC)
 
 
 def make(
@@ -94,9 +94,7 @@ class SchemaTest(LedgerCase):
     def test_the_store_is_created_with_the_tables_it_needs(self):
         names = {
             row[0]
-            for row in self.con.execute(
-                "SELECT name FROM sqlite_master WHERE type = 'table'"
-            )
+            for row in self.con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
         }
         self.assertLessEqual(
             {
@@ -118,9 +116,7 @@ class SchemaTest(LedgerCase):
         self.assertEqual(ledger.stored_format_version(again), ledger.FORMAT_VERSION)
 
     def test_a_newer_store_refuses_writes_rather_than_guessing(self):
-        self.con.execute(
-            "UPDATE ledger_meta SET value = '99' WHERE key = 'format_version'"
-        )
+        self.con.execute("UPDATE ledger_meta SET value = '99' WHERE key = 'format_version'")
         self.con.commit()
         with self.assertRaises(ledger.LedgerTooNewError):
             ledger.assert_writable(self.con)
@@ -148,9 +144,7 @@ class SessionWriteTest(LedgerCase):
         ledger.upsert_sessions(self.con, [make(tin=100, tout=20)])
         ledger.upsert_sessions(self.con, [make(tin=250, tout=40)])
         self.assertEqual(self.count("sessions"), 1)
-        stored = self.con.execute(
-            "SELECT tokens_input, tokens_output FROM sessions"
-        ).fetchone()
+        stored = self.con.execute("SELECT tokens_input, tokens_output FROM sessions").fetchone()
         self.assertEqual(stored[0], 250)
         self.assertEqual(stored[1], 40)
 
@@ -192,9 +186,7 @@ class ModelFamilyTest(unittest.TestCase):
         self.assertEqual(ledger.model_family_of("claude-opus-5-5"), "claude-opus-5")
 
     def test_an_already_stable_name_is_kept(self):
-        self.assertEqual(
-            ledger.model_family_of("deepseek-v4-flash"), "deepseek-v4-flash"
-        )
+        self.assertEqual(ledger.model_family_of("deepseek-v4-flash"), "deepseek-v4-flash")
 
     def test_a_codename_is_not_trimmed(self):
         self.assertEqual(ledger.model_family_of("gpt-5.6-sol"), "gpt-5.6-sol")
@@ -264,12 +256,8 @@ class FoldTest(LedgerCase):
         ]
         ledger.upsert_sessions(self.con, rows)
         ledger.fold_days(self.con, ledger.affected_days(rows))
-        daily_sessions = self.con.execute("SELECT SUM(sessions) FROM daily").fetchone()[
-            0
-        ]
-        hourly_sessions = self.con.execute(
-            "SELECT SUM(session_count) FROM hourly"
-        ).fetchone()[0]
+        daily_sessions = self.con.execute("SELECT SUM(sessions) FROM daily").fetchone()[0]
+        hourly_sessions = self.con.execute("SELECT SUM(session_count) FROM hourly").fetchone()[0]
         self.assertEqual(daily_sessions, hourly_sessions)
 
     def test_fold_all_rebuilds_every_day(self):
@@ -285,9 +273,7 @@ class FoldTest(LedgerCase):
         rows = [make(source="estimate")]
         ledger.upsert_sessions(self.con, rows)
         ledger.fold_days(self.con, ledger.affected_days(rows))
-        estimated = self.con.execute("SELECT estimated_sessions FROM daily").fetchone()[
-            0
-        ]
+        estimated = self.con.execute("SELECT estimated_sessions FROM daily").fetchone()[0]
         self.assertEqual(estimated, 1)
 
 
@@ -299,7 +285,7 @@ class ReportTest(LedgerCase):
                 provider="claude",
                 model="claude-opus-5-5",
                 project="alpha",
-                started=datetime(2026, 10, 1, 10, tzinfo=timezone.utc),
+                started=datetime(2026, 10, 1, 10, tzinfo=UTC),
                 duration_s=1200,
                 tin=1000,
                 tcr=3000,
@@ -310,7 +296,7 @@ class ReportTest(LedgerCase):
                 provider="opencode",
                 model="deepseek-v4-flash",
                 project="alpha",
-                started=datetime(2026, 10, 1, 11, tzinfo=timezone.utc),
+                started=datetime(2026, 10, 1, 11, tzinfo=UTC),
                 duration_s=1200,
                 tin=2000,
                 cost=0.1,
@@ -320,7 +306,7 @@ class ReportTest(LedgerCase):
                 provider="claude",
                 model="claude-opus-5-5",
                 project="beta",
-                started=datetime(2026, 10, 2, 9, tzinfo=timezone.utc),
+                started=datetime(2026, 10, 2, 9, tzinfo=UTC),
                 duration_s=100,
                 tin=500,
                 cost=2.0,
@@ -330,7 +316,7 @@ class ReportTest(LedgerCase):
                 provider="opencode",
                 model="deepseek-v4-flash",
                 project="beta",
-                started=datetime(2026, 10, 3, 9, tzinfo=timezone.utc),
+                started=datetime(2026, 10, 3, 9, tzinfo=UTC),
                 duration_s=3 * 3600 + 60,
                 tin=400,
                 cost=0.2,
@@ -363,9 +349,7 @@ class ReportTest(LedgerCase):
 
     def test_group_by_project_and_model(self):
         self.seed()
-        projects = {
-            r["project"]: r["sessions"] for r in self.report(group_by="project")
-        }
+        projects = {r["project"]: r["sessions"] for r in self.report(group_by="project")}
         self.assertEqual(projects, {"alpha": 2, "beta": 2})
         models = {r["model"]: r["sessions"] for r in self.report(group_by="model")}
         self.assertEqual(models, {"claude-opus-5-5": 2, "deepseek-v4-flash": 2})
@@ -404,9 +388,7 @@ class ReportTest(LedgerCase):
 
     def test_cache_share_reports_the_cached_fraction(self):
         self.seed()
-        share = ledger.cache_share(
-            self.con, start_day="2026-10-01", end_day="2026-10-03"
-        )
+        share = ledger.cache_share(self.con, start_day="2026-10-01", end_day="2026-10-03")
         self.assertEqual(share["cache_read_tokens"], 3000)
         self.assertAlmostEqual(share["share"], 3000 / 6980)
 
@@ -419,25 +401,19 @@ class ReportTest(LedgerCase):
 
     def test_streaks_count_consecutive_days(self):
         self.seed()
-        found = ledger.streaks(
-            self.con, now=datetime(2026, 10, 3, 23, tzinfo=timezone.utc)
-        )
+        found = ledger.streaks(self.con, now=datetime(2026, 10, 3, 23, tzinfo=UTC))
         self.assertEqual(found["longest"], 3)
         self.assertEqual(found["current"], 3)
 
     def test_a_streak_that_ended_yesterday_is_over(self):
         self.seed()
-        found = ledger.streaks(
-            self.con, now=datetime(2026, 10, 10, tzinfo=timezone.utc)
-        )
+        found = ledger.streaks(self.con, now=datetime(2026, 10, 10, tzinfo=UTC))
         self.assertEqual(found["current"], 0)
         self.assertEqual(found["longest"], 3)
 
     def test_session_shape_buckets_by_duration(self):
         self.seed()
-        shape = ledger.session_shape(
-            self.con, start_day="2026-10-01", end_day="2026-10-03"
-        )
+        shape = ledger.session_shape(self.con, start_day="2026-10-01", end_day="2026-10-03")
         self.assertEqual(shape["sessions"], 4)
         self.assertEqual(shape["duration_buckets"]["under 15m"], 1)
         self.assertEqual(shape["duration_buckets"]["15m to 1h"], 2)
@@ -457,7 +433,7 @@ class ReportTest(LedgerCase):
 
 class PruneTest(LedgerCase):
     def test_raw_sessions_expire_but_the_rollup_stays(self):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         old = now - timedelta(days=120)
         rows = [
             make(external_id="old", started=old),
@@ -484,37 +460,25 @@ class PruneTest(LedgerCase):
     def test_retention_off_prunes_nothing(self):
         ledger.upsert_sessions(self.con, [make(started=NOW - timedelta(days=900))])
         removed = ledger.prune(self.con, keep_days=0)
-        self.assertEqual(
-            removed, {"sessions": 0, "messages": 0, "transcript_messages": 0}
-        )
+        self.assertEqual(removed, {"sessions": 0, "messages": 0, "transcript_messages": 0})
 
 
 class PerModelTest(LedgerCase):
     def test_cycle_rows_are_keyed_and_replaceable(self):
         ledger.upsert_per_model(
             self.con,
-            [
-                ledger.PerModelRow(
-                    "cursor", "gpt-5", "2026-10-31", tokens_input=10, cost_usd=0.2
-                )
-            ],
+            [ledger.PerModelRow("cursor", "gpt-5", "2026-10-31", tokens_input=10, cost_usd=0.2)],
         )
         ledger.upsert_per_model(
             self.con,
-            [
-                ledger.PerModelRow(
-                    "cursor", "gpt-5", "2026-10-31", tokens_input=99, cost_usd=0.9
-                )
-            ],
+            [ledger.PerModelRow("cursor", "gpt-5", "2026-10-31", tokens_input=99, cost_usd=0.9)],
         )
         self.assertEqual(self.count("per_model"), 1)
         tokens = self.con.execute("SELECT tokens_input FROM per_model").fetchone()[0]
         self.assertEqual(tokens, 99)
 
     def test_rewriting_an_unchanged_cycle_row_writes_nothing(self):
-        row = ledger.PerModelRow(
-            "cursor", "gpt-5", "2026-10-31", tokens_input=10, cost_usd=0.2
-        )
+        row = ledger.PerModelRow("cursor", "gpt-5", "2026-10-31", tokens_input=10, cost_usd=0.2)
         self.assertEqual(ledger.upsert_per_model(self.con, [row]), 1)
         self.assertEqual(ledger.upsert_per_model(self.con, [row]), 0)
 
@@ -541,9 +505,7 @@ class MessageTest(LedgerCase):
 
     def test_recent_messages_are_newest_first_and_limited(self):
         for day in range(1, 5):
-            ledger.store_message(
-                self.con, kind="daily", key=f"2026-10-0{day}", body=f"m{day}"
-            )
+            ledger.store_message(self.con, kind="daily", key=f"2026-10-0{day}", body=f"m{day}")
         found = ledger.recent_messages(self.con, limit=3)
         self.assertEqual([m["body"] for m in found], ["m4", "m3", "m2"])
 
@@ -562,24 +524,20 @@ class MessageTest(LedgerCase):
         self.assertIsNotNone(age)
         assert age is not None
         self.assertGreaterEqual(age, 0)
-        self.assertIsNone(
-            ledger.last_message_age(self.con, kind="weekly", key="2026-W41")
-        )
+        self.assertIsNone(ledger.last_message_age(self.con, kind="weekly", key="2026-W41"))
 
     def test_the_same_message_is_one_row(self):
         # A timestamp used to be part of the identity, so generating the same
         # message again in a different second made a second row -- and a
         # dismissal is stored per row, so the panel could offer an identical
         # message again under a new id.
-        first = ledger.store_message(
-            self.con, kind="daily", key="2026-10-08", body="first"
-        )
+        first = ledger.store_message(self.con, kind="daily", key="2026-10-08", body="first")
         again = ledger.store_message(
             self.con,
             kind="daily",
             key="2026-10-08",
             body="second",
-            at=datetime.now(timezone.utc) + timedelta(seconds=5),
+            at=datetime.now(UTC) + timedelta(seconds=5),
         )
         self.assertEqual(self.count("messages"), 1)
         self.assertEqual(first, again)
@@ -626,15 +584,13 @@ class MessageTest(LedgerCase):
 
         migrated = ledger.connect(path)
         self.addCleanup(migrated.close)
-        rows = list(
-            migrated.execute("SELECT key, body, seen_at FROM messages ORDER BY key")
-        )
+        rows = list(migrated.execute("SELECT key, body, seen_at FROM messages ORDER BY key"))
         self.assertEqual([row[0] for row in rows], ["k", "other"])
         self.assertEqual(rows[0][1], "newest")
         self.assertEqual(rows[0][2], 555)
 
     def test_messages_expire_with_retention(self):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         ledger.store_message(
             self.con, kind="daily", key="old", body="old", at=now - timedelta(days=120)
         )
@@ -675,7 +631,7 @@ class RecorderTest(LedgerCase):
             except Exception as exc:  # noqa: BLE001 - reported by the assertion
                 result.append(exc)
 
-        thread = threading.Thread(target=work, name="ai-usage-test")
+        thread = threading.Thread(target=work, name="tokens-go-brrr-test")
         thread.start()
         thread.join()
         self.assertEqual(result, [0])
@@ -691,7 +647,7 @@ class RecorderTest(LedgerCase):
                 if con is not None:
                     ledger.upsert_sessions(con, [make()])
 
-        thread = threading.Thread(target=work, name="ai-usage-test")
+        thread = threading.Thread(target=work, name="tokens-go-brrr-test")
         thread.start()
         thread.join()
         self.assertEqual(self.count("sessions"), 1)
@@ -718,9 +674,7 @@ class RecorderTest(LedgerCase):
         recorder = ledger.LedgerRecorder(self.path)
         self.addCleanup(recorder.close)
         with (
-            mock.patch.object(
-                ledger, "upsert_sessions", side_effect=sqlite3.Error("full")
-            ),
+            mock.patch.object(ledger, "upsert_sessions", side_effect=sqlite3.Error("full")),
             mock.patch("sys.stderr"),
         ):
             self.assertEqual(recorder.upsert_sessions([make()]), 0)
@@ -754,7 +708,7 @@ class ReportCliTest(LedgerCase):
                 provider="claude",
                 model="claude-opus-5-5",
                 project="alpha",
-                started=datetime(2026, 10, 1, 10, tzinfo=timezone.utc),
+                started=datetime(2026, 10, 1, 10, tzinfo=UTC),
                 tin=1000,
                 cost=1.0,
             ),
@@ -763,7 +717,7 @@ class ReportCliTest(LedgerCase):
                 provider="opencode",
                 model="deepseek-v4-flash",
                 project="beta",
-                started=datetime(2026, 10, 2, 10, tzinfo=timezone.utc),
+                started=datetime(2026, 10, 2, 10, tzinfo=UTC),
                 tin=2000,
                 cost=0.1,
             ),
@@ -775,9 +729,7 @@ class ReportCliTest(LedgerCase):
         real_connect = ledger.connect
         out = io.StringIO()
         with (
-            mock.patch.object(
-                ledger, "connect", side_effect=lambda: real_connect(self.path)
-            ),
+            mock.patch.object(ledger, "connect", side_effect=lambda: real_connect(self.path)),
             redirect_stdout(out),
         ):
             code = cli.main(["report", *argv])
@@ -785,15 +737,11 @@ class ReportCliTest(LedgerCase):
 
     def test_json_reports_totals_and_rows(self):
         self.seed()
-        code, out = self.run_report(
-            ["--since", "2026-10-01", "--until", "2026-10-02", "--json"]
-        )
+        code, out = self.run_report(["--since", "2026-10-01", "--until", "2026-10-02", "--json"])
         self.assertEqual(code, 0)
         payload = json.loads(out)
         self.assertEqual(payload["totals"]["sessions"], 2)
-        self.assertEqual(
-            {r["provider"] for r in payload["rows"]}, {"claude", "opencode"}
-        )
+        self.assertEqual({r["provider"] for r in payload["rows"]}, {"claude", "opencode"})
 
     def test_text_names_the_grouping_when_asked_for_models(self):
         self.seed()

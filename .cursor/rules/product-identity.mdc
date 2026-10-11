@@ -1,0 +1,31 @@
+---
+description: Canonical names, brand freeze, and voice for tokens-go-brrr
+alwaysApply: true
+---
+
+# Product identity
+
+| Role | Canonical form | Never reinvent as |
+|------|----------------|-------------------|
+| Installed product / CLI / package | `tokens-go-brrr` | `cursor-spend-monitor`, `ai-usage` |
+| Python import | `tokens_go_brrr` | mixed casing |
+| Marketing display | `Tokens go brrr` | `AI usage`, `AI Usage` (except design-system name) |
+| Design system (internal) | AI Usage design system | rename casually |
+| GitHub repo (legacy) | `cursor-spend-monitor` OK for remote/path | do not rebrand installs to this |
+
+## Freeze — do not change (breaks upgrades)
+
+Extension UUID `tokens-go-brrr@fredrickmakoffu.github.io`, D-Bus `TokensGoBrrr`, CSS `tokens-go-brrr-*`, config/data dirs, systemd unit, RPM/DEB name.
+
+## Display rename is display-only
+
+Popover kicker, notifications, site copy, README titles may say `tokens-go-brrr` / `Tokens go brrr`. Do not "fix" the freeze list when renaming UI strings.
+
+## Voice by surface
+
+- **README / CLI / daemon:** engineer-precise, short "why" where it matters. No meme gags.
+- **Extension chrome:** sober brand + data. No site copy jokes (`−1.2k`, shake/`brrr`).
+- **Site (`site/`):** meme-forward OK — hero lowercase, meter gags, one job per section.
+- **Privacy claims:** only what the code does (local credentials read-only, no scraping).
+
+When packaging blurbs list providers, keep them in sync with README (Cursor, Claude, OpenCode, Codex, Pi).

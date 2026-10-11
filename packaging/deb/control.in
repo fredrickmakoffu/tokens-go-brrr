@@ -1,4 +1,4 @@
-Package: cursor-spend-monitor
+Package: tokens-go-brrr
 Version: @VERSION@
 Section: utils
 Priority: optional
@@ -8,6 +8,6 @@ Maintainer: Fredrick Makoffu <42011427+fredrickmakoffu@users.noreply.github.com>
 Homepage: https://github.com/fredrickmakoffu/cursor-spend-monitor
 Description: AI coding usage limits in the GNOME top bar
  A daemon that tracks usage limits for AI coding tools (Cursor, Claude Code,
- OpenCode) and a GNOME Shell extension that shows them as a status dot in the
- top bar. Log out and back in after installing so GNOME Shell loads the
- extension, then run `cursor-spend-monitor setup`.
+ OpenCode, Codex, Pi) and a GNOME Shell extension that shows them as a status
+ dot in the top bar. Log out and back in after installing so GNOME Shell loads
+ the extension, then run `tokens-go-brrr setup`.

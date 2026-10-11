@@ -1,14 +1,8 @@
 # Handover — popover redesign, site copy, website i18n, light and dark
 
-**State:** #25–#31 shipped and merged; **#33 (extension i18n) and #34 (rename) are open**,
-#34 stacked on #33. `main` @ `440c2b3`, version **0.6.2** (no release cut for any of this
-yet). PRs [#25](https://github.com/fredrickmakoffu/cursor-spend-monitor/pull/25),
-[#26](https://github.com/fredrickmakoffu/cursor-spend-monitor/pull/26),
-[#27](https://github.com/fredrickmakoffu/cursor-spend-monitor/pull/27),
-[#29](https://github.com/fredrickmakoffu/cursor-spend-monitor/pull/29),
-[#30](https://github.com/fredrickmakoffu/cursor-spend-monitor/pull/30). **416 tests pass.**
-
-**Left:** merge #33 then #34, then the logo.
+**Historical.** Snapshot from the i18n / theme / rename series. Prefer the tree,
+`AGENTS.md`, and `.cursor/rules/` for current behaviour. Extension and site i18n
+(en/fr/pt-BR) and the `tokens-go-brrr` display rename are shipped.
 
 ---
 
@@ -58,7 +52,7 @@ amber, red and the primary button were under 4.5:1 and were darkened.
 
 ### Extension theme
 St's CSS has no `var()`, so the dark rules stay literal and the light values are a
-**generated block** at the end of `stylesheet.css`, scoped under `.ai-usage-light`.
+**generated block** at the end of `stylesheet.css`, scoped under `.tokens-go-brrr-light`.
 Edit a dark rule, then `python3 scripts/gen_light_css.py` (idempotent). Colours set
 from JS live in `PALETTES` in `extension.js`. The popover is light **only** when
 `org.gnome.desktop.interface color-scheme` is `prefer-light`; `default` counts as
@@ -124,9 +118,9 @@ English label. Dates come from GLib's `LC_TIME`, so they follow the session, not
 `SHARE:` marker when it renders from the template.
 
 **Rename.** Display strings only. Deliberately unchanged: the extension UUID
-`ai-usage@fredrickmakoffu.github.io`, D-Bus names (`...AIUsage`), `ai-usage-*` CSS
-classes, `[ai-usage]` log prefixes, the config dir and package names
-(`cursor-spend-monitor`) — changing them breaks installs and upgrades. The "AI Usage
+`tokens-go-brrr@fredrickmakoffu.github.io`, D-Bus names (`...TokensGoBrrr`), `tokens-go-brrr-*` CSS
+classes, `[tokens-go-brrr]` log prefixes, the config dir and package names
+(`tokens-go-brrr`) — changing them breaks installs and upgrades. The "AI Usage
 design system" keeps its name. The popover kicker keeps the brand's own case instead of
 uppercasing it.
 

@@ -1,0 +1,641 @@
+/* tokens-go-brrr — the blueprint look from the AI Usage design system: square, hairline-framed,
+   graphite surface (#2b2b2d), snow text (#f5f5f8), one steel accent (#94bce3).
+   Status uses the design's "signal" hues (amber, red) on top of the steel "ok". */
+
+/* Top bar status dot.
+
+   The dot is the one place in the product where a state is carried by colour
+   and nothing else — everywhere a meter is drawn, the percentage is written
+   beside it. So the three states differ in form too, and a reader who cannot
+   separate the hues still gets three distinct marks: a bare dot, a dot with a
+   halo, and a dot with a wider, heavier halo. The halo is a box-shadow, which
+   costs no allocation, so the panel does not reflow as the state changes. */
+.tokens-go-brrr-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 0;
+  background-color: #94bce3;
+}
+/* Caution is the one that needs a form of its own. Green and red are far enough
+   apart in lightness to tell apart without hue (0.538 against 0.297); green and
+   amber were not, so caution is drawn hollow. A halo was the first attempt and
+   St renders box-shadow spread without clipping it to the border radius, so a
+   round dot got a square glow — the same quirk that made the popover shadow a
+   slab. A border follows the radius.
+
+   3px core plus a 3px border on each side keeps the 9px outer size, so nothing
+   in the panel moves as the state changes. */
+.tokens-go-brrr-dot.caution {
+  width: 3px;
+  height: 3px;
+  background-color: transparent;
+  border: 3px solid #f0ba59;
+}
+.tokens-go-brrr-dot.critical { background-color: #fd7562; }
+.tokens-go-brrr-dot.error { background-color: #7a7a7d; }
+/* Something to read. An inset ring rather than an outer glow: St does not clip a
+   spread shadow to the border radius (the quirk that made the popover shadow a
+   slab), and an inset ring is already the focus treatment here. The dot keeps
+   its 9px footprint, so the panel does not reflow when a message arrives. */
+.tokens-go-brrr-dot.has-update { box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.85); }
+
+#panel .panel-button.tokens-go-brrr-panel-button,
+#panel .panel-button.tokens-go-brrr-panel-button:hover,
+#panel .panel-button.tokens-go-brrr-panel-button:active,
+#panel .panel-button.tokens-go-brrr-panel-button:checked,
+#panel .panel-button.tokens-go-brrr-panel-button:active:hover,
+#panel .panel-button.tokens-go-brrr-panel-button:checked:hover,
+#panel .panel-button.tokens-go-brrr-panel-button:focus {
+  box-shadow: inset 0 0 0 100px transparent;
+}
+/* Alpha values match the shell's own panel-button hover and press states, so the
+   dot reacts with the same weight as every other icon in the top bar. */
+.tokens-go-brrr-dot-halo {
+  /* Padding rather than a fixed width, so the pill grows with the session chips
+     and stays a circle around the bare dot when there are none. */
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 0;
+  background-color: transparent;
+  transition-duration: 150ms;
+}
+#panel .panel-button.tokens-go-brrr-panel-button:hover .tokens-go-brrr-dot-halo {
+  background-color: rgba(255, 255, 255, 0.17);
+}
+#panel .panel-button.tokens-go-brrr-panel-button:active .tokens-go-brrr-dot-halo,
+#panel .panel-button.tokens-go-brrr-panel-button:checked .tokens-go-brrr-dot-halo {
+  background-color: rgba(255, 255, 255, 0.28);
+}
+#panel .panel-button.tokens-go-brrr-panel-button:focus .tokens-go-brrr-dot-halo {
+  background-color: rgba(91, 142, 242, 0.45);
+}
+
+/* Running sessions, beside the dot in the top bar */
+.tokens-go-brrr-sessions { spacing: 8px; padding-left: 8px; }
+.tokens-go-brrr-session { spacing: 4px; }
+.tokens-go-brrr-session-icon { icon-size: 14px; -st-icon-style: regular; }
+.tokens-go-brrr-session-pct { font-size: 11px; font-weight: 700; font-feature-settings: "tnum"; }
+.tokens-go-brrr-session-count { font-size: 11px; color: #b7b7ba; font-feature-settings: "tnum"; }
+/* A harness carries the account it spends on as a corner badge. The dark ring
+   keeps the small mark legible where it overlaps the host logo. */
+.tokens-go-brrr-session-stack { width: 18px; height: 16px; }
+.tokens-go-brrr-session-via {
+  icon-size: 9px;
+  -st-icon-style: regular;
+  background-color: rgba(20, 20, 22, 0.9);
+  border-radius: 0;
+  padding: 1px;
+}
+
+/* Popover chrome (.menu in the mockup) */
+.tokens-go-brrr-menu {
+  -arrow-border-radius: 0;
+}
+.tokens-go-brrr-menu .popup-menu-content {
+  width: 378px;               /* + 1px border each side = 380px, the design's popover width */
+  padding: 0;
+  background-color: #2b2b2d;
+  border: 1px solid #4b4b4e;
+  border-radius: 0;
+  /* The mockup's 0 20px 48px is a browser value and does not survive the port:
+     CSS blurs to nothing over the radius, while St paints a blurred silhouette
+     of the background box with a much heavier profile and no clipping. At 20px
+     down and 48px of blur that lands as a dark slab under the panel, obvious
+     the moment the menu drops or grows into a taller screen. Same intent — the
+     panel reads as lifted — at values St renders as a shadow. */
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  color: #f5f5f8;
+  font-family: "Barlow", sans-serif;
+  font-weight: 400;
+}
+/* The design system sets the popover in Barlow, with Barlow Condensed for
+   titles, kickers, tags, figures and buttons. Barlow is not a default install
+   (install.sh puts the bundled copies in ~/.local/share/fonts); where it is
+   missing, fontconfig falls back to the shell's sans, so nothing breaks.
+
+   No font-size here on purpose. The mockup's fixed 13px base was transcribed
+   from a browser, where it is the whole story; in the shell it overrides the
+   font the user chose and freezes the popover against text-scaling-factor, so
+   the menu stays put while every other menu on the desktop grows. Sizes below
+   are em against the inherited base, which is how the shell's own menus and
+   every extension that reads well at a glance do it. */
+
+/* Header */
+/* Settings / Guide / About, in space the title never used. They are quieter
+   than the providers below on purpose: you press them once to read something,
+   where the rows and the window picker are the menu's actual work. */
+
+/* Sentence headline: the design's 26px condensed title, set in the shell font. */
+
+/* List */
+.tokens-go-brrr-section { padding: 6px 0; }
+
+.tokens-go-brrr-menu .tokens-go-brrr-row {
+  padding: 11px 14px 11px 18px;
+  spacing: 12px;
+  min-height: 44px;           /* 58px outer, like the mockup's min-height with box-sizing */
+  border-radius: 0;
+  background-color: transparent;
+  color: #f5f5f8;
+  transition-duration: 120ms;
+}
+.tokens-go-brrr-menu .tokens-go-brrr-row:hover,
+.tokens-go-brrr-menu .tokens-go-brrr-row:selected,
+.tokens-go-brrr-menu .tokens-go-brrr-row:active {
+  background-color: #363638;
+  color: #f5f5f8;
+}
+.tokens-go-brrr-menu .tokens-go-brrr-row:focus {
+  background-color: #363638;
+}
+.tokens-go-brrr-menu .tokens-go-brrr-row.tokens-go-brrr-keyboard-focus {
+  background-color: #363638;
+  box-shadow: inset 2px 0 0 #94bce3;
+}
+.tokens-go-brrr-menu .tokens-go-brrr-row.tokens-go-brrr-row-disabled,
+.tokens-go-brrr-menu .tokens-go-brrr-row.tokens-go-brrr-row-disabled:hover {
+  background-color: transparent;
+}
+
+.tokens-go-brrr-badge {
+  width: 26px;
+  height: 26px;
+  border: 1px solid #4b4b4e;
+  border-radius: 0;
+  color: #b7b7ba;
+}
+.tokens-go-brrr-badge-icon { icon-size: 15px; -st-icon-style: regular; }
+
+.tokens-go-brrr-name-row { spacing: 7px; }
+.tokens-go-brrr-name { font-size: 1em; font-weight: 600; }
+/* "via <account>" — this row's numbers belong to another provider. */
+
+/* The window picker at the foot of the list, in the shape the footer had: three
+   flat buttons dividing the row edge to edge and rounding into the menu's
+   bottom corners. The pill chips read as a control floating on a shelf, which
+   is one object too many at the very bottom of the menu.
+
+   Selection has to survive hover, so the fill does not carry it alone: the
+   chosen window keeps a brighter, heavier label and an accent rule along its
+   top edge, the way a selected tab does. Hover and press fill without either. */
+.tokens-go-brrr-windowbar {
+  border-top: 1px solid #4b4b4e;
+  border-radius: 0;
+}
+.tokens-go-brrr-window-btn {
+  height: 36px;
+  padding: 0;
+  border-radius: 0;
+  background-color: transparent;
+  color: #b7b7ba;
+  font-size: 0.82em;
+  font-weight: 400;
+  transition-duration: 120ms;
+}
+.tokens-go-brrr-window-btn:first-child { border-radius: 0; }
+.tokens-go-brrr-window-btn:last-child { border-radius: 0; }
+.tokens-go-brrr-window-btn:hover, .tokens-go-brrr-window-btn:active {
+  background-color: #363638;
+  color: #f5f5f8;
+}
+.tokens-go-brrr-window-btn.selected {
+  color: #f5f5f8;
+  font-weight: 600;
+  box-shadow: inset 0 2px 0 #94bce3;
+}
+.tokens-go-brrr-window-btn:focus { box-shadow: inset 0 0 0 2px #94bce3; }
+
+.tokens-go-brrr-bar {
+  margin-top: 9px;
+  height: 4px;
+  background-color: rgba(245, 245, 248, 0.11);
+  border-radius: 0;
+}
+.tokens-go-brrr-bar-fill { border-radius: 0; }
+
+.tokens-go-brrr-value { font-size: 1.55em; font-weight: 600; font-feature-settings: "tnum"; }
+.tokens-go-brrr-chevron { icon-size: 14px; color: #98989b; -st-icon-style: symbolic; }
+
+/* Detail / guide / about */
+.tokens-go-brrr-back {
+  padding: 3px;
+  border-radius: 0;
+  background-color: transparent;
+  color: #b7b7ba;
+  transition-duration: 120ms;
+}
+.tokens-go-brrr-back:hover, .tokens-go-brrr-back:active { background-color: #363638; color: #f5f5f8; }
+.tokens-go-brrr-back:focus { box-shadow: 0 0 0 2px #94bce3; }
+.tokens-go-brrr-back-icon { icon-size: 16px; -st-icon-style: symbolic; }
+
+/* The detail screen exists to show one provider's limits, so the meter is the
+   headline here and gets the list row's weight: the label reads as a title
+   rather than a caption, and the number matches .tokens-go-brrr-value. It used to be
+   smaller here than on the summary screen, which had it backwards. */
+
+.tokens-go-brrr-sessions-empty { font-size: 0.85em; color: #b7b7ba; }
+.tokens-go-brrr-session-row { spacing: 10px; }
+.tokens-go-brrr-session-mark {
+  width: 7px;
+  height: 7px;
+  border-radius: 0;
+  background-color: #94bce3;
+}
+.tokens-go-brrr-session-mark.paused {
+  background-color: transparent;
+  border: 1px solid #98989b;
+}
+.tokens-go-brrr-session-name {
+  font-size: 0.92em;
+  font-weight: 500;
+  color: #f5f5f8;
+}
+
+
+.tokens-go-brrr-sessions-filters { spacing: 8px; }
+.tokens-go-brrr-filter-chip {
+  padding: 3px 10px;
+  border: 1px solid #4b4b4e;
+  border-radius: 0;
+  background-color: transparent;
+  color: #b7b7ba;
+  font-size: 0.8em;
+  font-weight: 400;
+  transition-duration: 120ms;
+}
+.tokens-go-brrr-filter-chip:hover { background-color: #3d3d3f; color: #f5f5f8; }
+.tokens-go-brrr-filter-chip:focus { box-shadow: 0 0 0 2px #94bce3; }
+.tokens-go-brrr-filter-chip.active {
+  border-color: transparent;
+  background-color: #4b4b4e;
+  color: #f5f5f8;
+}
+
+.tokens-go-brrr-dash-btn.tokens-go-brrr-refresh-btn { margin-top: 0; }
+
+.tokens-go-brrr-guide-item { spacing: 10px; }
+.tokens-go-brrr-guide-dot { margin-top: 4px; width: 9px; height: 9px; border-radius: 0; }
+.tokens-go-brrr-guide-text { spacing: 2px; }
+.tokens-go-brrr-guide-title { font-size: 0.95em; font-weight: 700; }
+.tokens-go-brrr-guide-desc { font-size: 0.85em; color: #b7b7ba; }
+
+/* The landing page: one notification, blown up, with the AI it is about.
+
+   The quote is set larger than any other text in the popover and is allowed to
+   wrap freely — a message that has to be ellipsised is too long, and the
+   generator's own contract caps it at three sentences. The featured AI sits
+   under it as a badge plus a name, so the page answers "what is this about" as
+   well as "what does it say". */
+/* The mark sits beside the quote rather than above it. On its own line its tall
+   line box left a gap the height of the glyph, which read as the quote floating
+   away from its own opening mark. `line-height: 1` keeps the box tight to the
+   glyph; a negative margin is what broke this screen once already. */
+.tokens-go-brrr-landing-featured { spacing: 10px; margin-top: 6px; }
+.tokens-go-brrr-landing-icon { margin-top: 2px; }
+/* The popover's content box has no padding of its own, so whatever sits last
+   decides how far the panel floor is. This row is last on the landing page, and
+   with no bottom margin the button rested on the border. */
+.tokens-go-brrr-landing-actions {
+  spacing: 8px;
+  margin-top: 10px;
+  margin-bottom: 16px;
+}
+/* Hover and press are different shades, so the click is felt rather than
+   guessed at. */
+
+.tokens-go-brrr-empty {
+  padding: 24px 16px;
+  color: #b7b7ba;
+  font-size: 0.92em;
+  text-align: center;
+}
+
+/* ---- Screen parts, after the design system's Ext components ----------------
+   Colours: graphite #2b2b2d, snow #f5f5f8, muted #b7b7ba, hairline #4b4b4e,
+   steel #94bce3. Everything is square; separation is by 1px rules, not gaps. */
+
+/* ExtHeader */
+.tokens-go-brrr-hdr { padding: 16px 18px 14px 18px; spacing: 6px; }
+.tokens-go-brrr-hdr-top { spacing: 6px; min-height: 22px; }
+.tokens-go-brrr-kicker { font-size: 0.8em; font-weight: 600; color: #b7b7ba; letter-spacing: 1px; }
+.tokens-go-brrr-title { font-size: 1.75em; font-weight: 600; color: #f5f5f8; }
+.tokens-go-brrr-hdr-sub { font-size: 0.92em; color: #b7b7ba; }
+
+/* ExtSection */
+.tokens-go-brrr-section { padding: 0; border-top: 1px solid #4b4b4e; }
+.tokens-go-brrr-section-label { padding: 10px 18px 2px 18px; font-size: 0.8em; font-weight: 600; color: #b7b7ba; letter-spacing: 1px; }
+
+/* Rows */
+.tokens-go-brrr-menu .tokens-go-brrr-row { padding: 12px 14px 12px 18px; spacing: 12px; min-height: 0; }
+.tokens-go-brrr-info { spacing: 6px; }
+.tokens-go-brrr-name-row { spacing: 8px; }
+.tokens-go-brrr-name { font-size: 1em; font-weight: 600; }
+.tokens-go-brrr-tag { font-size: 0.8em; font-weight: 500; color: #b7b7ba; letter-spacing: 0.8px; }
+.tokens-go-brrr-value { font-size: 1.55em; font-weight: 600; font-feature-settings: "tnum"; }
+.tokens-go-brrr-sub { font-size: 0.85em; color: #b7b7ba; }
+.tokens-go-brrr-sub.crit { font-weight: 700; }
+.tokens-go-brrr-limit-row { padding: 12px 18px; spacing: 6px; }
+.tokens-go-brrr-bar { margin-top: 0; margin-bottom: 0; }
+.tokens-go-brrr-bar-tick { background-color: #f5f5f8; }
+.tokens-go-brrr-badge { width: 26px; height: 26px; border: 1px solid #4b4b4e; color: #f5f5f8; }
+
+/* ExtListRow */
+.tokens-go-brrr-list-row { padding: 11px 14px 11px 18px; border-top: 1px solid #4b4b4e; background-color: transparent; }
+.tokens-go-brrr-list-row:hover, .tokens-go-brrr-list-row:active { background-color: #363638; }
+.tokens-go-brrr-list-row:focus { box-shadow: inset 2px 0 0 #94bce3; }
+.tokens-go-brrr-list-title { font-size: 1em; font-weight: 600; color: #f5f5f8; }
+
+/* ExtSwitch: square track and thumb, hairline off, steel on. */
+.tokens-go-brrr-switch { width: 28px; height: 12px; padding: 3px; border: 1px solid #4b4b4e; background-color: transparent; }
+.tokens-go-brrr-switch:checked { border-color: #94bce3; background-color: rgba(148, 188, 227, 0.22); }
+.tokens-go-brrr-switch-thumb { width: 12px; height: 12px; background-color: #b7b7ba; }
+.tokens-go-brrr-switch:checked .tokens-go-brrr-switch-thumb { background-color: #94bce3; }
+.tokens-go-brrr-switch-state { font-size: 0.85em; font-weight: 600; color: #b7b7ba; min-width: 2.6em; text-align: right; padding-right: 10px; }
+.tokens-go-brrr-list-row:checked .tokens-go-brrr-switch-state { color: #f5f5f8; }
+
+/* ExtSessionRow */
+.tokens-go-brrr-session-row { padding: 10px 18px; spacing: 12px; }
+.tokens-go-brrr-session-name { font-size: 1em; font-weight: 600; color: #f5f5f8; }
+.tokens-go-brrr-session-mark { margin-top: 5px; width: 7px; height: 7px; background-color: #94bce3; }
+.tokens-go-brrr-session-mark.paused { background-color: transparent; border: 1px solid #98989b; }
+.tokens-go-brrr-focus-btn { padding: 3px 10px; border: 1px solid #4b4b4e; background-color: transparent; color: #f5f5f8; font-size: 0.85em; font-weight: 600; }
+.tokens-go-brrr-focus-btn:hover, .tokens-go-brrr-focus-btn:active { background-color: rgba(148, 188, 227, 0.16); border-color: #94bce3; }
+.tokens-go-brrr-focus-btn:focus { box-shadow: 0 0 0 2px #94bce3; }
+.tokens-go-brrr-sessions-filters { padding: 0 18px 12px 18px; spacing: 8px; }
+.tokens-go-brrr-sessions-empty { padding: 14px 18px; font-size: 0.92em; color: #b7b7ba; }
+
+/* ExtFooter */
+.tokens-go-brrr-footer { padding: 0 8px 0 18px; min-height: 40px; spacing: 2px; border-top: 1px solid #4b4b4e; }
+.tokens-go-brrr-footer-text { font-size: 0.85em; color: #b7b7ba; }
+.tokens-go-brrr-ghost-btn { padding: 5px 6px; border: 1px solid transparent; background-color: transparent; color: #f5f5f8; font-size: 0.88em; font-weight: 600; }
+.tokens-go-brrr-ghost-btn:hover { background-color: rgba(245, 245, 248, 0.08); }
+.tokens-go-brrr-ghost-btn:active { background-color: rgba(245, 245, 248, 0.14); }
+.tokens-go-brrr-ghost-btn:focus { box-shadow: 0 0 0 2px #94bce3; }
+
+/* ExtButton */
+.tokens-go-brrr-primary-btn { height: 40px; padding: 0 18px; border: 1px solid #94bce3; background-color: #94bce3; color: #1d1f20; font-size: 1em; font-weight: 600; text-align: center; }
+.tokens-go-brrr-primary-btn:hover { background-color: #7fa6cc; }
+.tokens-go-brrr-primary-btn:active { background-color: #6890b5; }
+.tokens-go-brrr-primary-btn:focus { box-shadow: 0 0 0 2px #f5f5f8; }
+.tokens-go-brrr-secondary-btn { height: 40px; padding: 0 18px; border: 1px solid #4b4b4e; background-color: transparent; color: #f5f5f8; font-size: 1em; font-weight: 600; text-align: center; }
+.tokens-go-brrr-secondary-btn:hover { background-color: rgba(148, 188, 227, 0.16); border-color: #94bce3; }
+.tokens-go-brrr-secondary-btn:active { background-color: rgba(148, 188, 227, 0.26); }
+.tokens-go-brrr-secondary-btn:focus { box-shadow: 0 0 0 2px #94bce3; }
+.tokens-go-brrr-about-refresh { margin: 6px 18px 18px 18px; }
+
+/* Landing */
+.tokens-go-brrr-landing-actions { padding: 4px 18px 18px 18px; spacing: 8px; }
+.tokens-go-brrr-landing-featured { padding: 4px 18px 12px 18px; spacing: 8px; }
+.tokens-go-brrr-landing-icon { icon-size: 16px; -st-icon-style: regular; }
+
+/* Guide */
+.tokens-go-brrr-guide-item { padding: 10px 18px; spacing: 10px; }
+.tokens-go-brrr-guide-dot { margin-top: 4px; width: 9px; height: 9px; }
+.tokens-go-brrr-guide-tick { margin-top: 2px; margin-left: 4px; margin-right: 4px; width: 1px; height: 12px; background-color: #f5f5f8; }
+.tokens-go-brrr-guide-title { font-size: 1em; font-weight: 600; }
+.tokens-go-brrr-guide-desc { font-size: 0.88em; color: #b7b7ba; }
+
+/* Empty/notes */
+.tokens-go-brrr-empty { padding: 24px 18px; }
+
+/* Barlow Condensed: titles, kickers, tags, figures and buttons, as in the design. */
+.tokens-go-brrr-kicker, .tokens-go-brrr-title, .tokens-go-brrr-tag, .tokens-go-brrr-value, .tokens-go-brrr-section-label,
+.tokens-go-brrr-primary-btn, .tokens-go-brrr-secondary-btn, .tokens-go-brrr-ghost-btn, .tokens-go-brrr-focus-btn,
+.tokens-go-brrr-window-btn, .tokens-go-brrr-filter-chip {
+  font-family: "Barlow Condensed", "Barlow", sans-serif;
+}
+
+
+/* >>> light theme (generated by scripts/gen_light_css.py; do not edit) */
+/* Applied by extension.js when GNOME's color-scheme is prefer-light. */
+.tokens-go-brrr-menu.tokens-go-brrr-light .popup-menu-content {
+  background-color: #f2f2f3;
+  border: 1px solid #cfcfd1;
+  box-shadow: 0 12px 32px rgba(29, 31, 32, 0.22);
+  color: #1d1f20;
+}
+.tokens-go-brrr-light .tokens-go-brrr-row {
+  color: #1d1f20;
+}
+.tokens-go-brrr-light .tokens-go-brrr-row:hover,
+.tokens-go-brrr-light .tokens-go-brrr-row:selected,
+.tokens-go-brrr-light .tokens-go-brrr-row:active {
+  background-color: #e9e9ea;
+  color: #1d1f20;
+}
+.tokens-go-brrr-light .tokens-go-brrr-row:focus {
+  background-color: #e9e9ea;
+}
+.tokens-go-brrr-light .tokens-go-brrr-row.tokens-go-brrr-keyboard-focus {
+  background-color: #e9e9ea;
+  box-shadow: inset 2px 0 0 #5980a6;
+}
+.tokens-go-brrr-light .tokens-go-brrr-badge {
+  border: 1px solid #cfcfd1;
+  color: #5d5d60;
+}
+.tokens-go-brrr-light .tokens-go-brrr-windowbar {
+  border-top: 1px solid #cfcfd1;
+}
+.tokens-go-brrr-light .tokens-go-brrr-window-btn {
+  color: #5d5d60;
+}
+.tokens-go-brrr-light .tokens-go-brrr-window-btn:hover,
+.tokens-go-brrr-light .tokens-go-brrr-window-btn:active {
+  background-color: #e9e9ea;
+  color: #1d1f20;
+}
+.tokens-go-brrr-light .tokens-go-brrr-window-btn.selected {
+  color: #1d1f20;
+  box-shadow: inset 0 2px 0 #5980a6;
+}
+.tokens-go-brrr-light .tokens-go-brrr-window-btn:focus {
+  box-shadow: inset 0 0 0 2px #5980a6;
+}
+.tokens-go-brrr-light .tokens-go-brrr-bar {
+  background-color: rgba(29, 31, 32, 0.11);
+}
+.tokens-go-brrr-light .tokens-go-brrr-chevron {
+  color: #7a7a7d;
+}
+.tokens-go-brrr-light .tokens-go-brrr-back {
+  color: #5d5d60;
+}
+.tokens-go-brrr-light .tokens-go-brrr-back:hover,
+.tokens-go-brrr-light .tokens-go-brrr-back:active {
+  background-color: #e9e9ea;
+  color: #1d1f20;
+}
+.tokens-go-brrr-light .tokens-go-brrr-back:focus {
+  box-shadow: 0 0 0 2px #5980a6;
+}
+.tokens-go-brrr-light .tokens-go-brrr-sessions-empty {
+  color: #5d5d60;
+}
+.tokens-go-brrr-light .tokens-go-brrr-session-mark {
+  background-color: #5980a6;
+}
+.tokens-go-brrr-light .tokens-go-brrr-session-mark.paused {
+  border: 1px solid #7a7a7d;
+}
+.tokens-go-brrr-light .tokens-go-brrr-session-name {
+  color: #1d1f20;
+}
+.tokens-go-brrr-light .tokens-go-brrr-filter-chip {
+  border: 1px solid #cfcfd1;
+  color: #5d5d60;
+}
+.tokens-go-brrr-light .tokens-go-brrr-filter-chip:hover {
+  background-color: #e1e1e3;
+  color: #1d1f20;
+}
+.tokens-go-brrr-light .tokens-go-brrr-filter-chip:focus {
+  box-shadow: 0 0 0 2px #5980a6;
+}
+.tokens-go-brrr-light .tokens-go-brrr-filter-chip.active {
+  background-color: #cfcfd1;
+  color: #1d1f20;
+}
+.tokens-go-brrr-light .tokens-go-brrr-guide-desc {
+  color: #5d5d60;
+}
+.tokens-go-brrr-light .tokens-go-brrr-empty {
+  color: #5d5d60;
+}
+.tokens-go-brrr-light .tokens-go-brrr-kicker {
+  color: #5d5d60;
+}
+.tokens-go-brrr-light .tokens-go-brrr-title {
+  color: #1d1f20;
+}
+.tokens-go-brrr-light .tokens-go-brrr-hdr-sub {
+  color: #5d5d60;
+}
+.tokens-go-brrr-light .tokens-go-brrr-section {
+  border-top: 1px solid #cfcfd1;
+}
+.tokens-go-brrr-light .tokens-go-brrr-section-label {
+  color: #5d5d60;
+}
+.tokens-go-brrr-light .tokens-go-brrr-tag {
+  color: #5d5d60;
+}
+.tokens-go-brrr-light .tokens-go-brrr-sub {
+  color: #5d5d60;
+}
+.tokens-go-brrr-light .tokens-go-brrr-bar-tick {
+  background-color: #1d1f20;
+}
+.tokens-go-brrr-light .tokens-go-brrr-badge {
+  border: 1px solid #cfcfd1;
+  color: #1d1f20;
+}
+.tokens-go-brrr-light .tokens-go-brrr-list-row {
+  border-top: 1px solid #cfcfd1;
+}
+.tokens-go-brrr-light .tokens-go-brrr-list-row:hover,
+.tokens-go-brrr-light .tokens-go-brrr-list-row:active {
+  background-color: #e9e9ea;
+}
+.tokens-go-brrr-light .tokens-go-brrr-list-row:focus {
+  box-shadow: inset 2px 0 0 #5980a6;
+}
+.tokens-go-brrr-light .tokens-go-brrr-list-title {
+  color: #1d1f20;
+}
+.tokens-go-brrr-light .tokens-go-brrr-switch {
+  border: 1px solid #cfcfd1;
+}
+.tokens-go-brrr-light .tokens-go-brrr-switch:checked {
+  border-color: #5980a6;
+  background-color: rgba(89, 128, 166, 0.22);
+}
+.tokens-go-brrr-light .tokens-go-brrr-switch-thumb {
+  background-color: #5d5d60;
+}
+.tokens-go-brrr-light .tokens-go-brrr-switch:checked .tokens-go-brrr-switch-thumb {
+  background-color: #5980a6;
+}
+.tokens-go-brrr-light .tokens-go-brrr-switch-state {
+  color: #5d5d60;
+}
+.tokens-go-brrr-light .tokens-go-brrr-list-row:checked .tokens-go-brrr-switch-state {
+  color: #1d1f20;
+}
+.tokens-go-brrr-light .tokens-go-brrr-session-name {
+  color: #1d1f20;
+}
+.tokens-go-brrr-light .tokens-go-brrr-session-mark {
+  background-color: #5980a6;
+}
+.tokens-go-brrr-light .tokens-go-brrr-session-mark.paused {
+  border: 1px solid #7a7a7d;
+}
+.tokens-go-brrr-light .tokens-go-brrr-focus-btn {
+  border: 1px solid #cfcfd1;
+  color: #1d1f20;
+}
+.tokens-go-brrr-light .tokens-go-brrr-focus-btn:hover,
+.tokens-go-brrr-light .tokens-go-brrr-focus-btn:active {
+  background-color: rgba(89, 128, 166, 0.16);
+  border-color: #5980a6;
+}
+.tokens-go-brrr-light .tokens-go-brrr-focus-btn:focus {
+  box-shadow: 0 0 0 2px #5980a6;
+}
+.tokens-go-brrr-light .tokens-go-brrr-sessions-empty {
+  color: #5d5d60;
+}
+.tokens-go-brrr-light .tokens-go-brrr-footer {
+  border-top: 1px solid #cfcfd1;
+}
+.tokens-go-brrr-light .tokens-go-brrr-footer-text {
+  color: #5d5d60;
+}
+.tokens-go-brrr-light .tokens-go-brrr-ghost-btn {
+  color: #1d1f20;
+}
+.tokens-go-brrr-light .tokens-go-brrr-ghost-btn:hover {
+  background-color: rgba(29, 31, 32, 0.08);
+}
+.tokens-go-brrr-light .tokens-go-brrr-ghost-btn:active {
+  background-color: rgba(29, 31, 32, 0.14);
+}
+.tokens-go-brrr-light .tokens-go-brrr-ghost-btn:focus {
+  box-shadow: 0 0 0 2px #5980a6;
+}
+.tokens-go-brrr-light .tokens-go-brrr-primary-btn {
+  border: 1px solid #416180;
+  background-color: #416180;
+  color: #f2f2f3;
+}
+.tokens-go-brrr-light .tokens-go-brrr-primary-btn:hover {
+  background-color: #375270;
+}
+.tokens-go-brrr-light .tokens-go-brrr-primary-btn:active {
+  background-color: #2c455d;
+}
+.tokens-go-brrr-light .tokens-go-brrr-primary-btn:focus {
+  box-shadow: 0 0 0 2px #1d1f20;
+}
+.tokens-go-brrr-light .tokens-go-brrr-secondary-btn {
+  border: 1px solid #cfcfd1;
+  color: #1d1f20;
+}
+.tokens-go-brrr-light .tokens-go-brrr-secondary-btn:hover {
+  background-color: rgba(89, 128, 166, 0.16);
+  border-color: #5980a6;
+}
+.tokens-go-brrr-light .tokens-go-brrr-secondary-btn:active {
+  background-color: rgba(89, 128, 166, 0.26);
+}
+.tokens-go-brrr-light .tokens-go-brrr-secondary-btn:focus {
+  box-shadow: 0 0 0 2px #5980a6;
+}
+.tokens-go-brrr-light .tokens-go-brrr-guide-tick {
+  background-color: #1d1f20;
+}
+.tokens-go-brrr-light .tokens-go-brrr-guide-desc {
+  color: #5d5d60;
+}
+/* <<< light theme */

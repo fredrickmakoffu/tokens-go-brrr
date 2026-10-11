@@ -1,4 +1,4 @@
-const REL_REPO = "fredrickmakoffu/cursor-spend-monitor-releases";
+const REL_REPO = "fredrickmakoffu/tokens-go-brrr-releases";
 const REL_URL = "https://github.com/" + REL_REPO + "/releases";
 const PLATFORMS = [
   { id: "fedora", name: "Fedora", kindKey: "dl.kind.rpm", ext: ".rpm", cmd: (f) => "sudo dnf install ./" + f },
@@ -9,8 +9,8 @@ const PLATFORMS = [
 const FALLBACK_RELEASES = [{
   tag: "v0.6.1", date: "2026-10-09", url: REL_URL + "/tag/v0.6.1", notes: [],
   assets: [
-    { name: "cursor-spend-monitor-0.6.1-1.fc44.noarch.rpm", size: 257000, url: REL_URL + "/download/v0.6.1/cursor-spend-monitor-0.6.1-1.fc44.noarch.rpm", sha: null },
-    { name: "cursor-spend-monitor_0.6.1_all.deb", size: 106000, url: REL_URL + "/download/v0.6.1/cursor-spend-monitor_0.6.1_all.deb", sha: null },
+    { name: "tokens-go-brrr-0.6.1-1.fc44.noarch.rpm", size: 257000, url: REL_URL + "/download/v0.6.1/tokens-go-brrr-0.6.1-1.fc44.noarch.rpm", sha: null },
+    { name: "tokens-go-brrr_0.6.1_all.deb", size: 106000, url: REL_URL + "/download/v0.6.1/tokens-go-brrr_0.6.1_all.deb", sha: null },
   ],
 }];
 const fmtSize = (b) => b >= 1e6 ? I18N.num(b / 1e6, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " MB" : Math.round(b / 1000) + " KB";
@@ -80,7 +80,7 @@ function Downloads({ b, rel }) {
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: "1px solid var(--color-divider)", paddingTop: 12 }}>
           <span style={KICK}>{t("dl.then2")}</span>
-          <CopyLine text="cursor-spend-monitor setup" b={b} />
+          <CopyLine text="tokens-go-brrr setup" b={b} />
         </div>
       </div>
     </div>

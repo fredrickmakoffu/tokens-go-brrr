@@ -43,7 +43,7 @@ reload an extension whose version changed while unloaded, with the message *"A d
 version was loaded previously. You need to log out for changes to take effect."*
 
 Give the import a path it has not seen and the problem disappears. Each revision is a copy
-of the extension under a new uuid, `ai-usage-rN@fredrickmakoffu.github.io`, so its
+of the extension under a new uuid, `tokens-go-brrr-rN@fredrickmakoffu.github.io`, so its
 `extension.js` sits at a URI nothing has imported yet. That is all `live-reload.sh` does:
 refresh the canonical install so an ordinary logout is still correct, copy it to the next
 free revision, rewrite `uuid` and `name` in the copy's `metadata.json`, then print the
@@ -56,7 +56,7 @@ Looking Glass evaluates its input as the body of an async function with `Main`, 
 
 1. unloads whatever copy of this extension the shell has loaded, which may be none, which
    destroys the indicator and disconnects the daemon proxy through the extension's own
-   `disable()`. It matches `ai-usage@` and `ai-usage-rN@` exactly rather than by prefix, so a
+   `disable()`. It matches `tokens-go-brrr@` and `tokens-go-brrr-rN@` exactly rather than by prefix, so a
    test harness sharing the prefix is left alone;
 2. rewrites `enabled-extensions`, swapping the old uuid for the new one, because an
    extension that is not in that list gets disabled again immediately;
@@ -70,9 +70,15 @@ Looking Glass evaluates its input as the body of an async function with `Main`, 
   path is cached, so the next reload has to be `r3`. Deleting `r2` does not release the number,
   because the module stays cached for the life of the login: staging `r2` again would appear to
   work and silently run the old code. `live-reload.sh` therefore records the highest number it
-  has handed out in `.ai-usage-revision` beside the extensions, and the reset script leaves that
+  has handed out in `.tokens-go-brrr-revision` beside the extensions, and the reset script leaves that
   marker alone.
 
+- **`live-reload.sh` restores the real uuid when it exits.** It stays running after printing the
+  command; press Enter or Ctrl+C (or close the terminal) when done and it runs the reset script,
+  so a throwaway `tokens-go-brrr-rN@` uuid is never left in `enabled-extensions` for the next login.
+  The indicator disappears at that point (see below). Re-running it hands over to the new
+  instance without restoring. `--no-wait` skips all this. A crash or power loss can still skip
+  the restore; `live-reload-reset.sh` fixes that by hand.
 - **The reset script disables the running copy immediately.** It rewrites
   `enabled-extensions`, which the shell acts on at once, so the indicator disappears rather than
   reverting to the canonical extension: that one is only picked up at the next login. Running
@@ -85,4 +91,4 @@ Looking Glass evaluates its input as the body of an async function with `Main`, 
   until the next login; the error is visible in Looking Glass and in `journalctl /usr/bin/gnome-shell`.
 - **Only the extension reloads.** The daemon is a separate systemd service and is unaffected,
   so usage data keeps flowing across reloads. Restart it with
-  `systemctl --user restart cursor-spend-monitor.service` when the Python side changes.
+  `systemctl --user restart tokens-go-brrr.service` when the Python side changes.

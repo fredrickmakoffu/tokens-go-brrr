@@ -1,8 +1,8 @@
-/* @ds-bundle: {"format":4,"namespace":"AIUsageDesignSystem_480680","components":[{"name":"ExtButton","sourcePath":"components/controls/ExtButton.jsx"},{"name":"ExtFilterChips","sourcePath":"components/controls/ExtFilterChips.jsx"},{"name":"ExtWindowPicker","sourcePath":"components/controls/ExtWindowPicker.jsx"},{"name":"EXT_ICON_PATHS","sourcePath":"components/icons/ExtIcon.jsx"},{"name":"ExtIcon","sourcePath":"components/icons/ExtIcon.jsx"},{"name":"PROVIDER_ICONS","sourcePath":"components/icons/ProviderIcon.jsx"},{"name":"ProviderIcon","sourcePath":"components/icons/ProviderIcon.jsx"},{"name":"ExtPanelIndicator","sourcePath":"components/panel/ExtPanelIndicator.jsx"},{"name":"ExtFooter","sourcePath":"components/popover/ExtFooter.jsx"},{"name":"ExtHeader","sourcePath":"components/popover/ExtHeader.jsx"},{"name":"ExtPopover","sourcePath":"components/popover/ExtPopover.jsx"},{"name":"ExtSection","sourcePath":"components/popover/ExtSection.jsx"},{"name":"ExtGuideItem","sourcePath":"components/rows/ExtGuideItem.jsx"},{"name":"ExtListRow","sourcePath":"components/rows/ExtListRow.jsx"},{"name":"ExtMeterRow","sourcePath":"components/rows/ExtMeterRow.jsx"},{"name":"ExtSessionRow","sourcePath":"components/rows/ExtSessionRow.jsx"},{"name":"ExtStats","sourcePath":"components/rows/ExtStats.jsx"}],"sourceHashes":{"components/controls/ExtButton.jsx":"d56839f76550","components/controls/ExtFilterChips.jsx":"0054371c8e03","components/controls/ExtWindowPicker.jsx":"b98aaeccacd1","components/icons/ExtIcon.jsx":"09890230e39f","components/icons/ProviderIcon.jsx":"1666afb15866","components/panel/ExtPanelIndicator.jsx":"3d3ff2519899","components/popover/ExtFooter.jsx":"b9548bda0c4c","components/popover/ExtHeader.jsx":"770a15d4d632","components/popover/ExtPopover.jsx":"9f0a1cace693","components/popover/ExtSection.jsx":"e28fffecc8a8","components/rows/ExtGuideItem.jsx":"7e61052f1cbc","components/rows/ExtListRow.jsx":"4bbbc1808afe","components/rows/ExtMeterRow.jsx":"32af0c012942","components/rows/ExtSessionRow.jsx":"3da140b89516","components/rows/ExtStats.jsx":"a9da20d2ace9","site/Directions.jsx":"049168973600","site/Shared.jsx":"79795b5d4de4","site/burn.jsx":"a2ac3fc9366d","site/releases.jsx":"dde83de18508","site/tweaks-panel.jsx":"d259e3a86f73","ui_kits/ai-usage-popover/App.jsx":"b6ec02dac281","ui_kits/ai-usage-popover/Screens.jsx":"dcca37b8b6cc","ui_kits/ai-usage-popover/TopBar.jsx":"aa0598f02d04","ui_kits/ai-usage-popover/data.jsx":"ab52bc1ac188"},"inlinedExternals":[],"unexposedExports":[{"name":"resolveIcon","sourcePath":"components/icons/ProviderIcon.jsx"}]} */
+/* @ds-bundle: {"format":4,"namespace":"TokensGoBrrrDesignSystem_480680","components":[{"name":"ExtButton","sourcePath":"components/controls/ExtButton.jsx"},{"name":"ExtFilterChips","sourcePath":"components/controls/ExtFilterChips.jsx"},{"name":"ExtWindowPicker","sourcePath":"components/controls/ExtWindowPicker.jsx"},{"name":"EXT_ICON_PATHS","sourcePath":"components/icons/ExtIcon.jsx"},{"name":"ExtIcon","sourcePath":"components/icons/ExtIcon.jsx"},{"name":"PROVIDER_ICONS","sourcePath":"components/icons/ProviderIcon.jsx"},{"name":"ProviderIcon","sourcePath":"components/icons/ProviderIcon.jsx"},{"name":"ExtPanelIndicator","sourcePath":"components/panel/ExtPanelIndicator.jsx"},{"name":"ExtFooter","sourcePath":"components/popover/ExtFooter.jsx"},{"name":"ExtHeader","sourcePath":"components/popover/ExtHeader.jsx"},{"name":"ExtPopover","sourcePath":"components/popover/ExtPopover.jsx"},{"name":"ExtSection","sourcePath":"components/popover/ExtSection.jsx"},{"name":"ExtGuideItem","sourcePath":"components/rows/ExtGuideItem.jsx"},{"name":"ExtListRow","sourcePath":"components/rows/ExtListRow.jsx"},{"name":"ExtMeterRow","sourcePath":"components/rows/ExtMeterRow.jsx"},{"name":"ExtSessionRow","sourcePath":"components/rows/ExtSessionRow.jsx"},{"name":"ExtStats","sourcePath":"components/rows/ExtStats.jsx"}],"sourceHashes":{"components/controls/ExtButton.jsx":"d56839f76550","components/controls/ExtFilterChips.jsx":"0054371c8e03","components/controls/ExtWindowPicker.jsx":"b98aaeccacd1","components/icons/ExtIcon.jsx":"09890230e39f","components/icons/ProviderIcon.jsx":"1666afb15866","components/panel/ExtPanelIndicator.jsx":"3d3ff2519899","components/popover/ExtFooter.jsx":"b9548bda0c4c","components/popover/ExtHeader.jsx":"770a15d4d632","components/popover/ExtPopover.jsx":"9f0a1cace693","components/popover/ExtSection.jsx":"e28fffecc8a8","components/rows/ExtGuideItem.jsx":"7e61052f1cbc","components/rows/ExtListRow.jsx":"4bbbc1808afe","components/rows/ExtMeterRow.jsx":"32af0c012942","components/rows/ExtSessionRow.jsx":"3da140b89516","components/rows/ExtStats.jsx":"a9da20d2ace9","site/Directions.jsx":"049168973600","site/Shared.jsx":"79795b5d4de4","site/burn.jsx":"a2ac3fc9366d","site/releases.jsx":"dde83de18508","site/tweaks-panel.jsx":"d259e3a86f73","ui_kits/tokens-go-brrr-popover/App.jsx":"b6ec02dac281","ui_kits/tokens-go-brrr-popover/Screens.jsx":"dcca37b8b6cc","ui_kits/tokens-go-brrr-popover/TopBar.jsx":"aa0598f02d04","ui_kits/tokens-go-brrr-popover/data.jsx":"ab52bc1ac188"},"inlinedExternals":[],"unexposedExports":[{"name":"resolveIcon","sourcePath":"components/icons/ProviderIcon.jsx"}]} */
 
 (() => {
 
-const __ds_ns = (window.AIUsageDesignSystem_480680 = window.AIUsageDesignSystem_480680 || {});
+const __ds_ns = (window.TokensGoBrrrDesignSystem_480680 = window.TokensGoBrrrDesignSystem_480680 || {});
 
 const __ds_scope = {};
 
@@ -1379,7 +1379,7 @@ Object.assign(window, {
 
 // site/Shared.jsx
 try { (() => {
-const DS = window.AIUsageDesignSystem_480680;
+const DS = window.TokensGoBrrrDesignSystem_480680;
 const {
   ExtPopover,
   ExtHeader,
@@ -2043,7 +2043,7 @@ function useBurn(mult = 1) {
   };
 }
 const SITE = {
-  privacy: [["No cookies, no scraping", "Each provider reuses a login already on disk: Cursor's IDE state, Claude Code's OAuth file, OpenCode's API key."], ["Read, never written", "Claude Code owns its token refresh. The file is opened read-only, so the daemon cannot sign you out of the CLI."], ["The extension holds nothing", "It has no credentials and makes no network calls. It reads state from the daemon over the session bus."], ["History stays in ~/.local", "Polls and the usage ledger are kept in ~/.local/share/cursor-spend-monitor for 90 days. Set history_days to 0 to stop recording."], ["Only numbers travel", "Insight wording is a template unless you turn on llm_notifications. When it is on, no transcript text, prompts or file contents are sent."]],
+  privacy: [["No cookies, no scraping", "Each provider reuses a login already on disk: Cursor's IDE state, Claude Code's OAuth file, OpenCode's API key."], ["Read, never written", "Claude Code owns its token refresh. The file is opened read-only, so the daemon cannot sign you out of the CLI."], ["The extension holds nothing", "It has no credentials and makes no network calls. It reads state from the daemon over the session bus."], ["History stays in ~/.local", "Polls and the usage ledger are kept in ~/.local/share/tokens-go-brrr for 90 days. Set history_days to 0 to stop recording."], ["Only numbers travel", "Insight wording is a template unless you turn on llm_notifications. When it is on, no transcript text, prompts or file contents are sent."]],
   faq: [["Which tools does it track?", "Cursor, Claude Code, OpenCode and Codex report their own limits. Pi is a harness, so it borrows the meters of whichever account its sessions bill to."], ["Why does a row sometimes show no bar?", "xAI publishes no usage endpoint and Cline reports a credit balance, not a window. An empty bar at 0% would read as plenty left, so the row shows its sessions and no percentage."], ["Does a paused session count?", "No. A session suspended with Ctrl+Z spends nothing until you resume it, so it stays out of the top-bar count and shows as paused in the provider's detail screen."], ["Does opening the popover hit five APIs every time?", "It asks for a refresh, and the daemon drops the request if it polled in the last 60 seconds. Anthropic returns 429 on its usage route long before any quota is spent."], ["Can I use it from a status bar or a script?", "Yes. status prints the published state in about 0.1s with no network call. check exits non-zero when quota is low, and best names the provider with the most left."], ["Which GNOME versions?", "GNOME Shell 45 or newer. Log out and back in after installing so the shell picks up the extension."], ["Windows or macOS?", "Both are coming. Fedora and Debian/Ubuntu packages are available now."]]
 };
 Object.assign(window, {
@@ -2062,7 +2062,7 @@ Object.assign(window, {
 
 // site/releases.jsx
 try { (() => {
-const REL_REPO = "fredrickmakoffu/cursor-spend-monitor-releases";
+const REL_REPO = "fredrickmakoffu/tokens-go-brrr-releases";
 const REL_URL = "https://github.com/" + REL_REPO + "/releases";
 const PLATFORMS = [{
   id: "fedora",
@@ -2091,14 +2091,14 @@ const FALLBACK_RELEASES = [{
   url: REL_URL + "/tag/v0.6.1",
   notes: [],
   assets: [{
-    name: "cursor-spend-monitor-0.6.1-1.fc44.noarch.rpm",
+    name: "tokens-go-brrr-0.6.1-1.fc44.noarch.rpm",
     size: 257000,
-    url: REL_URL + "/download/v0.6.1/cursor-spend-monitor-0.6.1-1.fc44.noarch.rpm",
+    url: REL_URL + "/download/v0.6.1/tokens-go-brrr-0.6.1-1.fc44.noarch.rpm",
     sha: null
   }, {
-    name: "cursor-spend-monitor_0.6.1_all.deb",
+    name: "tokens-go-brrr_0.6.1_all.deb",
     size: 106000,
-    url: REL_URL + "/download/v0.6.1/cursor-spend-monitor_0.6.1_all.deb",
+    url: REL_URL + "/download/v0.6.1/tokens-go-brrr_0.6.1_all.deb",
     sha: null
   }]
 }];
@@ -2318,7 +2318,7 @@ function Downloads({
   }, /*#__PURE__*/React.createElement("span", {
     style: KICK
   }, "After installing \xB7 2"), /*#__PURE__*/React.createElement(CopyLine, {
-    text: "cursor-spend-monitor setup",
+    text: "tokens-go-brrr setup",
     b: b
   }))), /*#__PURE__*/React.createElement("p", {
     style: {
@@ -3139,11 +3139,11 @@ Object.assign(window, {
 });
 })(); } catch (e) { __ds_ns.__errors.push({ path: "site/tweaks-panel.jsx", error: String((e && e.message) || e) }); }
 
-// ui_kits/ai-usage-popover/App.jsx
+// ui_kits/tokens-go-brrr-popover/App.jsx
 try { (() => {
 const {
   ExtPopover
-} = window.AIUsageDesignSystem_480680;
+} = window.TokensGoBrrrDesignSystem_480680;
 function App() {
   const saved = JSON.parse(localStorage.getItem("aiusage-kit2") || "null");
   const [nav, setNav] = React.useState(saved?.nav || {
@@ -3290,9 +3290,9 @@ if (window.__AIU_KIT__) {
   const el = document.getElementById("root");
   if (el) ReactDOM.createRoot(el).render(/*#__PURE__*/React.createElement(App, null));
 }
-})(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/ai-usage-popover/App.jsx", error: String((e && e.message) || e) }); }
+})(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/tokens-go-brrr-popover/App.jsx", error: String((e && e.message) || e) }); }
 
-// ui_kits/ai-usage-popover/Screens.jsx
+// ui_kits/tokens-go-brrr-popover/Screens.jsx
 try { (() => {
 const {
   ExtHeader,
@@ -3307,7 +3307,7 @@ const {
   ExtFilterChips,
   ExtGuideItem,
   ProviderIcon
-} = window.AIUsageDesignSystem_480680;
+} = window.TokensGoBrrrDesignSystem_480680;
 const byId = id => PROVIDERS.find(p => p.id === id);
 const sessionsOf = id => SESSIONS.filter(s => s.p === id);
 const sessionMeta = s => [s.model ? s.model + " via " + s.via : null, s.tty, s.paused ? "paused" : null].filter(Boolean).join(" · ");
@@ -3406,7 +3406,7 @@ function ListScreen({
   const running = SESSIONS.filter(s => !s.paused);
   const projects = new Set(running.map(s => s.project)).size;
   return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(ExtHeader, {
-    kicker: "AI usage",
+    kicker: "tokens-go-brrr",
     meta: "15:00",
     title: "Claude Code runs out in ~40m.",
     sub: "OpenCode has room. " + running.length + " agents running across " + projects + " projects."
@@ -3598,7 +3598,7 @@ function AboutScreen({
 }) {
   return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(ExtHeader, {
     kicker: "About",
-    title: "AI usage",
+    title: "tokens-go-brrr",
     sub: "Local GNOME Shell indicator for AI coding limits.",
     onBack: () => go({
       screen: "list"
@@ -3626,14 +3626,14 @@ if (window.__AIU_KIT__) Object.assign(window, {
   GuideScreen,
   AboutScreen
 });
-})(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/ai-usage-popover/Screens.jsx", error: String((e && e.message) || e) }); }
+})(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/tokens-go-brrr-popover/Screens.jsx", error: String((e && e.message) || e) }); }
 
-// ui_kits/ai-usage-popover/TopBar.jsx
+// ui_kits/tokens-go-brrr-popover/TopBar.jsx
 try { (() => {
 const {
   ExtPanelIndicator,
   ExtIcon
-} = window.AIUsageDesignSystem_480680;
+} = window.TokensGoBrrrDesignSystem_480680;
 function TopBar({
   variant,
   urgent,
@@ -3685,9 +3685,9 @@ function TopBar({
   }));
 }
 if (window.__AIU_KIT__) window.TopBar = TopBar;
-})(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/ai-usage-popover/TopBar.jsx", error: String((e && e.message) || e) }); }
+})(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/tokens-go-brrr-popover/TopBar.jsx", error: String((e && e.message) || e) }); }
 
-// ui_kits/ai-usage-popover/data.jsx
+// ui_kits/tokens-go-brrr-popover/data.jsx
 try { (() => {
 const PROVIDERS = [{
   id: "cursor",
@@ -3873,7 +3873,7 @@ const WINDOWS = [{
   label: "Monthly"
 }];
 const ABOUT = {
-  version: "0.4.0",
+  version: "0.7.0",
   updated: "just now"
 };
 if (window.__AIU_KIT__) Object.assign(window, {
@@ -3883,7 +3883,7 @@ if (window.__AIU_KIT__) Object.assign(window, {
   WINDOWS,
   ABOUT
 });
-})(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/ai-usage-popover/data.jsx", error: String((e && e.message) || e) }); }
+})(); } catch (e) { __ds_ns.__errors.push({ path: "ui_kits/tokens-go-brrr-popover/data.jsx", error: String((e && e.message) || e) }); }
 
 __ds_ns.ExtButton = __ds_scope.ExtButton;
 

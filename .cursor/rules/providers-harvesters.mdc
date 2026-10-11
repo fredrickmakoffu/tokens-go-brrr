@@ -1,0 +1,28 @@
+---
+description: Provider and harvester contracts
+globs: "tokens_go_brrr/providers/**/*.py,tokens_go_brrr/harvesters/**/*.py"
+alwaysApply: false
+---
+
+# Providers and harvesters
+
+## Providers (panel meters)
+
+- Implement `available()` / `fetch()` → `ProviderSnapshot`. Declare `process_specs` as a frozenset/tuple of `ProcessSpec`.
+- Window `kind` is declared by the provider; the UI names exceptions honestly.
+- Auth: read credentials from disk; **never write** vendor credential files (Claude refresh is owned by Claude Code).
+- Harnesses (Pi): empty own meters; daemon borrows from backend. Borrowed rows must not vote on the status dot or fire duplicate alerts.
+- Unknown limit → no bar / no percentage (never fake 0% as "plenty left").
+
+## Harvesters (ledger)
+
+- `harvest()` must not raise; return `HarvestResult(failed=True)` or skip with a clear count.
+- Idempotent + watermarked; schema-probing; version notes in `ledger_meta` when formats drift.
+- Do not invent token/cost zeros. Label estimates in stored metadata when needed.
+- Prefer injectable clients/paths for tests (see `CursorApiHarvester`).
+
+## Shared anti-patterns
+
+- Do not put vendor HTTP in `daemon.py`.
+- Do not filter harvesters by panel `enabled_providers` unless product intent changes (ledger history is independent of which rows show in the panel).
+- Keep provider id strings stable (`cursor`, `claude`, `opencode`, `codex`, `pi`).

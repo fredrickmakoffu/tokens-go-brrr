@@ -1,4 +1,4 @@
-const DS = window.AIUsageDesignSystem_480680;
+const DS = window.TokensGoBrrrDesignSystem_480680;
 const { ExtPopover, ExtHeader, ExtSection, ExtMeterRow, ExtFooter, ExtButton, ExtStats, ExtFilterChips, ExtPanelIndicator, ExtIcon } = DS;
 const HEAD = { fontFamily: "var(--font-heading)", fontWeight: 600 };
 const KICK = { ...HEAD, fontSize: 12, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--muted)" };

@@ -22,11 +22,11 @@ caution, so an idle-but-healthy tool costs a logo and two characters.
 
 ```bash
 chmod +x install.sh && ./install.sh
-cursor-spend-monitor setup
-systemctl --user enable --now cursor-spend-monitor.service
+tokens-go-brrr setup
+systemctl --user enable --now tokens-go-brrr.service
 ```
 
-`install.sh` also installs the Barlow fonts the popover is set in (to `~/.local/share/fonts/ai-usage/`); `./install-fonts.sh` does only that. Log out and back in so GNOME Shell picks up the extension. Needs GNOME Shell 45 or newer.
+`install.sh` also installs the Barlow fonts the popover is set in (to `~/.local/share/fonts/tokens-go-brrr/`); `./install-fonts.sh` does only that. Log out and back in so GNOME Shell picks up the extension. Needs GNOME Shell 45 or newer.
 
 ## Providers
 
@@ -139,7 +139,7 @@ usage route long before any quota is spent. Inside the cooldown the panel is
 served state that is at most a minute old, which is the same number a fresh poll
 would have returned. The scheduled poll is not affected.
 
-`~/.config/cursor-spend-monitor/config.json`:
+`~/.config/tokens-go-brrr/config.json`:
 
 ```json
 {
@@ -148,7 +148,7 @@ would have returned. The scheduled poll is not affected.
   "alert_cooldown_hours": 6,
   "history_days": 90,
   "primary_alerts": [75, 90, 100],
-  "enabled_providers": ["cursor"],
+  "enabled_providers": ["cursor", "claude", "opencode", "pi", "codex"],
   "primary_overrides": {}
 }
 ```
@@ -159,14 +159,16 @@ Chip swaps persist in `primary_overrides`.
 
 ```text
 GNOME Shell extension (status dot + popover)
-        ↑  io.github.fredrickmakoffu.AIUsage on the session bus
-   daemon (poll, alert, publish)
-        ↑
-  ProviderSnapshot[] ← providers/cursor (+ opencode, claude later)
+        ↑  D-Bus  io.github.fredrickmakoffu.TokensGoBrrr
+   UsageDaemon (poll, harvest, notify, publish)
+        ├─ providers/   Cursor · Claude · OpenCode · Codex · Pi
+        ├─ harvesters/  local stores → usage ledger
+        ├─ ledger       sessions, rollups, messages, billboard
+        └─ notify* + llm_*   digests, live notes, optional wording
 ```
 
 The extension holds no credentials and makes no network calls. It reads state from the
-daemon and sends back two commands: `Refresh` and `SetPrimary`.
+daemon and sends commands such as `Refresh`, `SetPrimary`, and `Acknowledge`.
 
 ## Commands
 
@@ -182,17 +184,17 @@ daemon and sends back two commands: `Refresh` and `SetPrimary`.
 ## Status bars and scripts
 
 `status` reads the state the daemon already published to
-`/run/user/$UID/cursor-spend-monitor/state.json`. That means **no credentials, no
+`/run/user/$UID/tokens-go-brrr/state.json`. That means **no credentials, no
 network call and no rate limit**, so it is safe to run as often as a status bar
 redraws — about 0.1s per call, against 3.6s and one request per provider if it
 has to fetch. When no daemon is running, or its state has gone stale (two missed
 polls), it falls back to fetching directly and says so; `--live` forces that.
 
 ```bash
-cursor-spend-monitor status --json                       # full payload
-cursor-spend-monitor status --json --compact             # one line, for jq
-cursor-spend-monitor status --format "{icon} {pct}%"     # cursor 37%  claude 62%
-cursor-spend-monitor status --format "{name} {pct}%" --provider claude
+tokens-go-brrr status --json                       # full payload
+tokens-go-brrr status --json --compact             # one line, for jq
+tokens-go-brrr status --format "{icon} {pct}%"     # cursor 37%  claude 62%
+tokens-go-brrr status --format "{name} {pct}%" --provider claude
 ```
 
 Template fields: `{id}` `{name}` `{icon}` `{plan}` `{status}` `{pct}` `{label}`
@@ -217,8 +219,8 @@ Exit codes: `0` every provider shown is fine, `1` at least one needs attention,
 and Makefiles — so a two-hour run does not start at 97%.
 
 ```bash
-cursor-spend-monitor check --min 20 --provider claude || echo "wait for the reset"
-cursor-spend-monitor check --min 10 --any --quiet
+tokens-go-brrr check --min 20 --provider claude || echo "wait for the reset"
+tokens-go-brrr check --min 10 --any --quiet
 ```
 
 | Exit | Meaning |
@@ -236,7 +238,7 @@ have headroom; `--any` passes when one does.
 `best` answers the question that comes with paying for four subscriptions:
 
 ```console
-$ cursor-spend-monitor best --explain
+$ tokens-go-brrr best --explain
 Use Cursor — 63% left (Claude Code 35% left, OpenCode 20% left).
 ```
 
@@ -245,7 +247,7 @@ subscription cannot decide an answer twice.
 
 ## Burn rate
 
-Every poll is recorded to `~/.local/share/cursor-spend-monitor/history.db`, one
+Every poll is recorded to `~/.local/share/tokens-go-brrr/history.db`, one
 row per meter, kept for `history_days` (90 by default; `0` turns recording off).
 From that series each meter gets a time-to-exhaustion:
 
@@ -290,12 +292,12 @@ was spent on*: tokens per provider, model, project and hour, harvested
 idempotently from each tool's own store.
 
 ```bash
-cursor-spend-monitor harvest                   # read every store into the ledger
-cursor-spend-monitor harvest --provider claude  # one provider only
-cursor-spend-monitor harvest --full            # ignore watermarks, re-read all
-cursor-spend-monitor report                    # this month, by provider
-cursor-spend-monitor report --week --by model  # last 7 days, by model
-cursor-spend-monitor report --checks           # cross-check disagreements
+tokens-go-brrr harvest                   # read every store into the ledger
+tokens-go-brrr harvest --provider claude  # one provider only
+tokens-go-brrr harvest --full            # ignore watermarks, re-read all
+tokens-go-brrr report                    # this month, by provider
+tokens-go-brrr report --week --by model  # last 7 days, by model
+tokens-go-brrr report --checks           # cross-check disagreements
 ```
 
 | Source | What it gives | Fidelity |
@@ -318,9 +320,9 @@ Digests and alerts are composed from the ledger, and **work with no LLM
 configured**: the wording is a template until a generator is enabled.
 
 ```bash
-cursor-spend-monitor quote                     # the latest generated message
-cursor-spend-monitor quote --generate --slot weekly
-cursor-spend-monitor quote --tweet             # SHARE: line, copied to clipboard
+tokens-go-brrr quote                     # the latest generated message
+tokens-go-brrr quote --generate --slot weekly
+tokens-go-brrr quote --tweet             # SHARE: line, copied to clipboard
 ```
 
 The daemon sends a digest on its schedule (daily at `notify_daily_hour`, weekly
@@ -357,9 +359,55 @@ unparseable reply.
 {
   "llm_notifications": true,
   "llm_generator_model": "",   // "" = the cheap default for each provider
-  "llm_min_headroom": 15       // never spend capacity to warn about capacity
+  "llm_min_headroom": 15,      // never spend capacity to warn about capacity
+  "llm_log_days": 30           // days of the per-call LLM log to keep; 0 = off
 }
 ```
+
+**Cold notes.** The first time you open the panel after a few hours away (or
+after the daemon starts), it makes one trend or insight note from your own
+ledger -- cache-read share, week over week, your peak hour and busiest day,
+where your tokens go, your weekday rhythm. They rotate so none repeats before
+the rest have had a turn, never call a model, and wait on the landing page
+instead of popping a desktop notification.
+
+**Warm notes.** Open the panel again inside a working cycle and the daemon
+catches the note up with the last couple of hours: it reads the tools' stores
+once more, waits for the fresh meters, and -- only if the picture changed --
+adds a note like "Last 2h: 3 sessions, 480K tokens, mostly alpha. Claude Code
+5-hour limit is at 42%." A short "Catching up…" line shows while it works (never
+more than four seconds), then goes. Reopening within `live_hot_minutes` of the
+last one changes nothing; warm notes stop being shown two hours after the
+figures they describe were read. Wording is a template, translated like the
+rest.
+
+**Quick-model wording and "ran elsewhere".** With `llm_notifications` on, a
+warm note that is actually new is reworded by the cheapest model on whichever
+provider has the most room (Haiku for Claude), within the same four seconds; any
+refusal, timeout or spent cap leaves the template, which is a complete note.
+Open-time calls are capped (`live_llm_per_hour`, `live_llm_per_day`), a provider
+that answers 429 is left alone for 15 minutes, and every call -- and every skip,
+with its reason -- is in the LLM log. When a rolling meter has climbed over the
+last two hours while this machine recorded no session for that provider and none
+is running, the note says so first: that usage came from a phone, the web or
+another computer, which the local transcripts can never show.
+
+```jsonc
+{
+  "live_notes": true,        // false = scheduled digests only
+  "live_cold_hours": 4,      // idle hours before an open counts as cold
+  "live_hot_minutes": 10,    // a warm note this recent is simply served again
+  "live_llm_per_hour": 4,    // model calls made because the panel opened
+  "live_llm_per_day": 24     // 0 = never reword on open
+}
+```
+
+**Every model call is logged**, so you can see exactly what was sent and what
+came back. One file per local day under
+`~/.local/share/tokens-go-brrr/llm-calls/YYYY-MM-DD.jsonl`, one JSON
+object per line: time, why it ran, provider and model, outcome (including
+refusals and skips), latency, tokens, the prompt and the reply. Open it in the
+panel from **About → LLM activity**. Credentials are never written.
 
 The reply names the AI it is about (`FEATURED:`), chosen from ranked provider
 facts sent in the prompt; the daemon validates it and falls back to the derived
@@ -373,3 +421,8 @@ no prompt history, no file contents.
 > provider (`claude-haiku-4-5`, `deepseek-v4-flash`) and have not been verified
 > against the live services. A wrong id is not fatal — the provider refuses and
 > the template is used — but set `llm_generator_model` to pin a specific one.
+
+## License
+
+Application code is [MIT](LICENSE). Bundled Barlow fonts are SIL OFL-1.1
+(`gnome-shell-extension/.../fonts/OFL.txt`).

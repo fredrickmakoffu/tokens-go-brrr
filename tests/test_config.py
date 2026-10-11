@@ -13,8 +13,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from cursor_spend_monitor import config as config_module
-from cursor_spend_monitor.config import MonitorConfig
+from tokens_go_brrr import config as config_module
+from tokens_go_brrr.config import MonitorConfig
 
 
 class ConfigLoadTest(unittest.TestCase):
@@ -68,6 +68,37 @@ class ConfigLoadTest(unittest.TestCase):
         found = MonitorConfig.load()
         self.assertEqual(found.ledger_days, 45)
         self.assertEqual(found.harvest_deep_seconds, 600)
+
+    def test_defaults_include_all_five_providers(self):
+        found = MonitorConfig.load()
+        self.assertEqual(
+            found.enabled_providers,
+            ["cursor", "claude", "opencode", "pi", "codex"],
+        )
+
+    def test_hiding_a_provider_persists(self):
+        cfg = MonitorConfig.load()
+        self.assertTrue(cfg.set_provider_enabled("codex", False))
+        self.assertNotIn("codex", cfg.enabled_providers)
+        again = MonitorConfig.load()
+        self.assertNotIn("codex", again.enabled_providers)
+
+    def test_showing_a_provider_restores_default_order(self):
+        cfg = MonitorConfig(enabled_providers=["cursor", "claude"])
+        cfg.save()
+        self.assertTrue(cfg.set_provider_enabled("codex", True))
+        self.assertEqual(cfg.enabled_providers, ["cursor", "claude", "codex"])
+        self.assertTrue(cfg.set_provider_enabled("opencode", True))
+        self.assertEqual(
+            cfg.enabled_providers,
+            ["cursor", "claude", "opencode", "codex"],
+        )
+
+    def test_unknown_provider_is_ignored(self):
+        cfg = MonitorConfig.load()
+        before = list(cfg.enabled_providers)
+        self.assertFalse(cfg.set_provider_enabled("nope", True))
+        self.assertEqual(cfg.enabled_providers, before)
 
 
 if __name__ == "__main__":
