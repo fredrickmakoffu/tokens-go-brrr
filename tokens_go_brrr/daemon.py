@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import os
+import random
 import signal
 import sqlite3
+import subprocess
 import sys
 import threading
 import time
@@ -21,6 +23,8 @@ from . import (
     llm_budget,
     llm_log,
     notify_engine,
+    update_install,
+    updates,
 )
 from . import llm_composer as llm
 from .borrowing import apply_borrowing
@@ -103,6 +107,14 @@ class UsageDaemon:
         self._billboard: dict[str, Any] | None = None
         self._latest_message: dict[str, Any] | None = None
         self._recent_messages: list[dict[str, Any]] = []
+        # The newer release on offer (updates.offer_from_manifest), if any.
+        self._update: dict[str, Any] | None = None
+        self._checking_update = False
+        # Where the user's Update press has got to: available, downloading,
+        # installing, installed or error. Held in memory only: a restart starts
+        # from a fresh check against the version that is now running.
+        self._update_phase = "available"
+        self._update_error: str | None = None
         self.snapshots: list[ProviderSnapshot] = []
         self.last_error: str | None = None
         self.last_fetch: datetime | None = None
@@ -127,6 +139,9 @@ class UsageDaemon:
             on_refresh=self.panel_opened,
             on_set_primary=self.set_primary,
             on_set_provider_enabled=self.set_provider_enabled,
+            on_install_update=self.install_update,
+            on_restart=self.restart_daemon,
+            on_skip_update=self.skip_update,
             on_acknowledge=self.acknowledge,
             on_llm_log=self.llm_log_payload,
             on_llm_log_clear=self.llm_log_clear,
@@ -145,6 +160,10 @@ class UsageDaemon:
         GLib.timeout_add_seconds(max(60, self.config.harvest_deep_seconds), self._harvest_tick)
         if self.config.notify_enabled:
             GLib.timeout_add_seconds(NOTIFY_CHECK_SECONDS, self._notify_tick)
+        if self.config.update_check:
+            # A random start spreads installs over the first minutes after a
+            # login, so a fleet does not hit the site on the same second.
+            GLib.timeout_add_seconds(random.randint(30, 150), self._update_first)
         # The first runs happen at idle, but each must fire exactly once.
         # `GLib.idle_add` re-schedules a callback that returns True, and the
         # timer functions return True to keep their own timers alive — handing
@@ -997,6 +1016,133 @@ class UsageDaemon:
         self._instances = kept
         self._published_signature = signature(self._instances)
 
+    # -- updates -------------------------------------------------------------
+
+    def _update_first(self) -> bool:
+        """First check after start-up, which then repeats on its own clock."""
+        self._update_tick()
+        hours = max(1, self.config.update_check_hours)
+        GLib.timeout_add_seconds(hours * 3600, self._update_tick)
+        return False
+
+    def _update_tick(self) -> bool:
+        if self._checking_update:
+            return True
+        self._checking_update = True
+        # A network fetch never runs on the main loop.
+        threading.Thread(
+            target=self._update_worker, name="tokens-go-brrr-update", daemon=True
+        ).start()
+        return True
+
+    def _update_worker(self) -> None:
+        try:
+            url = self.config.update_manifest_url or updates.MANIFEST_URL
+            manifest = updates.fetch_manifest(url)
+            # A failed fetch keeps whatever offer is showing; only a manifest
+            # that arrived and has nothing newer clears it.
+            if manifest is not None:
+                GLib.idle_add(self._apply_update, updates.offer_from_manifest(manifest))
+        finally:
+            self._checking_update = False
+
+    def _apply_update(self, offer: dict[str, Any] | None) -> bool:
+        if offer != self._update:
+            if (offer or {}).get("version") != (self._update or {}).get("version"):
+                self._update_phase, self._update_error = "available", None
+            self._update = offer
+            self._publish()
+        if offer is not None:
+            self._notify_update(offer)
+        return False
+
+    def _notify_update(self, offer: dict[str, Any]) -> None:
+        """Tell the user once per version; the panel keeps showing it after."""
+        state = updates.load_state()
+        if not updates.should_notify(offer, state) or self._quiet_now():
+            return
+        relogin = offer["requires"] == "relogin"
+        tail = "Log out afterwards to finish." if relogin else "Restart to apply."
+        try:
+            send("tokens-go-brrr update", f"Version {offer['version']} is ready. {tail}")
+        except Exception as exc:  # noqa: BLE001 - a missing notification daemon must not stop the check
+            print(f"update notification failed: {exc}", file=sys.stderr, flush=True)
+            return
+        updates.save_state({**state, "notified_version": offer["version"]})
+
+    def _visible_update(self) -> dict[str, Any] | None:
+        """The offer as the panel sees it, or None if there is nothing to show."""
+        offer = self._update
+        if not offer or offer["version"] == updates.load_state().get("skipped_version"):
+            return None
+        return {
+            "version": offer["version"],
+            "requires": offer["requires"],
+            "released": offer["released"],
+            "changes": list(offer["changes"]),
+            "status": self._update_phase,
+            "error": self._update_error,
+            # A source install is not changed by a package, so no button for it.
+            "installable": updates.installed_from_package(),
+        }
+
+    def _set_update_phase(self, phase: str, error: str | None = None) -> bool:
+        self._update_phase, self._update_error = phase, error
+        self._publish()
+        return False
+
+    def install_update(self) -> bool:
+        """Download and install the offered release; progress shows in the state."""
+        visible = self._visible_update()
+        if (
+            visible is None
+            or not visible["installable"]
+            or self._update_phase in ("downloading", "installing", "installed")
+        ):
+            return False
+        self._set_update_phase("downloading")
+        threading.Thread(
+            target=self._install_worker,
+            args=(dict(self._update or {}),),
+            name="tokens-go-brrr-install",
+            daemon=True,
+        ).start()
+        return False
+
+    def _install_worker(self, offer: dict[str, Any]) -> None:
+        family = updates.distro_family()
+        try:
+            package = update_install.download(offer)
+            GLib.idle_add(self._set_update_phase, "installing")
+            update_install.install(package, offer, family)
+        except update_install.UpdateError as exc:
+            GLib.idle_add(self._set_update_phase, "error", str(exc))
+        except Exception as exc:  # noqa: BLE001 - an install failure is reported, never fatal
+            GLib.idle_add(self._set_update_phase, "error", f"update failed: {exc}")
+        else:
+            GLib.idle_add(self._set_update_phase, "installed")
+
+    def restart_daemon(self) -> bool:
+        """Start the daemon again so it runs the installed code."""
+        if self._update_phase != "installed":
+            return False
+        try:
+            # Detached: systemd stops this process as part of the restart.
+            subprocess.Popen(  # noqa: S603 - fixed argv, no user input
+                ["systemctl", "--user", "restart", "tokens-go-brrr.service"],
+                start_new_session=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except OSError as exc:
+            self._set_update_phase("error", f"could not restart: {exc}")
+        return False
+
+    def skip_update(self, version: str) -> None:
+        """Stop showing this version; the next release shows again."""
+        updates.save_state({**updates.load_state(), "skipped_version": version})
+        self._publish()
+
     # -- state ---------------------------------------------------------------
 
     def state_payload(self) -> dict[str, Any]:
@@ -1015,6 +1161,8 @@ class UsageDaemon:
         payload["recentMessages"] = [dict(m) for m in self._recent_messages]
         # Additive, like the fields above: true while a warm note is being made.
         payload["live"] = {"catchingUp": bool(self._catching_up)}
+        # Additive: null unless a newer release is published for this install.
+        payload["update"] = self._visible_update()
         # The five known providers, with who is currently on the panel. The
         # Settings screen uses this to offer Show again for anyone hidden.
         enabled = set(self.config.enabled_providers)

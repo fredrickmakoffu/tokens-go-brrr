@@ -336,6 +336,7 @@ class DaemonBillboardTest(unittest.TestCase):
         stub.config = MonitorConfig(**config_values)
         stub.ledger.connection = self.con
         stub._billboard = None
+        stub._update = None
         stub._latest_message = None
         stub._recent_messages = []
         stub._publish = mock.Mock()
@@ -444,6 +445,7 @@ class DaemonBillboardTest(unittest.TestCase):
             snapshots=[],
             last_fetch=None,
             last_error=None,
+            _update=None,
             _billboard=None,
             _latest_message=None,
             _recent_messages=[],
@@ -890,6 +892,7 @@ class DaemonWarmNoteTest(WarmDaemonBase):
         stub.last_fetch = None
         stub.last_error = None
         stub._billboard = None
+        stub._update = None
         stub._latest_message = None
         stub._recent_messages = []
         self.assertEqual(stub.state_payload()["live"], {"catchingUp": False})
