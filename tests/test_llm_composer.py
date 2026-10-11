@@ -279,8 +279,9 @@ class TransportTest(unittest.TestCase):
 
     def post(self, status: int, body: str):
         connection = self.Connection(status, body)
-        with mock.patch.object(
-            llm.http.client, "HTTPSConnection", return_value=connection
+        with mock.patch(
+            "tokens_go_brrr.http_json.http.client.HTTPSConnection",
+            return_value=connection,
         ):
             result = llm._post_json(
                 "example.test",
@@ -304,7 +305,7 @@ class TransportTest(unittest.TestCase):
         self.assertEqual(method, "POST")
         self.assertEqual(path, "/v1/x")
         self.assertEqual(json.loads(body), {"a": 1})
-        self.assertEqual(headers["content-type"], "application/json")
+        self.assertEqual(headers["Content-Type"], "application/json")
 
     def test_a_rate_limit_is_its_own_error(self):
         with self.assertRaises(llm.LlmRateLimited):
@@ -321,8 +322,9 @@ class TransportTest(unittest.TestCase):
 
     def test_an_unreachable_host_is_an_error(self):
         with (
-            mock.patch.object(
-                llm.http.client, "HTTPSConnection", side_effect=OSError("no route")
+            mock.patch(
+                "tokens_go_brrr.http_json.http.client.HTTPSConnection",
+                side_effect=OSError("no route"),
             ),
             self.assertRaises(llm.LlmError),
         ):

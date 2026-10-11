@@ -53,29 +53,43 @@ class CursorProvider:
         usage = self._client.fetch()
         plan = usage.membership_type.title() if usage.membership_type else None
         resets = usage.billing_cycle_end
-        return ProviderSnapshot(
-            provider_id=self.id,
-            display_name=self.display_name,
-            icon="cursor",
-            plan=plan,
-            metrics=[
+        metrics: list[Meter] = []
+        # Drop windows the dashboard did not report — do not invent 0%.
+        if usage.auto_percent is not None:
+            metrics.append(
                 Meter(
                     "monthly",
                     "Monthly limit",
                     usage.auto_percent,
                     resets_at=resets,
                     kind="monthly",
-                ),
-                # Spend on models outside the plan, not a window that resets.
+                )
+            )
+        if usage.api_percent is not None:
+            metrics.append(
                 Meter(
                     "other",
                     "Other models",
                     usage.api_percent,
                     resets_at=resets,
                     kind="other",
-                ),
-            ],
-            primary_key="monthly",
+                )
+            )
+        if not metrics:
+            return ProviderSnapshot.error_snapshot(
+                provider_id=self.id,
+                display_name=self.display_name,
+                icon="cursor",
+                message="No usage reported",
+                dashboard_url=DASHBOARD_URL,
+            )
+        return ProviderSnapshot(
+            provider_id=self.id,
+            display_name=self.display_name,
+            icon="cursor",
+            plan=plan,
+            metrics=metrics,
+            primary_key=metrics[0].key,
             dashboard_url=DASHBOARD_URL,
             status="ok",
             error=None,

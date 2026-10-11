@@ -23,6 +23,7 @@ from . import (
     notify_engine,
 )
 from . import llm_composer as llm
+from .coerce import as_int as _as_int
 from .config import MonitorConfig, write_state
 from .dbus_service import UsageService
 from .instances import InstanceReport, scan, signature
@@ -35,14 +36,6 @@ from .state import build_payload
 # hourly at most, so this only decides how late a digest can be, not how often
 # one is sent.
 NOTIFY_CHECK_SECONDS = 300
-
-
-def _as_int(value: Any, default: int = 0) -> int:
-    """A config value as an int; a typo is not worth taking the daemon down."""
-    try:
-        return int(value)
-    except (TypeError, ValueError, OverflowError):
-        return default
 
 
 def _now_ts() -> int:

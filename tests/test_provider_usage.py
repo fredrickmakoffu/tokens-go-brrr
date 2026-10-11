@@ -1,10 +1,9 @@
 """The two usage fetches: what a reply becomes, and what a failure becomes.
 
-Both reach their endpoint over `http.client.HTTPSConnection`, so the socket is
-mocked rather than a URL opener. That keeps these honest about what changed when
-they stopped using `urlopen`: the status-to-exception mapping, and the JSON
-decoding around it. The tokens here are throwaway strings -- nothing in this file
-touches a credential.
+Both reach their endpoint through `tokens_go_brrr.http_json` (HTTPSConnection),
+so the socket is mocked rather than a URL opener. That keeps these honest about
+the status-to-exception mapping and JSON decoding. The tokens here are throwaway
+strings -- nothing in this file touches a credential.
 
 Both providers are driven through the same tests, because the contract is the
 same: read one JSON endpoint, map its failures onto ours, never invent a number.
@@ -17,7 +16,9 @@ from dataclasses import dataclass
 from typing import Any
 from unittest import mock
 
+from tokens_go_brrr.api import UsageSummary
 from tokens_go_brrr.providers import claude, opencode
+from tokens_go_brrr.providers.cursor import CursorProvider
 
 
 @dataclass(frozen=True)
@@ -141,6 +142,28 @@ class MeterReadingTest(unittest.TestCase):
         self.assertIsNone(claude._as_float(None))
         self.assertEqual(opencode._as_float(7), 7.0)
         self.assertIsNone(opencode._as_float({"percent": 1}))
+
+    def test_cursor_drops_unparsable_utilization(self):
+        summary = UsageSummary.from_dashboard(
+            {
+                "planUsage": {
+                    "autoPercentUsed": "n/a",
+                    "apiPercentUsed": 12,
+                    "includedSpend": 0,
+                    "limit": 100,
+                }
+            }
+        )
+        self.assertIsNone(summary.auto_percent)
+        self.assertEqual(summary.api_percent, 12.0)
+
+        provider = CursorProvider()
+        with mock.patch.object(provider, "available", return_value=True), mock.patch.object(
+            provider._client, "fetch", return_value=summary
+        ):
+            snap = provider.fetch()
+        self.assertEqual([m.key for m in snap.metrics], ["other"])
+        self.assertEqual(snap.metrics[0].percent, 12.0)
 
 
 class MeterResetsInTest(unittest.TestCase):

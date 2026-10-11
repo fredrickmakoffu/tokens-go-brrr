@@ -6,17 +6,11 @@ from typing import Any
 
 from gi.repository import Gio, GLib  # type: ignore  # gi has no stubs
 
+from .coerce import as_int as _as_int
+
 BUS_NAME = "io.github.fredrickmakoffu.TokensGoBrrr"
 OBJECT_PATH = "/io/github/fredrickmakoffu/TokensGoBrrr"
 INTERFACE = BUS_NAME
-
-
-def _as_int(value: Any) -> int:
-    """A value off the bus as an int; a malformed one is not worth raising for."""
-    try:
-        return int(value)
-    except (TypeError, ValueError, OverflowError):
-        return 0
 
 
 INTERFACE_XML = """

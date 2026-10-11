@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-import http.client
 import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from ..coerce import as_float_or_none as _as_float
+from ..coerce import parse_iso as _parse_iso
+from ..http_json import HttpJsonError, request_json
 from ..instances import ProcessSpec
 from .base import Meter, ProviderSnapshot
 
@@ -14,18 +16,6 @@ from .base import Meter, ProviderSnapshot
 # where https is a property of the code and there is no scheme to get wrong.
 USAGE_HOST = "opencode.ai"
 USAGE_PATH = "/zen/go/v1/usage"
-
-
-def _as_float(value: Any) -> float | None:
-    """The number the API sent, or None.
-
-    A `Meter` is a claim about how much of a limit is used, so a reading that
-    will not parse drops the window instead of becoming a zero we invented.
-    """
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
 
 
 DASHBOARD_URL = "https://opencode.ai/console"
@@ -44,16 +34,6 @@ def _auth_path() -> Path:
     data_home = os.environ.get("XDG_DATA_HOME")
     base = Path(data_home) if data_home else Path.home() / ".local" / "share"
     return base / "opencode" / "auth.json"
-
-
-def _parse_iso(value: Any) -> datetime | None:
-    if not value:
-        return None
-    try:
-        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
 class OpenCodeAuthError(RuntimeError):
@@ -168,34 +148,22 @@ class OpenCodeProvider:
 
     def _get_usage(self, api_key: str) -> dict[str, Any]:
         """Read the usage endpoint, mapping its failures onto ours."""
-        # `HTTPSConnection` rather than `urlopen`: TLS is a property of the code,
-        # with no URL to open and no scheme to get wrong. `api.py` does the same,
-        # for the same reason. Constructed outside the `try` so the `finally`
-        # always has one to close -- it does not connect here, so it cannot fail.
-        connection = http.client.HTTPSConnection(USAGE_HOST, timeout=30)
         try:
-            connection.request(
+            return request_json(
                 "GET",
+                USAGE_HOST,
                 USAGE_PATH,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                    "User-Agent": "tokens-go-brrr",
-                },
+                headers={"Authorization": f"Bearer {api_key}"},
             )
-            response = connection.getresponse()
-            status = int(response.status)
-            detail = response.read().decode("utf-8", errors="replace")
         except OSError as exc:
             raise RuntimeError(f"OpenCode usage unreachable: {exc}") from exc
-        finally:
-            connection.close()
-
-        if status in {401, 403}:
-            raise PermissionError("OpenCode key rejected — sign in again")
-        if status >= 400:
-            raise RuntimeError(f"HTTP {status} from OpenCode usage: {detail[:200]}")
-        try:
-            return json.loads(detail)
-        except ValueError as exc:
+        except HttpJsonError as exc:
+            if exc.status in {401, 403}:
+                raise PermissionError(
+                    "OpenCode key rejected — sign in again"
+                ) from exc
+            raise RuntimeError(
+                f"HTTP {exc.status} from OpenCode usage: {exc.body[:200]}"
+            ) from exc
+        except RuntimeError as exc:
             raise RuntimeError("OpenCode usage returned invalid JSON") from exc

@@ -25,6 +25,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .coerce import as_int as _as_int
+
 DEFAULT_KEEP_DAYS = 30
 
 # Outcomes an entry may carry.
@@ -57,13 +59,6 @@ def scrub(text: Any, *, limit: int = 400) -> str:
     """Free text with anything credential-shaped removed, and a length cap."""
     cleaned = _SECRETS.sub("[redacted]", str(text or ""))
     return cleaned[:limit]
-
-
-def _as_int(value: Any) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError, OverflowError):
-        return 0
 
 
 def _warn(message: str) -> None:

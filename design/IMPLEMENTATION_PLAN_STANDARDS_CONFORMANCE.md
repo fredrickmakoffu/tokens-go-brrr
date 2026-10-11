@@ -2,8 +2,10 @@
 
 **Implements:** `.cursor/rules/*`, `AGENTS.md` (coding standards established 2026-10-11)
 **Baseline commit:** `4fc490b` (Cursor rules + Ruff E/F/I in CI)
-**Status:** planned — no phase started
+**Status:** Phase 0 done; Phase 1 done — shared `coerce` / `http_json`, meter policy,
+User-Agent versioned. Next: Phase 2 (identity / docs / packaging).
 **Baseline checks:** `make test` green; `make lint` green; stdlib-only; Python ≥ 3.11
+**Tracking:** `design/STANDARDS_BACKLOG.md`
 
 This plan turns the audit into ordered, independently shippable steps. Each
 phase states what it changes, what it deliberately does **not** change, its
@@ -43,58 +45,41 @@ House style (locked):
 
 ## Phase 0 — Inventory gates (½ day)
 
+**Status:** ✅ **done.**
+
 **Why first:** later phases need a checklist that CI can grow into, and a
 single place that names every known smell so PRs can close rows.
 
-**Do**
+**Did**
 
-1. Add `design/STANDARDS_BACKLOG.md` (or a table at the bottom of this file)
-   listing each audit item with status `open | done | wontfix`.
-2. Document the **meter coercion policy** in `AGENTS.md` / `python.mdc` as one
-   sentence both humans and agents can quote:
-   - unparsable utilization → drop meter or `error_snapshot`
-   - never publish a healthy `0%` for "unknown"
-   - config defaults may coerce; meters may not invent health
-3. Note README architecture diagram as stale (fix in Phase 2).
-
-**Do not:** change runtime behaviour yet.
-
-**Verify:** backlog exists; rules sentence matches Phase 1 acceptance tests.
+1. Added `design/STANDARDS_BACKLOG.md` with status `open | done | wontfix`.
+2. Documented the **meter coercion policy** in `AGENTS.md` / `python.mdc`.
+3. README architecture diagram still stale (fix in Phase 2).
 
 ---
 
 ## Phase 1 — Shared Python toolkit (1–2 days)
 
+**Status:** ✅ **done.**
+
 **Why:** highest smell density; every provider/harvester PR currently re-copies
 `_as_int` / `_parse_iso` / `_jwt_exp` / HTTPS GET.
 
-**Do**
+**Did**
 
-1. Add `tokens_go_brrr/coerce.py` (name flexible):
-   - `as_int`, `as_float` with documented None-vs-default variants
-   - `parse_iso` (Z → +00:00)
-   - keep OverflowError in the catch set
-2. Add `tokens_go_brrr/http_json.py` (or similar): small GET/POST JSON helper
-   used by Cursor / Claude / OpenCode / `llm_composer` — `http.client` or
-   `urllib`, pick **one** and migrate callers.
-3. Move JWT expiry to `local_auth` (or `coerce`); delete the Codex duplicate.
-4. Centralise User-Agent as `tokens-go-brrr/<package_version>`.
-5. Migrate call sites module-by-module; leave behaviour identical except where
-   Phase 0 policy explicitly changes invent-zero → drop-meter.
+1. Added `tokens_go_brrr/coerce.py` (`as_int`, `as_float`, or_none variants,
+   `parse_iso`, `parse_ms_or_iso`, `jwt_exp`).
+2. Added `tokens_go_brrr/http_json.py` (`request_json` / `request_json_url`,
+   `USER_AGENT = tokens-go-brrr/<version>`). Migrated Cursor, Claude, OpenCode,
+   Codex, OAuth refresh, and `llm_composer`.
+3. Removed duplicate JWT helper from Codex; `local_auth` uses `coerce.jwt_exp`.
+4. Cursor utilization now uses `as_float_or_none` — unparsable windows are
+   dropped instead of becoming a healthy 0%.
+5. Call sites import shared helpers (thin `_as_*` aliases where churn was high).
 
-**Do not:** refactor daemon orchestration in this phase.
+**Tests:** `tests/test_coerce.py`; Cursor drop case in `tests/test_provider_usage.py`.
 
-**Tests**
-
-- `tests/test_coerce.py` (new): None, overflow, bad strings, ISO Z.
-- Provider tests that already cover meters: assert unknown/bad util does not
-  become a green 0% after migration.
-- Full suite green.
-
-**Verify:** `rg '_as_int|_as_float|_parse_iso|_jwt_exp' tokens_go_brrr` shows only
-the shared module (plus intentional thin wrappers). `make lint && make test`.
-
-**PR shape:** one PR titled roughly `refactor: shared coerce and HTTP helpers`.
+**PR shape:** `refactor: shared coerce and HTTP helpers`.
 
 ---
 

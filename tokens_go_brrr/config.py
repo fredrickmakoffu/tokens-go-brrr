@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .coerce import as_float as _as_float
+from .coerce import as_int as _as_int
 from .providers import DEFAULT_PROVIDERS
 
 CONFIG_DIR = (
@@ -20,25 +22,6 @@ DEFAULT_PRIMARY_ALERTS = [75, 90, 100]
 DEFAULT_NOTIFY_TYPES = ["informative", "fun", "actionable", "shareable"]
 # Local hours during which nothing is delivered: 22:00 through 07:00.
 DEFAULT_SILENT_HOURS = [22, 7]
-
-
-def _as_int(value: Any, default: int) -> int:
-    """A config value as an int, falling back rather than raising.
-
-    The config is a file a person can edit, so a typo in it must not stop the
-    daemon starting or make every command exit on a traceback.
-    """
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
-
-
-def _as_float(value: Any, default: float) -> float:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
 
 
 @dataclass

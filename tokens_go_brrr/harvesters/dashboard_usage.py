@@ -34,6 +34,8 @@ from typing import Any, Protocol
 
 from .. import ledger
 from ..api import AGGREGATED_PATH, POLICY_PATH, USAGE_PATH, CursorUsageClient
+from ..coerce import as_float_or_none as _as_float
+from ..coerce import as_int as _as_int
 from ..local_auth import read_local_auth
 from .base import HarvestResult
 
@@ -47,23 +49,6 @@ READER_VERSION = 1
 # Flipped once the collected evidence confirms the cost unit. Until then the
 # reader records the relationship rather than trusting it.
 COST_UNIT_CONFIRMED = False
-
-
-def _as_int(value: Any) -> int:
-    """Cursor sends token counts as strings; a malformed one becomes 0."""
-    try:
-        return int(value)
-    except (TypeError, ValueError, OverflowError):
-        return 0
-
-
-def _as_float(value: Any) -> float | None:
-    if value is None or value == "":
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError, OverflowError):
-        return None
 
 
 def _ms(value: Any) -> int | None:

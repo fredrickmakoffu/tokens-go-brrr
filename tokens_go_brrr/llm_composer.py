@@ -27,7 +27,6 @@ contents — a ledger digest or a meter reading, and nothing else.
 
 from __future__ import annotations
 
-import http.client
 import json
 import os
 import sys
@@ -38,6 +37,9 @@ from pathlib import Path
 from typing import Any
 
 from . import llm_log
+from .coerce import as_float as _as_float
+from .coerce import as_int as _as_int
+from .http_json import HttpJsonError, request_json
 from .notify_engine import SOURCE_LLM, Message, provider_label
 
 # Endpoints, one per generator we can actually authenticate to. Hosts are
@@ -66,21 +68,6 @@ OAUTH_BETA = "oauth-2025-04-20"
 MIN_SHORT_HEADROOM_FLOOR = 15
 
 SHARE_LIMIT = 200
-
-
-def _as_float(value: Any) -> float:
-    """A meter's percentage, tolerating whatever the payload held."""
-    try:
-        return float(value)
-    except (TypeError, ValueError, OverflowError):
-        return 0.0
-
-
-def _as_int(value: Any) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError, OverflowError):
-        return 0
 
 
 class LlmError(RuntimeError):
@@ -339,42 +326,24 @@ def _post_json(
     *,
     timeout: int,
 ) -> dict[str, Any]:
-    """POST over a connection that is TLS by construction.
-
-    No URL is built and no scheme is validated, because there is no scheme to
-    get wrong: `HTTPSConnection` cannot speak anything else. Certificate and
-    hostname verification are on by default from Python 3.4.3 onward, and this
-    package requires 3.11, so there is no unverified context to configure here.
-    """
-    connection: http.client.HTTPSConnection | None = None
+    """POST over a connection that is TLS by construction."""
     try:
-        connection = http.client.HTTPSConnection(host, timeout=timeout)
-        connection.request(
+        return request_json(
             "POST",
+            host,
             path,
-            body=json.dumps(payload),
-            headers={"content-type": "application/json", **headers},
+            body=payload,
+            headers=headers,
+            timeout=timeout,
         )
-        response = connection.getresponse()
-        status = _as_int(response.status)
-        body = response.read().decode("utf-8", errors="replace")
     except OSError as exc:
         raise LlmError(f"{host} unreachable: {exc}") from exc
-    finally:
-        if connection is not None:
-            connection.close()
-
-    if status == 429:
-        raise LlmRateLimited(f"{host} rate limited")
-    if status >= 400:
-        raise LlmError(f"HTTP {status} from {host}: {body[:200]}")
-    try:
-        parsed = json.loads(body)
-    except ValueError as exc:
-        raise LlmError(f"{host} returned invalid JSON") from exc
-    if not isinstance(parsed, dict):
-        raise LlmError(f"{host} returned {type(parsed).__name__}, not an object")
-    return parsed
+    except HttpJsonError as exc:
+        if exc.status == 429:
+            raise LlmRateLimited(f"{host} rate limited") from exc
+        raise LlmError(f"HTTP {exc.status} from {host}: {exc.body[:200]}") from exc
+    except RuntimeError as exc:
+        raise LlmError(str(exc)) from exc
 
 
 def _claude_token() -> str:

@@ -19,6 +19,8 @@ from pathlib import Path
 from typing import Any
 
 from .. import ledger
+from ..coerce import as_int as _as_int
+from ..coerce import as_int_or_none as _as_optional_int
 from .base import HarvestResult
 
 HARVESTER_ID = "codex_state"
@@ -40,22 +42,6 @@ UPDATED_COLUMNS = ("updated_at", "updated", "time_updated")
 
 def default_db_path() -> Path:
     return Path.home() / ".codex" / "state_5.sqlite"
-
-
-def _as_int(value: Any) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError, OverflowError):
-        return 0
-
-
-def _as_optional_int(value: Any) -> int | None:
-    if value is None or value == "":
-        return None
-    try:
-        return int(value)
-    except (TypeError, ValueError, OverflowError):
-        return None
 
 
 def _text(value: Any) -> str | None:

@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any
 
 from .. import ledger
+from ..coerce import as_int as _as_int
 from .base import HarvestResult
 
 HARVESTER_ID = "claude_jsonl"
@@ -46,13 +47,6 @@ STATE_VERSION = 1
 
 def default_root() -> Path:
     return Path.home() / ".claude" / "projects"
-
-
-def _as_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError, OverflowError):
-        return default
 
 
 def _parse_ts(value: Any) -> int | None:
