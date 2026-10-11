@@ -142,9 +142,12 @@ if (!i) {
 'started'
 JS
 
-# The one assertion that names a button by its label. AI_USAGE_LANG runs the walk
-# in another language, which is the point: French is the longest of the three.
-case "${AI_USAGE_LANG:-en}" in
+# The one assertion that names a button by its label. TOKENS_GO_BRRR_LANG (or
+# legacy AI_USAGE_LANG) runs the walk in another language — French is the
+# longest of the three catalogs.
+FORCE_LANG="${TOKENS_GO_BRRR_LANG:-${AI_USAGE_LANG:-en}}"
+export TOKENS_GO_BRRR_LANG="$FORCE_LANG"
+case "$FORCE_LANG" in
   fr) LATEST='Dernière' ;;
   pt*) LATEST='Último' ;;
   *) LATEST='Latest' ;;

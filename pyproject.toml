@@ -3,6 +3,7 @@ name = "tokens-go-brrr"
 version = "0.7.0"
 description = "GNOME Shell indicator + daemon for AI usage limits"
 readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.11"
 dependencies = []
 

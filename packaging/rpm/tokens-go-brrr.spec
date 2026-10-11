@@ -4,7 +4,8 @@ Name:           tokens-go-brrr
 Version:        %{ver}
 Release:        1%{?dist}
 Summary:        AI coding usage limits in the GNOME top bar
-License:        LicenseRef-Unspecified  # TODO: pick a license and add a LICENSE file
+# MIT for the application; Barlow fonts (when packaged) are SIL OFL-1.1.
+License:        MIT AND OFL-1.1
 URL:            https://github.com/fredrickmakoffu/cursor-spend-monitor
 Source0:        %{name}-%{version}.tar.gz
 BuildArch:      noarch

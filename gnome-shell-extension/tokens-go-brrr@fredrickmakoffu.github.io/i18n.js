@@ -19,9 +19,11 @@ const FALLBACK = "en";
 
 // The first of the user's preferred languages we have a catalog for. GLib reads
 // LANGUAGE, LC_ALL, LC_MESSAGES and LANG, so this follows the session without
-// asking the shell. AI_USAGE_LANG overrides it for screenshots and testing.
+// asking the shell. TOKENS_GO_BRRR_LANG overrides it for screenshots and
+// testing; AI_USAGE_LANG is still honoured as a legacy alias.
 export function detectLocale(names = GLib.get_language_names()) {
-    const forced = GLib.getenv("AI_USAGE_LANG");
+    const forced =
+        GLib.getenv("TOKENS_GO_BRRR_LANG") || GLib.getenv("AI_USAGE_LANG");
     const wanted = forced ? [forced] : names;
     for (const name of wanted) {
         const base = String(name).toLowerCase().split(/[_.@-]/)[0];

@@ -2,8 +2,8 @@
 
 **Implements:** `.cursor/rules/*`, `AGENTS.md` (coding standards established 2026-10-11)
 **Baseline commit:** `4fc490b` (Cursor rules + Ruff E/F/I in CI)
-**Status:** Phases 0–8 complete for in-scope work. Remaining backlog: B23 LICENSE,
-B24 `AI_USAGE_LANG` rename (out of band).
+**Status:** Phases 0–8 complete. Backlog B1–B24 closed (MIT LICENSE;
+`TOKENS_GO_BRRR_LANG` with `AI_USAGE_LANG` legacy alias).
 **Baseline checks:** `make test` / `make lint` / `make format-check` green; stdlib-only
 **Tracking:** `design/STANDARDS_BACKLOG.md`
 
