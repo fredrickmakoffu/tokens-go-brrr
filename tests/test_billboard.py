@@ -447,6 +447,7 @@ class DaemonBillboardTest(unittest.TestCase):
             _billboard=None,
             _latest_message=None,
             _recent_messages=[],
+            config=mock.Mock(enabled_providers=[]),
         )
         payload = UsageDaemon.state_payload(stub)
         self.assertIn("billboard", payload)

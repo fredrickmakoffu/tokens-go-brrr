@@ -271,6 +271,7 @@ class DaemonPayloadTest(unittest.TestCase):
             _billboard=None,
             _latest_message=None,
             _recent_messages=[],
+            config=MonitorConfig(enabled_providers=["claude", "cursor"]),
         )
 
         payload = UsageDaemon.state_payload(stub)
@@ -278,6 +279,10 @@ class DaemonPayloadTest(unittest.TestCase):
         self.assertEqual(payload["schema"], state.SCHEMA_VERSION)
         self.assertEqual(payload["tools"][0]["id"], "claude")
         self.assertIsNotNone(payload["updated_at"])
+        self.assertEqual(len(payload["catalog"]), 5)
+        by_id = {entry["id"]: entry for entry in payload["catalog"]}
+        self.assertTrue(by_id["claude"]["enabled"])
+        self.assertFalse(by_id["codex"]["enabled"])
 
     def test_daemon_payload_without_a_fetch_yet_has_no_timestamp(self):
         from tokens_go_brrr.daemon import UsageDaemon
@@ -289,6 +294,7 @@ class DaemonPayloadTest(unittest.TestCase):
             _billboard=None,
             _latest_message=None,
             _recent_messages=[],
+            config=MonitorConfig(),
         )
         self.assertIsNone(UsageDaemon.state_payload(stub)["updated_at"])
 

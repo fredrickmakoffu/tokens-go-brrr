@@ -37,6 +37,10 @@ const IFACE_XML = `
       <arg type="s" direction="in" name="provider"/>
       <arg type="s" direction="in" name="metric"/>
     </method>
+    <method name="SetProviderEnabled">
+      <arg type="s" direction="in" name="provider"/>
+      <arg type="b" direction="in" name="enabled"/>
+    </method>
     <method name="Acknowledge">
       <arg type="u" direction="in" name="id"/>
     </method>
@@ -95,6 +99,8 @@ const SCREEN_EASE = 160;
 // place rather than being stamped down all at once.
 const ROW_STAGGER = 34;
 const ROW_EASE = 210;
+const SWITCH_EASE = 140;
+const SWITCH_TRAVEL = 16; // track 36 - thumb 12 - 2 * (border 1 + pad 3) = 16
 const BAR_GROW = 420;
 
 const CAUTION_AT = 70;
@@ -1472,6 +1478,7 @@ const Indicator = GObject.registerClass(
             else if (this._screen === "earlier") this._renderEarlier(screen);
             else if (this._screen === "guide") this._renderGuide(screen);
             else if (this._screen === "about") this._renderAbout(screen);
+            else if (this._screen === "settings") this._renderSettings(screen);
             else this._renderList(screen);
             this.menu.box.add_child(screen);
 
@@ -1610,7 +1617,7 @@ const Indicator = GObject.registerClass(
                 bar.add_child(b);
             };
             for (const { label: text_, cb } of actions) add(text_, cb);
-            if (withSettings) add(tr("ui.settings"), () => this._openSettings());
+            if (withSettings) add(tr("ui.settings"), () => this._navigate("settings"));
             return bar;
         }
 
@@ -1641,6 +1648,68 @@ const Indicator = GObject.registerClass(
             );
             row.set_child(box);
             row.connect("clicked", cb);
+            return row;
+        }
+
+        // ExtSwitchRow: kicker, title and a meta line, with a square switch and
+        // an On/Off word beside it (state is never colour alone). The row owns
+        // its feedback: the thumb slides and the words change at once, without
+        // waiting for the daemon, and the next render lands on the same state.
+        _switchRow(kicker, title, metaOn, metaOff, enabled, cb) {
+            const row = new St.Button({
+                style_class: "tokens-go-brrr-list-row",
+                can_focus: true,
+                x_expand: true,
+                toggle_mode: true,
+                checked: enabled,
+            });
+            const box = new St.BoxLayout({ x_expand: true });
+            const text = new St.BoxLayout({
+                orientation: Clutter.Orientation.VERTICAL,
+                x_expand: true,
+            });
+            text.add_child(label(kicker.toUpperCase(), "tokens-go-brrr-kicker"));
+            text.add_child(wrappedLabel(title, "tokens-go-brrr-list-title"));
+            const meta = wrappedLabel("", "tokens-go-brrr-sub");
+            text.add_child(meta);
+            box.add_child(text);
+
+            const state = label("", "tokens-go-brrr-switch-state");
+            state.y_align = Clutter.ActorAlign.CENTER;
+            const track = new St.BoxLayout({
+                style_class: "tokens-go-brrr-switch",
+                y_align: Clutter.ActorAlign.CENTER,
+            });
+            const thumb = new St.Widget({
+                style_class: "tokens-go-brrr-switch-thumb",
+                y_align: Clutter.ActorAlign.CENTER,
+            });
+            track.add_child(thumb);
+            box.add_child(state);
+            box.add_child(track);
+            row.set_child(box);
+
+            const paint = (on, animate) => {
+                meta.text = on ? metaOn : metaOff;
+                state.text = on ? tr("switch.on") : tr("switch.off");
+                if (on) track.add_style_pseudo_class("checked");
+                else track.remove_style_pseudo_class("checked");
+                const x = on ? SWITCH_TRAVEL : 0;
+                if (animate && St.Settings.get().enable_animations) {
+                    thumb.ease({
+                        translation_x: x,
+                        duration: SWITCH_EASE,
+                        mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                    });
+                } else {
+                    thumb.translation_x = x;
+                }
+            };
+            paint(enabled, false);
+            row.connect("clicked", () => {
+                paint(row.checked, true);
+                cb(row.checked);
+            });
             return row;
         }
 
@@ -1946,6 +2015,13 @@ const Indicator = GObject.registerClass(
         _renderDetail(screen) {
             const tool = this.tools.find((t) => t.id === this._toolId);
             if (!tool) {
+                const hidden = (this._state?.catalog ?? []).find(
+                    (p) => p.id === this._toolId && !p.enabled,
+                );
+                if (hidden) {
+                    this._renderDetailHidden(screen, hidden);
+                    return;
+                }
                 this._screen = "list";
                 this._renderList(screen);
                 return;
@@ -2050,6 +2126,16 @@ const Indicator = GObject.registerClass(
                 screen.add_child(block);
             }
             screen.add_child(
+                this._switchRow(
+                    tr("detail.hide.kicker"),
+                    tr("detail.hide.title"),
+                    tr("detail.hide.subOn"),
+                    tr("detail.hide.subOff"),
+                    true,
+                    (on) => this._ext.setProviderEnabled(tool.id, on),
+                ),
+            );
+            screen.add_child(
                 this._footer(
                     this._footerNote ?? this._updatedText(),
                     [
@@ -2064,6 +2150,33 @@ const Indicator = GObject.registerClass(
                     ],
                     false,
                 ),
+            );
+        }
+
+        // The daemon drops a hidden provider from `tools`, so a switched-off
+        // provider has no data to paint. Stay on its screen with just the
+        // switch, so turning it back on is one tap and nothing jumps away.
+        _renderDetailHidden(screen, entry) {
+            screen.add_child(
+                this._screenHeader({
+                    kicker: tr("ui.settings"),
+                    title: entry.name || entry.id,
+                    sub: tr("detail.hide.subOff"),
+                    back: () => this._navigate("list"),
+                }),
+            );
+            screen.add_child(this._providerSwitch(entry, "detail.hide.title"));
+            screen.add_child(this._footer(this._updatedText(), [], false));
+        }
+
+        _providerSwitch(entry, titleKey) {
+            return this._switchRow(
+                tr("settings.switch.kicker"),
+                titleKey ? tr(titleKey) : entry.name || entry.id,
+                tr("settings.switch.on"),
+                tr("settings.switch.off"),
+                entry.enabled,
+                (on) => this._ext.setProviderEnabled(entry.id, on),
             );
         }
 
@@ -2161,6 +2274,31 @@ const Indicator = GObject.registerClass(
                 this._guideItem(null, tr("guide.pace.t"), tr("guide.pace.d"), "pace"),
             );
             screen.add_child(meter);
+            screen.add_child(this._footer(this._updatedText(), [], false));
+        }
+
+        _renderSettings(screen) {
+            const catalog = this._state?.catalog ?? [];
+            screen.add_child(
+                this._screenHeader({
+                    kicker: tr("ui.settings"),
+                    title: tr("settings.title"),
+                    sub: tr("settings.sub"),
+                    back: () => this._navigate("list"),
+                }),
+            );
+            const providers = this._section(tr("settings.providers"));
+            for (const entry of catalog)
+                providers.add_child(this._providerSwitch(entry, null));
+            screen.add_child(providers);
+            screen.add_child(
+                this._listRow(
+                    tr("settings.all.kicker"),
+                    tr("settings.all.title"),
+                    tr("settings.all.sub"),
+                    () => this._openConfigDocument(),
+                ),
+            );
             screen.add_child(this._footer(this._updatedText(), [], false));
         }
 
@@ -2424,7 +2562,7 @@ const Indicator = GObject.registerClass(
             }
         }
 
-        _openSettings() {
+        _openConfigDocument() {
             const file = Gio.File.new_for_path(CONFIG_PATH);
             const target = file.query_exists(null) ? file : file.get_parent();
             this._openUri(target.get_uri());
@@ -2537,6 +2675,20 @@ export default class TokensGoBrrrExtension extends Extension {
     setPrimary(providerId, metricKey) {
         if (this._proxy?.g_name_owner)
             this._proxy.SetPrimaryRemote(providerId, metricKey, () => { });
+    }
+
+    setProviderEnabled(providerId, enabled) {
+        if (!this._proxy?.g_name_owner) return;
+        if (typeof this._proxy.SetProviderEnabledRemote !== "function") {
+            Main.notify(tr("brand"), tr("settings.unavailable"));
+            return;
+        }
+        try {
+            this._proxy.SetProviderEnabledRemote(providerId, enabled, () => { });
+        } catch (e) {
+            console.error(`[tokens-go-brrr] setProviderEnabled failed: ${e.message}`);
+            Main.notify(tr("brand"), tr("settings.unavailable"));
+        }
     }
 
     // The daemon writes the LLM log to a text file and tells us where. Defensive
