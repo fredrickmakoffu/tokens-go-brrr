@@ -27,6 +27,11 @@ echo "==> Installing systemd user service..."
 mkdir -p "$HOME/.config/systemd/user"
 cp "$SERVICE_SRC" "$SERVICE_DST"
 systemctl --user daemon-reload
+# A running daemon keeps the old code in memory, so a reinstall alone is not
+# enough: restart it if it is already up.
+if systemctl --user is-active --quiet tokens-go-brrr.service; then
+  systemctl --user restart tokens-go-brrr.service
+fi
 
 echo "==> Removing leftover live-reload revisions..."
 # `live-reload.sh` stages each revision under a new uuid, which is how it makes
