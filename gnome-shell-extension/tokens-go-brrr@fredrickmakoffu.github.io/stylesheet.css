@@ -381,10 +381,12 @@
 .tokens-go-brrr-secondary-btn:hover { background-color: rgba(148, 188, 227, 0.16); border-color: #94bce3; }
 .tokens-go-brrr-secondary-btn:active { background-color: rgba(148, 188, 227, 0.26); }
 .tokens-go-brrr-secondary-btn:focus { box-shadow: 0 0 0 2px #94bce3; }
+.tokens-go-brrr-corner { width: 11px; height: 11px; }
+.tokens-go-brrr-corner-bar { background-color: rgba(245, 245, 248, 0.55); }
 .tokens-go-brrr-about-refresh { margin: 6px 18px 18px 18px; }
 
 /* Landing */
-.tokens-go-brrr-landing-actions { padding: 4px 18px 18px 18px; spacing: 8px; }
+.tokens-go-brrr-landing-actions { padding: 0 13px 13px 13px; spacing: 0; }
 .tokens-go-brrr-landing-featured { padding: 4px 18px 12px 18px; spacing: 8px; }
 .tokens-go-brrr-landing-icon { icon-size: 16px; -st-icon-style: regular; }
 
@@ -631,6 +633,9 @@
 }
 .tokens-go-brrr-light .tokens-go-brrr-secondary-btn:focus {
   box-shadow: 0 0 0 2px #5980a6;
+}
+.tokens-go-brrr-light .tokens-go-brrr-corner-bar {
+  background-color: rgba(29, 31, 32, 0.55);
 }
 .tokens-go-brrr-light .tokens-go-brrr-guide-tick {
   background-color: #1d1f20;
