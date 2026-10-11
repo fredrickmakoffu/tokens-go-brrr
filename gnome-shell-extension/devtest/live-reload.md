@@ -73,6 +73,12 @@ Looking Glass evaluates its input as the body of an async function with `Main`, 
   has handed out in `.tokens-go-brrr-revision` beside the extensions, and the reset script leaves that
   marker alone.
 
+- **`live-reload.sh` restores the real uuid when it exits.** It stays running after printing the
+  command; press Enter or Ctrl+C (or close the terminal) when done and it runs the reset script,
+  so a throwaway `tokens-go-brrr-rN@` uuid is never left in `enabled-extensions` for the next login.
+  The indicator disappears at that point (see below). Re-running it hands over to the new
+  instance without restoring. `--no-wait` skips all this. A crash or power loss can still skip
+  the restore; `live-reload-reset.sh` fixes that by hand.
 - **The reset script disables the running copy immediately.** It rewrites
   `enabled-extensions`, which the shell acts on at once, so the indicator disappears rather than
   reverting to the canonical extension: that one is only picked up at the next login. Running
