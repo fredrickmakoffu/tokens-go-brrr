@@ -14,8 +14,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from cursor_spend_monitor import ledger
-from cursor_spend_monitor.harvesters.claude_transcripts import ClaudeTranscriptHarvester
+from tokens_go_brrr import ledger
+from tokens_go_brrr.harvesters.claude_transcripts import ClaudeTranscriptHarvester
 
 ROOT_SLUG = "-home-u-alpha"
 

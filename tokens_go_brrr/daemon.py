@@ -133,6 +133,7 @@ class UsageDaemon:
             on_acknowledge=self.acknowledge,
             on_llm_log=self.llm_log_payload,
             on_llm_log_clear=self.llm_log_clear,
+            on_llm_log_report=self.llm_log_report,
             on_quit=self.quit,
             on_name_lost=self._name_lost,
         )
@@ -230,7 +231,7 @@ class UsageDaemon:
             return
         self._cold_running = True
         threading.Thread(
-            target=self._cold_worker, name="ai-usage-cold", daemon=True
+            target=self._cold_worker, name="tokens-go-brrr-cold", daemon=True
         ).start()
 
     def _cold_worker(self) -> None:
@@ -290,7 +291,7 @@ class UsageDaemon:
         threading.Thread(
             target=self._warm_worker,
             args=(harvest_here,),
-            name="ai-usage-warm",
+            name="tokens-go-brrr-warm",
             daemon=True,
         ).start()
 
@@ -422,7 +423,7 @@ class UsageDaemon:
                 return False
         self._polling = True
         threading.Thread(
-            target=self._poll_worker, name="ai-usage-poll", daemon=True
+            target=self._poll_worker, name="tokens-go-brrr-poll", daemon=True
         ).start()
         return False
 
@@ -584,7 +585,7 @@ class UsageDaemon:
             return True
         self._harvesting = True
         threading.Thread(
-            target=self._harvest_worker, name="ai-usage-harvest", daemon=True
+            target=self._harvest_worker, name="tokens-go-brrr-harvest", daemon=True
         ).start()
         return True
 
@@ -677,7 +678,7 @@ class UsageDaemon:
         threading.Thread(
             target=self._digest_worker,
             args=(slot,),
-            name="ai-usage-digest",
+            name="tokens-go-brrr-digest",
             daemon=True,
         ).start()
         return True
@@ -792,6 +793,14 @@ class UsageDaemon:
         """One day of the LLM log for the Settings screen; newest day if none."""
         return self.llm_log.payload(day or None)
 
+    def llm_log_report(self) -> str:
+        """Write the whole log as a text document and return where it is."""
+        try:
+            return str(self.llm_log.write_report())
+        except OSError as exc:
+            print(f"LLM log: could not write the report: {exc}", file=sys.stderr)
+            return ""
+
     def llm_log_clear(self) -> None:
         self.llm_log.clear()
 
@@ -845,7 +854,7 @@ class UsageDaemon:
         if self.ledger.connection is None:
             return
         threading.Thread(
-            target=self._events_worker, name="ai-usage-event", daemon=True
+            target=self._events_worker, name="tokens-go-brrr-event", daemon=True
         ).start()
 
     def _events_worker(self) -> None:
@@ -1050,7 +1059,7 @@ def run_daemon(config: MonitorConfig) -> int:
     if not any(p.available() for p in providers):
         print(
             "No provider credentials found.\n"
-            "Open Cursor and sign in, then run: cursor-spend-monitor setup",
+            "Open Cursor and sign in, then run: tokens-go-brrr setup",
             file=sys.stderr,
         )
         return 1

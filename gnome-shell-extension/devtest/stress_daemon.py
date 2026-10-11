@@ -3,7 +3,7 @@ import sys
 sys.path.insert(0, sys.argv[1])
 from gi.repository import GLib  # type: ignore  # gi has no stubs
 
-from cursor_spend_monitor.dbus_service import UsageService
+from tokens_go_brrr.dbus_service import UsageService
 
 # worst case: longest labels this codebase can produce, all at three digits
 tools = [
@@ -100,7 +100,7 @@ LONG_QUOTE = (
     "Last month: 214 sessions, 8.4M tokens across 11 projects, up 22% on the "
     "month before. OpenCode Go carried 71% of the tokens for $4.10, Claude "
     "Code 26% for $20, and Cursor the remaining 3%. Your top project by tokens "
-    "was cursor-spend-monitor at 1.1M, and 87% of all input tokens were cache "
+    "was tokens-go-brrr at 1.1M, and 87% of all input tokens were cache "
     "reads."
 )
 BILLBOARD = {

@@ -20,9 +20,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = ROOT / "pyproject.toml"
-INIT = ROOT / "cursor_spend_monitor" / "__init__.py"
+INIT = ROOT / "tokens_go_brrr" / "__init__.py"
 METADATA = (
-    ROOT / "gnome-shell-extension" / "ai-usage@fredrickmakoffu.github.io" / "metadata.json"
+    ROOT / "gnome-shell-extension" / "tokens-go-brrr@fredrickmakoffu.github.io" / "metadata.json"
 )
 
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")

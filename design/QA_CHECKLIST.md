@@ -20,7 +20,7 @@ until it is reinstalled:
 
 ```bash
 ./install.sh
-systemctl --user restart cursor-spend-monitor.service   # NEVER with sudo
+systemctl --user restart tokens-go-brrr.service   # NEVER with sudo
 ```
 
 `systemctl --user` acts on your own user manager; `sudo` makes the caller root
@@ -31,7 +31,7 @@ The extension **does** need a reload for the landing page: `extension.js` and
 reload the running one with `gnome-shell-extension/devtest/live-reload.sh` —
 `design/UI_TEST_GUIDE.md` §0 has the paste step.
 
-**Evidence the new code is live:** `~/.local/share/cursor-spend-monitor/usage.db`
+**Evidence the new code is live:** `~/.local/share/tokens-go-brrr/usage.db`
 appears within about a minute of the restart.
 
 ---
@@ -66,8 +66,8 @@ The last row is the one worth keeping an eye on: it exists because
 ## B. Ledger pipeline (manual)
 
 ```bash
-cursor-spend-monitor harvest
-cursor-spend-monitor harvest      # second run
+tokens-go-brrr harvest
+tokens-go-brrr harvest      # second run
 ```
 
 Expected first run, on this machine:
@@ -84,9 +84,9 @@ The **second run must report `no change` for every reader.** That single line is
 the whole accuracy story: it means writes are keyed and re-running is free.
 
 ```bash
-cursor-spend-monitor report
-cursor-spend-monitor report --week --by model
-cursor-spend-monitor report --checks
+tokens-go-brrr report
+tokens-go-brrr report --week --by model
+tokens-go-brrr report --checks
 ```
 
 Spot-check the totals against the Cursor and Claude dashboards in a browser.
@@ -102,11 +102,11 @@ records the disagreement instead of guessing.
 ## C. Notifications (manual)
 
 ```bash
-cursor-spend-monitor quote --generate --slot monthly
-cursor-spend-monitor quote
-cursor-spend-monitor quote --generate --slot daily
-cursor-spend-monitor quote --tweet --no-copy
-cursor-spend-monitor quote --json
+tokens-go-brrr quote --generate --slot monthly
+tokens-go-brrr quote
+tokens-go-brrr quote --generate --slot daily
+tokens-go-brrr quote --tweet --no-copy
+tokens-go-brrr quote --json
 ```
 
 - `--generate --slot monthly` should produce a sentence with **your** numbers and
@@ -129,7 +129,7 @@ Then let the daemon run and confirm delivery:
 Verify the daemon published a quote for the panel:
 
 ```bash
-python3 -c "import json,os;d=json.load(open('/run/user/%d/cursor-spend-monitor/state.json'%os.getuid()));print(d.get('billboard'))"
+python3 -c "import json,os;d=json.load(open('/run/user/%d/tokens-go-brrr/state.json'%os.getuid()));print(d.get('billboard'))"
 ```
 
 ---
@@ -139,7 +139,7 @@ python3 -c "import json,os;d=json.load(open('/run/user/%d/cursor-spend-monitor/s
 This is the check that caught a 6-hour CPU burn.
 
 ```bash
-systemctl --user status cursor-spend-monitor.service --no-pager | grep -E "CPU|Memory"
+systemctl --user status tokens-go-brrr.service --no-pager | grep -E "CPU|Memory"
 ```
 
 Run it, wait a minute, run it again. **`CPU:` must creep, not race.** The broken
@@ -150,8 +150,8 @@ Also confirm it survives a hostile store:
 
 ```bash
 # with the OpenCode TUI running
-cursor-spend-monitor harvest        # expect "skipped", not a traceback
-journalctl --user -u cursor-spend-monitor.service -n 50 --no-pager
+tokens-go-brrr harvest        # expect "skipped", not a traceback
+journalctl --user -u tokens-go-brrr.service -n 50 --no-pager
 ```
 
 No repeated errors, and the daemon must still be `active`.
@@ -163,13 +163,13 @@ No repeated errors, and the daemon must still be `active`.
 A repeat install must not accumulate copies.
 
 ```bash
-ls ~/.local/share/gnome-shell/extensions/ | grep ai-usage
-gnome-extensions list | grep ai-usage
+ls ~/.local/share/gnome-shell/extensions/ | grep tokens-go-brrr
+gnome-extensions list | grep tokens-go-brrr
 gsettings get org.gnome.shell enabled-extensions
 ```
 
-- On disk: **exactly one** `ai-usage@fredrickmakoffu.github.io`, and no
-  `ai-usage-rN@` leftovers.
+- On disk: **exactly one** `tokens-go-brrr@fredrickmakoffu.github.io`, and no
+  `tokens-go-brrr-rN@` leftovers.
 - Enabled: exactly one entry for this extension.
 - `gnome-extensions list` may still show stale revisions until you log out —
   the Shell only scans at startup. That is cosmetic.
@@ -218,7 +218,7 @@ another `./install.sh` collapses it back to one.
 For any of these, capture:
 
 ```bash
-cursor-spend-monitor report --checks
-journalctl --user -u cursor-spend-monitor.service -n 200 --no-pager
-python3 -c "import json,os;print(json.load(open('/run/user/%d/cursor-spend-monitor/state.json'%os.getuid()))['version'])"
+tokens-go-brrr report --checks
+journalctl --user -u tokens-go-brrr.service -n 200 --no-pager
+python3 -c "import json,os;print(json.load(open('/run/user/%d/tokens-go-brrr/state.json'%os.getuid()))['version'])"
 ```

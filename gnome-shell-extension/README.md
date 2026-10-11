@@ -1,14 +1,14 @@
 # tokens-go-brrr — GNOME Shell extension
 
-UUID: `ai-usage@fredrickmakoffu.github.io`
+UUID: `tokens-go-brrr@fredrickmakoffu.github.io`
 
 A status dot in the top bar and a popover that mirrors `design/menu-bar-concept.html`
 one to one. The extension is presentation only: all data arrives from the
-`cursor-spend-monitor` daemon over the session bus.
+`tokens-go-brrr` daemon over the session bus.
 
 ## Interface
 
-`io.github.fredrickmakoffu.AIUsage` at `/io/github/fredrickmakoffu/AIUsage`:
+`io.github.fredrickmakoffu.TokensGoBrrr` at `/io/github/fredrickmakoffu/TokensGoBrrr`:
 
 | Member | Kind | Meaning |
 |--------|------|---------|
@@ -43,8 +43,8 @@ telling you to start the service.
 ## Install
 
 ```bash
-cp -r ai-usage@fredrickmakoffu.github.io ~/.local/share/gnome-shell/extensions/
-gnome-extensions enable ai-usage@fredrickmakoffu.github.io
+cp -r tokens-go-brrr@fredrickmakoffu.github.io ~/.local/share/gnome-shell/extensions/
+gnome-extensions enable tokens-go-brrr@fredrickmakoffu.github.io
 ```
 
 Log out and back in (Wayland) or restart the shell with Alt+F2 r (X11).
@@ -231,7 +231,7 @@ no preference, and GNOME's own panel and popups stay dark in either mode.
 
 St's CSS has no `var()`, so the dark values stay as written and the light ones
 are a generated block at the end of `stylesheet.css`, scoped under
-`.ai-usage-light`. Edit a dark rule, then run `python3 scripts/gen_light_css.py`
+`.tokens-go-brrr-light`. Edit a dark rule, then run `python3 scripts/gen_light_css.py`
 to bring the light block into step. Colours set from JS (status colours, number
 colour) live in `PALETTES` in `extension.js`. The top bar chips always use the
 dark palette because the panel is always dark.
@@ -274,7 +274,7 @@ The popover is set in **Barlow**, with **Barlow Condensed** for titles, kickers,
 tags, figures and buttons, as the AI Usage design system specifies. Neither ships
 with Fedora or Ubuntu, so the extension bundles the TTFs in `fonts/` (SIL Open
 Font License, `fonts/OFL.txt`) and `install.sh` (or `install-fonts.sh` on its own) copies them to
-`~/.local/share/fonts/ai-usage/` and refreshes the font cache. A shell extension
+`~/.local/share/fonts/tokens-go-brrr/` and refreshes the font cache. A shell extension
 cannot register fonts itself — St resolves `font-family` through fontconfig — so
 installing the extension by hand means copying `fonts/*.ttf` there too. Without
 them fontconfig falls back to the shell's sans and nothing breaks; the popover
@@ -307,7 +307,7 @@ Two consequences worth keeping. Secondary text is `#9a9ba0`, not the mockup's
 was carrying the reset copy — the line most worth reading. And the meter bar is
 an 8px slab rather than a 3px hairline, because the fill answers the question the
 menu exists to answer and should not be something you look for. The slab geometry
-is borrowed from `ai-usagebar`; the colour is not. That extension fills with
+is borrowed from `tokens-go-brrrbar`; the colour is not. That extension fills with
 `-st-accent-color`, which would say the same thing at 20% as at 95%, and the
 green / amber / red distinction is what the status dot, the Guide screen and the
 alert thresholds are all built on.

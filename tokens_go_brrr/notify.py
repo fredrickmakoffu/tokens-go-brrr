@@ -18,7 +18,7 @@ ALERT_STATE_FILE = CONFIG_DIR / "alert-state.json"
 
 def init_notifications() -> None:
     if not Notify.is_initted():
-        Notify.init("cursor-spend-monitor")
+        Notify.init("tokens-go-brrr")
 
 
 def send(title: str, body: str, *, urgency: str = "normal") -> None:

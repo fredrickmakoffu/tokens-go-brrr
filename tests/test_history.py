@@ -9,8 +9,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
-from cursor_spend_monitor import burn, history
-from cursor_spend_monitor.providers.base import Meter, ProviderSnapshot
+from tokens_go_brrr import burn, history
+from tokens_go_brrr.providers.base import Meter, ProviderSnapshot
 
 NOW = datetime(2026, 9, 17, 12, 0, tzinfo=timezone.utc)
 RESET = NOW + timedelta(hours=3)
@@ -217,11 +217,11 @@ class DaemonForecastTest(unittest.TestCase):
     """The daemon attaches ETAs, and withholds ones the window makes moot."""
 
     def _daemon(self, samples, *, now=NOW):
-        from cursor_spend_monitor.daemon import UsageDaemon
+        from tokens_go_brrr.daemon import UsageDaemon
 
         stub = mock.Mock()
         stub.history.window_samples.return_value = samples
-        with mock.patch("cursor_spend_monitor.daemon.datetime") as clock:
+        with mock.patch("tokens_go_brrr.daemon.datetime") as clock:
             clock.now.return_value = now
             meter = Meter("five_hour", "5-hour limit", 40.0, resets_at=RESET)
             return UsageDaemon._forecast(stub, "claude", meter)
@@ -238,7 +238,7 @@ class DaemonForecastTest(unittest.TestCase):
         self.assertIsNone(self._daemon(samples))
 
     def test_a_meter_with_no_reset_still_gets_an_eta(self):
-        from cursor_spend_monitor.daemon import UsageDaemon
+        from tokens_go_brrr.daemon import UsageDaemon
 
         stub = mock.Mock()
         stub.history.window_samples.return_value = series(

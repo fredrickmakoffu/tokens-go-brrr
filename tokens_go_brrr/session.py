@@ -31,5 +31,5 @@ def run_setup() -> int:
     config.save()
     print()
     print(f"Config: {CONFIG_DIR / 'config.json'}")
-    print("Start daemon: systemctl --user restart cursor-spend-monitor.service")
+    print("Start daemon: systemctl --user restart tokens-go-brrr.service")
     return 0

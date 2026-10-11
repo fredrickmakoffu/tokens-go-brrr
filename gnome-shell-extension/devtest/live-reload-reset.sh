@@ -3,7 +3,7 @@
 # The switch itself takes effect at the next login; the deletions are immediate.
 set -euo pipefail
 
-UUID="ai-usage@fredrickmakoffu.github.io"
+UUID="tokens-go-brrr@fredrickmakoffu.github.io"
 EXT_HOME="$HOME/.local/share/gnome-shell/extensions"
 
 python3 - "$UUID" <<'PY'
@@ -12,14 +12,14 @@ uuid = sys.argv[1]
 enabled = ast.literal_eval(subprocess.run(
     ['gsettings', 'get', 'org.gnome.shell', 'enabled-extensions'],
     capture_output=True, text=True, check=True).stdout.strip())
-kept = [u for u in enabled if not re.match(r'ai-usage(-r\d+)?@', u)]
+kept = [u for u in enabled if not re.match(r'tokens-go-brrr(-r\d+)?@', u)]
 kept.append(uuid)
 subprocess.run(['gsettings', 'set', 'org.gnome.shell', 'enabled-extensions', repr(kept)], check=True)
 print('enabled-extensions ->', kept)
 PY
 
 removed=0
-for dir in "$EXT_HOME"/ai-usage-r*@*; do
+for dir in "$EXT_HOME"/tokens-go-brrr-r*@*; do
   [ -e "$dir" ] || continue
   rm -rf "$dir"
   echo "removed $(basename "$dir")"

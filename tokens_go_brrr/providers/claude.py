@@ -177,7 +177,7 @@ class ClaudeProvider:
                     "Authorization": f"Bearer {access_token}",
                     "Content-Type": "application/json",
                     "anthropic-beta": OAUTH_BETA,
-                    "User-Agent": "cursor-spend-monitor",
+                    "User-Agent": "tokens-go-brrr",
                 },
             )
             response = connection.getresponse()

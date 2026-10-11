@@ -7,8 +7,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SRC="$ROOT/gnome-shell-extension/ai-usage@fredrickmakoffu.github.io/fonts"
-DST="$HOME/.local/share/fonts/ai-usage"
+SRC="$ROOT/gnome-shell-extension/tokens-go-brrr@fredrickmakoffu.github.io/fonts"
+DST="$HOME/.local/share/fonts/tokens-go-brrr"
 
 mkdir -p "$DST"
 cp "$SRC"/*.ttf "$DST"/

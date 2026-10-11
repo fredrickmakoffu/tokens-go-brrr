@@ -14,9 +14,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import cursor_spend_monitor.llm_composer as llm
-from cursor_spend_monitor.notify_engine import ACTIONABLE, INFORMATIVE, Message
-from cursor_spend_monitor.providers.base import Meter, ProviderSnapshot
+import tokens_go_brrr.llm_composer as llm
+from tokens_go_brrr.notify_engine import ACTIONABLE, INFORMATIVE, Message
+from tokens_go_brrr.providers.base import Meter, ProviderSnapshot
 
 
 def snap(
@@ -388,7 +388,7 @@ class RewriteTest(unittest.TestCase):
         self.assertEqual(rewritten.meta["source"], "llm")
 
     def test_a_reworded_warm_note_is_shown_as_written_not_re_rendered(self):
-        from cursor_spend_monitor import notify_engine as ne
+        from tokens_go_brrr import notify_engine as ne
 
         warm = Message(
             kind=INFORMATIVE,
@@ -473,7 +473,7 @@ class DaemonComposeTest(unittest.TestCase):
     def setUp(self) -> None:
         import tempfile as _tempfile
 
-        from cursor_spend_monitor import ledger as _ledger
+        from tokens_go_brrr import ledger as _ledger
 
         self._dir = _tempfile.TemporaryDirectory()
         self.addCleanup(self._dir.cleanup)
@@ -484,8 +484,8 @@ class DaemonComposeTest(unittest.TestCase):
     def daemon(self, **values):
         import types as _types
 
-        from cursor_spend_monitor.config import MonitorConfig
-        from cursor_spend_monitor.daemon import UsageDaemon
+        from tokens_go_brrr.config import MonitorConfig
+        from tokens_go_brrr.daemon import UsageDaemon
 
         stub = mock.Mock()
         stub.config = MonitorConfig(**values)
@@ -500,7 +500,7 @@ class DaemonComposeTest(unittest.TestCase):
         return Message(kind=INFORMATIVE, key="weekly:1", body="template body")
 
     def compose(self, stub):
-        from cursor_spend_monitor.daemon import UsageDaemon
+        from tokens_go_brrr.daemon import UsageDaemon
 
         return UsageDaemon._compose(stub, self.con, [self.message()])
 
@@ -539,7 +539,7 @@ class DaemonComposeTest(unittest.TestCase):
 
     def test_a_skipped_rewrite_is_logged_with_its_origin(self):
         stub = self.daemon(llm_notifications=True)
-        from cursor_spend_monitor.daemon import UsageDaemon
+        from tokens_go_brrr.daemon import UsageDaemon
 
         with mock.patch.object(llm, "choose", return_value=None):
             UsageDaemon._compose(
@@ -553,7 +553,7 @@ class DaemonComposeTest(unittest.TestCase):
 
     def test_a_rewrite_is_given_the_log_and_its_origin(self):
         stub = self.daemon(llm_notifications=True)
-        from cursor_spend_monitor.daemon import UsageDaemon
+        from tokens_go_brrr.daemon import UsageDaemon
 
         with (
             mock.patch.object(llm, "choose", return_value=self.generator()),

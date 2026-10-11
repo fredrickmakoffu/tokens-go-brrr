@@ -35,7 +35,7 @@ CREATE INDEX IF NOT EXISTS samples_lookup
 def default_path() -> Path:
     data_home = os.environ.get("XDG_DATA_HOME")
     base = Path(data_home) if data_home else Path.home() / ".local" / "share"
-    return base / "cursor-spend-monitor" / "history.db"
+    return base / "tokens-go-brrr" / "history.db"
 
 
 def connect(path: Path | None = None) -> sqlite3.Connection:

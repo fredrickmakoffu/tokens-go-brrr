@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from cursor_spend_monitor.llm_budget import DAY, HOUR, OVER_DAY, OVER_HOUR, CallBudget
+from tokens_go_brrr.llm_budget import DAY, HOUR, OVER_DAY, OVER_HOUR, CallBudget
 
 
 class Clock:

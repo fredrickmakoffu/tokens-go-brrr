@@ -1,6 +1,6 @@
 #!/bin/sh
 set -e
-if [ "$1" = configure ] && [ -d /usr/share/fonts/ai-usage ]; then
-  fc-cache -f /usr/share/fonts/ai-usage >/dev/null 2>&1 || true
+if [ "$1" = configure ] && [ -d /usr/share/fonts/tokens-go-brrr ]; then
+  fc-cache -f /usr/share/fonts/tokens-go-brrr >/dev/null 2>&1 || true
 fi
 exit 0

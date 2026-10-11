@@ -16,7 +16,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-EXT = ROOT / "gnome-shell-extension" / "ai-usage@fredrickmakoffu.github.io"
+EXT = ROOT / "gnome-shell-extension" / "tokens-go-brrr@fredrickmakoffu.github.io"
 SITE = ROOT / "site"
 
 # Strings that are the same in every language on purpose (brand and brand-like).

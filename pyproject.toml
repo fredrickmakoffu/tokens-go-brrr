@@ -1,5 +1,5 @@
 [project]
-name = "cursor-spend-monitor"
+name = "tokens-go-brrr"
 version = "0.7.0"
 description = "GNOME Shell indicator + daemon for AI usage limits"
 readme = "README.md"
@@ -7,7 +7,7 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.scripts]
-cursor-spend-monitor = "cursor_spend_monitor.__main__:main"
+tokens-go-brrr = "tokens_go_brrr.__main__:main"
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -15,5 +15,5 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["cursor_spend_monitor*"]
+include = ["tokens_go_brrr*"]
 
