@@ -15,10 +15,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
 
-from cursor_spend_monitor import ledger
-from cursor_spend_monitor.harvesters.pi_sessions import PiSessionHarvester
-from cursor_spend_monitor.instances import Instance, InstanceReport
-from cursor_spend_monitor.providers.pi_backend import Backend
+from tokens_go_brrr import ledger
+from tokens_go_brrr.harvesters.pi_sessions import PiSessionHarvester
+from tokens_go_brrr.instances import Instance, InstanceReport
+from tokens_go_brrr.providers.pi_backend import Backend
 
 STARTED = datetime(2026, 10, 1, 10, tzinfo=timezone.utc)
 
@@ -52,7 +52,7 @@ class PiCase(unittest.TestCase):
         self.addCleanup(self.con.close)
         self.reader = PiSessionHarvester()
         installed = mock.patch(
-            "cursor_spend_monitor.harvesters.pi_sessions.pi_backend.installed",
+            "tokens_go_brrr.harvesters.pi_sessions.pi_backend.installed",
             return_value=True,
         )
         installed.start()
@@ -61,7 +61,7 @@ class PiCase(unittest.TestCase):
     def with_sessions(self, *instances: Instance):
         report = InstanceReport(active=list(instances), suspended=[])
         return mock.patch(
-            "cursor_spend_monitor.harvesters.pi_sessions.scan",
+            "tokens_go_brrr.harvesters.pi_sessions.scan",
             return_value={"pi": report},
         )
 
@@ -129,7 +129,7 @@ class LifecycleTest(PiCase):
 class AvailabilityTest(PiCase):
     def test_no_pi_install_is_a_note(self):
         with mock.patch(
-            "cursor_spend_monitor.harvesters.pi_sessions.pi_backend.installed",
+            "tokens_go_brrr.harvesters.pi_sessions.pi_backend.installed",
             return_value=False,
         ):
             self.assertFalse(self.reader.available())
@@ -139,7 +139,7 @@ class AvailabilityTest(PiCase):
 
     def test_a_scan_failure_is_reported_not_raised(self):
         with mock.patch(
-            "cursor_spend_monitor.harvesters.pi_sessions.scan",
+            "tokens_go_brrr.harvesters.pi_sessions.scan",
             side_effect=OSError("proc went away"),
         ):
             result = self.reader.harvest(self.con)

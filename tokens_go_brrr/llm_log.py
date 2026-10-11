@@ -50,7 +50,7 @@ def default_dir() -> Path:
     """Next to `usage.db`, which is where the rest of the user's data lives."""
     data_home = os.environ.get("XDG_DATA_HOME")
     base = Path(data_home) if data_home else Path.home() / ".local" / "share"
-    return base / "cursor-spend-monitor" / "llm-calls"
+    return base / "tokens-go-brrr" / "llm-calls"
 
 
 def scrub(text: Any, *, limit: int = 400) -> str:
@@ -180,6 +180,43 @@ class LlmLog:
                     _warn(f"could not delete {day}: {exc}")
         return removed
 
+    def report(self) -> str:
+        """Every kept day as one readable document, newest day first."""
+        days = self.days()
+        out = [
+            "LLM ACTIVITY LOG",
+            "Every call this app has made to a language model.",
+            f"Kept for {self.keep_days} days. Raw files: {self.directory}",
+            f"Generated {datetime.now().astimezone().isoformat(timespec='seconds')}",
+        ]
+        if not self.enabled:
+            out += ["", "The log is switched off (llm_log_days is 0 in the config)."]
+        elif not days:
+            out += ["", "No model calls have been made yet."]
+        for day in days:
+            s = self.summary(day)
+            out += [
+                "",
+                "=" * 72,
+                f"{day}   {s['calls']} calls, {s['failures']} failed, "
+                f"{s['skipped']} skipped, {_fmt_tokens(s['tokens_in'])} tokens in, "
+                f"{_fmt_tokens(s['tokens_out'])} out",
+                "=" * 72,
+            ]
+            for entry in reversed(self.read(day)):
+                out += ["", render_entry(entry)]
+        return "\n".join(out) + "\n"
+
+    def write_report(self, path: Path | None = None) -> Path:
+        """Write `report()` to a text file (private) and return its path."""
+        target = path or self.directory.parent / "llm-activity.txt"
+        target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        with self._lock:
+            fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(self.report())
+        return target
+
     def payload(self, day: str | None = None) -> dict[str, Any]:
         """Everything the Settings screen needs for one day, as JSON-able data."""
         days = self.days()
@@ -193,6 +230,42 @@ class LlmLog:
             "summary": self.summary(chosen) if chosen else None,
             "entries": self.read(chosen) if chosen else [],
         }
+
+
+def _fmt_tokens(value: Any) -> str:
+    return f"{_as_int(value):,}"
+
+
+def _indent(text: Any, pad: str = "      ") -> str:
+    return "\n".join(pad + line for line in str(text).splitlines() or [""])
+
+
+def render_entry(entry: dict[str, Any]) -> str:
+    """One call as a block of plain text: who, which model, what it cost."""
+    time = str(entry.get("ts", ""))[11:19] or "--:--:--"
+    outcome = str(entry.get("outcome", "?"))
+    head = f"{time}  {outcome.upper()}"
+    if entry.get("trigger"):
+        head += f"  (trigger: {entry['trigger']})"
+    lines = [head]
+    fields = [
+        ("Provider", entry.get("provider")),
+        ("Model", entry.get("model")),
+        ("Reason", entry.get("reason")),
+        ("Message", entry.get("message_kind")),
+        ("Message key", entry.get("message_key")),
+    ]
+    if entry.get("latency_ms") is not None:
+        fields.append(("Latency", f"{_as_int(entry['latency_ms']):,} ms"))
+    if entry.get("tokens_in") is not None:
+        fields.append(("Tokens in", _fmt_tokens(entry["tokens_in"])))
+    if entry.get("tokens_out") is not None:
+        fields.append(("Tokens out", _fmt_tokens(entry["tokens_out"])))
+    lines += [f"    {name + ':':<13}{value}" for name, value in fields if value]
+    for title, key in (("Prompt", "prompt"), ("Reply", "reply"), ("Error", "error")):
+        if entry.get(key):
+            lines += [f"    {title}:", _indent(entry[key])]
+    return "\n".join(lines)
 
 
 __all__ = [

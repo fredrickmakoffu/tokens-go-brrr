@@ -335,7 +335,7 @@ Example assembled context:
 ### 6.4 Delivery
 
 - Desktop notification (existing `notify.send`, cooldown-respecting).
-- Terminal: `cursor-spend-monitor quote` — prints the latest generated message;
+- Terminal: `tokens-go-brrr quote` — prints the latest generated message;
   ideal for shell prompts/status lines.
 - Panel billboard (§9): the popover occasionally shows the message instead of
   the provider list.
@@ -371,7 +371,7 @@ mix: scheduled digests (informative) + a rotating "fun fact" + event-driven
 | --- | --- | --- |
 | Weekly digest | Σ sessions/tokens/cost by provider + top project + top model, trailing 7 days | *"Last week: 38 AI sessions, 1.9M tokens. OpenCode carried 71% (deepseek-v4-flash); Claude 26%. Top project: opencode — 14 sessions, 2h 40m."* |
 | Monthly digest | same over calendar month + MoM Δ | *"October: 154 sessions, 8.4M tokens across 11 projects. Up 22% vs September. Most used: OpenCode Go ($4.10); least: Codex ($0.12, 3 sessions)."* |
-| Project spotlight | top project by tokens/$ with its split | *"cursor-spend-monitor ate 1.1M tokens this week — 87% Claude opus, 13% deepseek. It is your most expensive project right now."* |
+| Project spotlight | top project by tokens/$ with its split | *"tokens-go-brrr ate 1.1M tokens this week — 87% Claude opus, 13% deepseek. It is your most expensive project right now."* |
 | Session shape reality-check | duration buckets + hour heatmap | *"Only 6 of your 41 sessions this week ran 8–5 on weekdays. 22 were evening bursts under 15m — that is where most cache misses are."* |
 | Model split inside provider | GROUP BY provider, model | *"On OpenCode you use deepseek-v4-flash 9× more than deepseek-v4-pro — but v4-pro is 41% of spend."* |
 

@@ -39,7 +39,7 @@ git tag v0.6.0 && git push origin v0.6.0
 ## Version
 
 `pyproject.toml` is the source of truth. `scripts/bump_version.py` also updates
-`cursor_spend_monitor/__init__.py` and the extension's `metadata.json`
+`tokens_go_brrr/__init__.py` and the extension's `metadata.json`
 (`version-name`). CI fails if they disagree, and the release job fails if the tag
 differs from the code.
 
@@ -59,10 +59,10 @@ builder both call it so the packages cannot drift.
 
 | Installed to | What |
 |---|---|
-| `/usr/bin/cursor-spend-monitor`, Python site/dist-packages | daemon + CLI |
+| `/usr/bin/tokens-go-brrr`, Python site/dist-packages | daemon + CLI |
 | `/usr/share/gnome-shell/extensions/<uuid>/` | GNOME extension |
-| `/usr/lib/systemd/user/cursor-spend-monitor.service` | user unit |
-| `/usr/share/fonts/ai-usage/` | Barlow (SIL OFL) |
+| `/usr/lib/systemd/user/tokens-go-brrr.service` | user unit |
+| `/usr/share/fonts/tokens-go-brrr/` | Barlow (SIL OFL) |
 
 Targets: the RPM is built on the current `fedora:latest` and pins that release's
 Python ABI, so build one per Fedora release you support. The DEB is built on Debian

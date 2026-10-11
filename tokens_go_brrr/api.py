@@ -207,7 +207,7 @@ class CursorUsageClient:
                     "Authorization": f"Bearer {access_token}",
                     "Content-Type": "application/json",
                     "Connect-Protocol-Version": "1",
-                    "User-Agent": "cursor-spend-monitor/0.1",
+                    "User-Agent": "tokens-go-brrr/0.1",
                 },
             )
             response = connection.getresponse()

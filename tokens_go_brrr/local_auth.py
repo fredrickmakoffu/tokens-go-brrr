@@ -98,7 +98,7 @@ def refresh_access_token(refresh_token: str) -> tuple[str, str]:
         method="POST",
         headers={
             "Content-Type": "application/json",
-            "User-Agent": "cursor-spend-monitor/0.1",
+            "User-Agent": "tokens-go-brrr/0.1",
         },
     )
     # pi-lens-ignore: S310  # request targets the https constant OAUTH_TOKEN_URL above

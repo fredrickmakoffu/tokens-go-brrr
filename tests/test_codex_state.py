@@ -13,8 +13,8 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
-from cursor_spend_monitor import ledger
-from cursor_spend_monitor.harvesters.codex_state import CodexStateHarvester
+from tokens_go_brrr import ledger
+from tokens_go_brrr.harvesters.codex_state import CodexStateHarvester
 
 RICH_SCHEMA = """
 CREATE TABLE threads (

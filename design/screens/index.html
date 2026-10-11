@@ -63,94 +63,94 @@ svg { display: block; flex: none; }
 .tnum { font-feature-settings: "tnum"; }
 
 /* Header */
-.ai-usage-header { display: flex; align-items: center; padding: 10px 10px 10px 16px; gap: 2px; border-bottom: 1px solid transparent; /* St draws no visible rule here in the reference */ }
-.ai-usage-header-title { font-size: 0.95em; font-weight: 700; flex: 1; margin-bottom: 1px; }
-.ai-usage-header-btn { padding: 4px 8px; border-radius: 6px; background: transparent; color: var(--muted); font-size: 0.8em; font-weight: 400; }
-.ai-usage-header-btn:hover { background: var(--hover-bg); color: var(--fg); }
+.tokens-go-brrr-header { display: flex; align-items: center; padding: 10px 10px 10px 16px; gap: 2px; border-bottom: 1px solid transparent; /* St draws no visible rule here in the reference */ }
+.tokens-go-brrr-header-title { font-size: 0.95em; font-weight: 700; flex: 1; margin-bottom: 1px; }
+.tokens-go-brrr-header-btn { padding: 4px 8px; border-radius: 6px; background: transparent; color: var(--muted); font-size: 0.8em; font-weight: 400; }
+.tokens-go-brrr-header-btn:hover { background: var(--hover-bg); color: var(--fg); }
 
 /* List */
-.ai-usage-section { padding: 6px 0; display: flex; flex-direction: column; }
-.ai-usage-row { display: flex; align-items: center; padding: 9px 14px 9px 16px; gap: 12px; min-height: 40px; background: transparent; color: var(--fg); cursor: pointer; }
-.ai-usage-row:hover { background: var(--hover-bg); }
-.ai-usage-badge { width: 26px; height: 26px; border: 1px solid var(--panel-border); border-radius: 9px; color: var(--muted); display: flex; align-items: center; justify-content: center; flex: none; }
-.ai-usage-badge-via { border-color: rgba(255,255,255,0.12); }
-.ai-usage-info { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; justify-content: center; }
-.ai-usage-name-row { display: flex; align-items: center; gap: 7px; }
-.ai-usage-name { font-size: 1em; font-weight: 600; white-space: nowrap; }
-.ai-usage-running { font-size: 0.82em; color: var(--muted); white-space: nowrap; }
-.ai-usage-via { font-size: 0.78em; color: var(--muted); padding: 1px 5px; border-radius: 6px; background: rgba(255,255,255,0.07); white-space: nowrap; }
-.ai-usage-via-note { font-size: 0.85em; color: var(--muted); padding-bottom: 4px; }
-.ai-usage-meta { padding-top: 2px; display: flex; flex-wrap: wrap; gap: 4px 7px; }
-.ai-usage-limit { font-size: 0.85em; color: var(--muted); font-feature-settings: "tnum"; white-space: nowrap; }
-.ai-usage-bar { margin-top: 9px; height: 8px; background: var(--track); border-radius: 4px; }
-.ai-usage-bar-fill { height: 8px; border-radius: 4px; }
-.ai-usage-value { font-size: 1.45em; font-weight: 700; font-feature-settings: "tnum"; }
-.ai-usage-chevron { color: var(--faint); }
+.tokens-go-brrr-section { padding: 6px 0; display: flex; flex-direction: column; }
+.tokens-go-brrr-row { display: flex; align-items: center; padding: 9px 14px 9px 16px; gap: 12px; min-height: 40px; background: transparent; color: var(--fg); cursor: pointer; }
+.tokens-go-brrr-row:hover { background: var(--hover-bg); }
+.tokens-go-brrr-badge { width: 26px; height: 26px; border: 1px solid var(--panel-border); border-radius: 9px; color: var(--muted); display: flex; align-items: center; justify-content: center; flex: none; }
+.tokens-go-brrr-badge-via { border-color: rgba(255,255,255,0.12); }
+.tokens-go-brrr-info { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; justify-content: center; }
+.tokens-go-brrr-name-row { display: flex; align-items: center; gap: 7px; }
+.tokens-go-brrr-name { font-size: 1em; font-weight: 600; white-space: nowrap; }
+.tokens-go-brrr-running { font-size: 0.82em; color: var(--muted); white-space: nowrap; }
+.tokens-go-brrr-via { font-size: 0.78em; color: var(--muted); padding: 1px 5px; border-radius: 6px; background: rgba(255,255,255,0.07); white-space: nowrap; }
+.tokens-go-brrr-via-note { font-size: 0.85em; color: var(--muted); padding-bottom: 4px; }
+.tokens-go-brrr-meta { padding-top: 2px; display: flex; flex-wrap: wrap; gap: 4px 7px; }
+.tokens-go-brrr-limit { font-size: 0.85em; color: var(--muted); font-feature-settings: "tnum"; white-space: nowrap; }
+.tokens-go-brrr-bar { margin-top: 9px; height: 8px; background: var(--track); border-radius: 4px; }
+.tokens-go-brrr-bar-fill { height: 8px; border-radius: 4px; }
+.tokens-go-brrr-value { font-size: 1.45em; font-weight: 700; font-feature-settings: "tnum"; }
+.tokens-go-brrr-chevron { color: var(--faint); }
 
 /* Window picker */
-.ai-usage-windowbar { display: flex; border-top: 1px solid var(--rule); border-radius: 0 0 var(--panel-radius) var(--panel-radius); }
-.ai-usage-window-btn { flex: 1 1 0; height: 36px; padding: 0; border-radius: 0; background: transparent; color: var(--muted); font-size: 0.82em; font-weight: 400; }
-.ai-usage-window-btn:first-child { border-radius: 0 0 0 var(--panel-radius); }
-.ai-usage-window-btn:last-child { border-radius: 0 0 var(--panel-radius) 0; }
-.ai-usage-window-btn:hover { background: var(--hover-bg); color: var(--fg); }
-.ai-usage-window-btn.selected { color: var(--fg); font-weight: 600; /* St does not paint the inset accent rule */ }
+.tokens-go-brrr-windowbar { display: flex; border-top: 1px solid var(--rule); border-radius: 0 0 var(--panel-radius) var(--panel-radius); }
+.tokens-go-brrr-window-btn { flex: 1 1 0; height: 36px; padding: 0; border-radius: 0; background: transparent; color: var(--muted); font-size: 0.82em; font-weight: 400; }
+.tokens-go-brrr-window-btn:first-child { border-radius: 0 0 0 var(--panel-radius); }
+.tokens-go-brrr-window-btn:last-child { border-radius: 0 0 var(--panel-radius) 0; }
+.tokens-go-brrr-window-btn:hover { background: var(--hover-bg); color: var(--fg); }
+.tokens-go-brrr-window-btn.selected { color: var(--fg); font-weight: 600; /* St does not paint the inset accent rule */ }
 
 /* Detail */
-.ai-usage-detail-header { display: flex; align-items: center; padding: 12px 16px; gap: 10px; border-bottom: 1px solid transparent; }
-.ai-usage-back { padding: 3px; border-radius: 6px; background: transparent; color: var(--muted); display: flex; }
-.ai-usage-back:hover { background: var(--hover-bg); color: var(--fg); }
-.ai-usage-detail-title { font-size: 1em; font-weight: 700; }
-.ai-usage-detail-body { padding: 16px 16px 6px 16px; display: flex; flex-direction: column; gap: 18px; }
-.ai-usage-metric-top { display: flex; font-size: 1em; font-weight: 600; color: var(--fg); }
-.ai-usage-detail-value { font-size: 1.45em; font-weight: 700; font-feature-settings: "tnum"; }
-.ai-usage-detail-reset { padding-top: 6px; font-size: 0.85em; color: var(--muted); font-feature-settings: "tnum"; }
-.ai-usage-sessions-block { display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
-.ai-usage-sessions-heading { font-size: 0.8em; font-weight: 600; color: var(--muted); }
-.ai-usage-sessions-empty { font-size: 0.85em; color: var(--muted); }
-.ai-usage-session-row { display: flex; align-items: center; gap: 10px; }
-.ai-usage-session-mark { width: 7px; height: 7px; border-radius: 999px; background: var(--ok); }
-.ai-usage-session-mark.paused { background: transparent; border: 1px solid var(--faint); }
-.ai-usage-session-name { font-size: 0.92em; font-weight: 500; color: var(--fg); flex: 1; }
-.ai-usage-session-state { font-size: 0.82em; color: var(--muted); }
-.ai-usage-session-model { font-size: 0.78em; color: var(--muted); padding-right: 8px; }
-.ai-usage-view-all { margin-top: 4px; padding: 8px 0; border-radius: 0; background: transparent; display: flex; align-items: center; gap: 8px; text-align: left; }
-.ai-usage-view-all-label { font-size: 0.92em; font-weight: 500; color: var(--fg); flex: 1; }
-.ai-usage-sessions-screen { padding: 14px 16px 16px 16px; display: flex; flex-direction: column; gap: 14px; }
-.ai-usage-sessions-stats { font-size: 0.85em; color: var(--muted); font-feature-settings: "tnum"; }
-.ai-usage-sessions-filters { display: flex; gap: 8px; }
-.ai-usage-filter-chip { padding: 3px 10px; border: 1px solid var(--panel-border); border-radius: 999px; background: transparent; color: var(--muted); font-size: 0.8em; font-weight: 400; }
-.ai-usage-filter-chip:hover { background: #3c4046; color: var(--fg); }
-.ai-usage-filter-chip.active { border-color: transparent; background: var(--chip-bg); color: var(--fg); }
-.ai-usage-sessions-list { display: flex; flex-direction: column; gap: 10px; }
-.ai-usage-dash-btn { display: block; margin: 6px 16px 14px 16px; padding: 9px; border: 1px solid var(--panel-border); border-radius: 7px; background: var(--hover-bg); color: var(--fg); font-size: 0.88em; font-weight: 600; text-align: center; }
-.ai-usage-dash-btn:hover { background: #3a3e44; }
-.ai-usage-dash-btn.ai-usage-refresh-btn { margin-top: 0; }
+.tokens-go-brrr-detail-header { display: flex; align-items: center; padding: 12px 16px; gap: 10px; border-bottom: 1px solid transparent; }
+.tokens-go-brrr-back { padding: 3px; border-radius: 6px; background: transparent; color: var(--muted); display: flex; }
+.tokens-go-brrr-back:hover { background: var(--hover-bg); color: var(--fg); }
+.tokens-go-brrr-detail-title { font-size: 1em; font-weight: 700; }
+.tokens-go-brrr-detail-body { padding: 16px 16px 6px 16px; display: flex; flex-direction: column; gap: 18px; }
+.tokens-go-brrr-metric-top { display: flex; font-size: 1em; font-weight: 600; color: var(--fg); }
+.tokens-go-brrr-detail-value { font-size: 1.45em; font-weight: 700; font-feature-settings: "tnum"; }
+.tokens-go-brrr-detail-reset { padding-top: 6px; font-size: 0.85em; color: var(--muted); font-feature-settings: "tnum"; }
+.tokens-go-brrr-sessions-block { display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
+.tokens-go-brrr-sessions-heading { font-size: 0.8em; font-weight: 600; color: var(--muted); }
+.tokens-go-brrr-sessions-empty { font-size: 0.85em; color: var(--muted); }
+.tokens-go-brrr-session-row { display: flex; align-items: center; gap: 10px; }
+.tokens-go-brrr-session-mark { width: 7px; height: 7px; border-radius: 999px; background: var(--ok); }
+.tokens-go-brrr-session-mark.paused { background: transparent; border: 1px solid var(--faint); }
+.tokens-go-brrr-session-name { font-size: 0.92em; font-weight: 500; color: var(--fg); flex: 1; }
+.tokens-go-brrr-session-state { font-size: 0.82em; color: var(--muted); }
+.tokens-go-brrr-session-model { font-size: 0.78em; color: var(--muted); padding-right: 8px; }
+.tokens-go-brrr-view-all { margin-top: 4px; padding: 8px 0; border-radius: 0; background: transparent; display: flex; align-items: center; gap: 8px; text-align: left; }
+.tokens-go-brrr-view-all-label { font-size: 0.92em; font-weight: 500; color: var(--fg); flex: 1; }
+.tokens-go-brrr-sessions-screen { padding: 14px 16px 16px 16px; display: flex; flex-direction: column; gap: 14px; }
+.tokens-go-brrr-sessions-stats { font-size: 0.85em; color: var(--muted); font-feature-settings: "tnum"; }
+.tokens-go-brrr-sessions-filters { display: flex; gap: 8px; }
+.tokens-go-brrr-filter-chip { padding: 3px 10px; border: 1px solid var(--panel-border); border-radius: 999px; background: transparent; color: var(--muted); font-size: 0.8em; font-weight: 400; }
+.tokens-go-brrr-filter-chip:hover { background: #3c4046; color: var(--fg); }
+.tokens-go-brrr-filter-chip.active { border-color: transparent; background: var(--chip-bg); color: var(--fg); }
+.tokens-go-brrr-sessions-list { display: flex; flex-direction: column; gap: 10px; }
+.tokens-go-brrr-dash-btn { display: block; margin: 6px 16px 14px 16px; padding: 9px; border: 1px solid var(--panel-border); border-radius: 7px; background: var(--hover-bg); color: var(--fg); font-size: 0.88em; font-weight: 600; text-align: center; }
+.tokens-go-brrr-dash-btn:hover { background: #3a3e44; }
+.tokens-go-brrr-dash-btn.tokens-go-brrr-refresh-btn { margin-top: 0; }
 
 /* Guide / About */
-.ai-usage-guide-body { padding: 14px 16px 16px 16px; display: flex; flex-direction: column; gap: 14px; }
-.ai-usage-guide-item { display: flex; gap: 10px; }
-.ai-usage-guide-dot { margin-top: 4px; width: 9px; height: 9px; border-radius: 999px; flex: none; }
-.ai-usage-guide-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
-.ai-usage-guide-title { font-size: 0.95em; font-weight: 700; }
-.ai-usage-guide-desc { font-size: 0.85em; color: var(--muted); }
+.tokens-go-brrr-guide-body { padding: 14px 16px 16px 16px; display: flex; flex-direction: column; gap: 14px; }
+.tokens-go-brrr-guide-item { display: flex; gap: 10px; }
+.tokens-go-brrr-guide-dot { margin-top: 4px; width: 9px; height: 9px; border-radius: 999px; flex: none; }
+.tokens-go-brrr-guide-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.tokens-go-brrr-guide-title { font-size: 0.95em; font-weight: 700; }
+.tokens-go-brrr-guide-desc { font-size: 0.85em; color: var(--muted); }
 
 /* Landing */
-.ai-usage-landing { padding: 14px 16px 16px 16px; display: flex; flex-direction: column; gap: 10px; }
-.ai-usage-landing-quote-row { display: flex; gap: 6px; }
-.ai-usage-landing-mark { font-size: 1.8em; font-weight: 700; color: #3a3e44; /* St ignores line-height; natural line box applies */ }
-.ai-usage-landing-quote { font-size: 1.18em; font-weight: 600; color: var(--fg); flex: 1; min-width: 0; }
-.ai-usage-landing-share { margin-top: 8px; font-size: 0.84em; color: var(--muted); }
-.ai-usage-landing-featured { display: flex; gap: 10px; margin-top: 6px; }
-.ai-usage-landing-icon { margin-top: 2px; align-self: center; }
-.ai-usage-landing-name { font-size: 0.98em; font-weight: 700; color: var(--fg); }
-.ai-usage-landing-role { font-size: 0.84em; color: var(--muted); }
-.ai-usage-landing-actions { display: flex; justify-content: center; gap: 8px; margin-top: 10px; margin-bottom: 16px; }
-.ai-usage-landing-continue { height: 38px; padding: 0 26px; border-radius: 10px; background: var(--btn-bg); color: var(--fg); font-size: 0.92em; font-weight: 600; }
-.ai-usage-landing-continue:hover { background: var(--btn-hover); }
-.ai-usage-landing-copy { height: 38px; padding: 0 18px; border-radius: 10px; background: transparent; color: var(--muted); font-size: 0.88em; align-self: center; }
-.ai-usage-landing-copy:hover { color: var(--fg); }
-.ai-usage-landing-note { padding: 0 16px 12px 16px; font-size: 0.8em; color: var(--dim); }
-.ai-usage-empty { padding: 24px 16px; color: var(--muted); font-size: 0.92em; text-align: center; white-space: pre-line; }
+.tokens-go-brrr-landing { padding: 14px 16px 16px 16px; display: flex; flex-direction: column; gap: 10px; }
+.tokens-go-brrr-landing-quote-row { display: flex; gap: 6px; }
+.tokens-go-brrr-landing-mark { font-size: 1.8em; font-weight: 700; color: #3a3e44; /* St ignores line-height; natural line box applies */ }
+.tokens-go-brrr-landing-quote { font-size: 1.18em; font-weight: 600; color: var(--fg); flex: 1; min-width: 0; }
+.tokens-go-brrr-landing-share { margin-top: 8px; font-size: 0.84em; color: var(--muted); }
+.tokens-go-brrr-landing-featured { display: flex; gap: 10px; margin-top: 6px; }
+.tokens-go-brrr-landing-icon { margin-top: 2px; align-self: center; }
+.tokens-go-brrr-landing-name { font-size: 0.98em; font-weight: 700; color: var(--fg); }
+.tokens-go-brrr-landing-role { font-size: 0.84em; color: var(--muted); }
+.tokens-go-brrr-landing-actions { display: flex; justify-content: center; gap: 8px; margin-top: 10px; margin-bottom: 16px; }
+.tokens-go-brrr-landing-continue { height: 38px; padding: 0 26px; border-radius: 10px; background: var(--btn-bg); color: var(--fg); font-size: 0.92em; font-weight: 600; }
+.tokens-go-brrr-landing-continue:hover { background: var(--btn-hover); }
+.tokens-go-brrr-landing-copy { height: 38px; padding: 0 18px; border-radius: 10px; background: transparent; color: var(--muted); font-size: 0.88em; align-self: center; }
+.tokens-go-brrr-landing-copy:hover { color: var(--fg); }
+.tokens-go-brrr-landing-note { padding: 0 16px 12px 16px; font-size: 0.8em; color: var(--dim); }
+.tokens-go-brrr-empty { padding: 24px 16px; color: var(--muted); font-size: 0.92em; text-align: center; white-space: pre-line; }
 
 /* Gallery */
 .gallery { padding: 24px; color: #e6e6e8; }
@@ -489,7 +489,7 @@ function ProviderIcon({ id, size }) {
 /* ---- Components ---- */
 function Badge({ icon, via }) {
   return (
-    <div className={"ai-usage-badge" + (via ? " ai-usage-badge-via" : "")}>
+    <div className={"tokens-go-brrr-badge" + (via ? " tokens-go-brrr-badge-via" : "")}>
       <ProviderIcon id={icon} size={15} />
     </div>
   );
@@ -497,30 +497,30 @@ function Badge({ icon, via }) {
 
 function Meter({ pct, color }) {
   return (
-    <div className="ai-usage-bar">
-      <div className="ai-usage-bar-fill" style={{ width: pct + "%", background: color }} />
+    <div className="tokens-go-brrr-bar">
+      <div className="tokens-go-brrr-bar-fill" style={{ width: pct + "%", background: color }} />
     </div>
   );
 }
 
 function Header({ title, withSettings, latest, nav }) {
   return (
-    <div className="ai-usage-header">
-      <span className="ai-usage-header-title">{title}</span>
-      {latest && <button className="ai-usage-header-btn" onClick={() => nav("landing", { mode: "latest" })}>Latest</button>}
-      {withSettings && <button className="ai-usage-header-btn">Settings</button>}
-      <button className="ai-usage-header-btn" onClick={() => nav("guide")}>Guide</button>
-      <button className="ai-usage-header-btn" onClick={() => nav("about")}>About</button>
+    <div className="tokens-go-brrr-header">
+      <span className="tokens-go-brrr-header-title">{title}</span>
+      {latest && <button className="tokens-go-brrr-header-btn" onClick={() => nav("landing", { mode: "latest" })}>Latest</button>}
+      {withSettings && <button className="tokens-go-brrr-header-btn">Settings</button>}
+      <button className="tokens-go-brrr-header-btn" onClick={() => nav("guide")}>Guide</button>
+      <button className="tokens-go-brrr-header-btn" onClick={() => nav("about")}>About</button>
     </div>
   );
 }
 
 function DetailHeader({ title, icon, back }) {
   return (
-    <div className="ai-usage-detail-header">
-      <button className="ai-usage-back" aria-label="Back" onClick={back}><Chevron dir="left" size={16} /></button>
+    <div className="tokens-go-brrr-detail-header">
+      <button className="tokens-go-brrr-back" aria-label="Back" onClick={back}><Chevron dir="left" size={16} /></button>
       {icon && <Badge icon={icon} />}
-      <span className="ai-usage-detail-title">{title}</span>
+      <span className="tokens-go-brrr-detail-title">{title}</span>
     </div>
   );
 }
@@ -535,23 +535,23 @@ function ProviderRow({ tool, selectedKind, onOpen }) {
   const running = ok ? activeSessions(tool) : 0;
   const honoured = !selectedKind || kindOf(tool) === selectedKind;
   return (
-    <div className="ai-usage-row" onClick={ok ? onOpen : undefined} style={ok ? null : { opacity: 140 / 255 }}>
+    <div className="tokens-go-brrr-row" onClick={ok ? onOpen : undefined} style={ok ? null : { opacity: 140 / 255 }}>
       <Badge icon={tool.icon} via={!!via} />
-      <div className="ai-usage-info">
-        <div className="ai-usage-name-row">
-          <span className="ai-usage-name">{tool.name}</span>
-          {via && <span className="ai-usage-via">via {via.name}</span>}
-          {running > 0 && <span className="ai-usage-running">{running} running</span>}
+      <div className="tokens-go-brrr-info">
+        <div className="tokens-go-brrr-name-row">
+          <span className="tokens-go-brrr-name">{tool.name}</span>
+          {via && <span className="tokens-go-brrr-via">via {via.name}</span>}
+          {running > 0 && <span className="tokens-go-brrr-running">{running} running</span>}
         </div>
-        <div className="ai-usage-meta">
+        <div className="tokens-go-brrr-meta">
           {metered
-            ? !honoured && <span className="ai-usage-limit">{shortLabel(primary?.label)}</span>
-            : <span className="ai-usage-limit">{tool.error || tool.status || "No limits"}</span>}
+            ? !honoured && <span className="tokens-go-brrr-limit">{shortLabel(primary?.label)}</span>
+            : <span className="tokens-go-brrr-limit">{tool.error || tool.status || "No limits"}</span>}
         </div>
         {metered && <Meter pct={pct} color={color} />}
       </div>
-      {ok && metered && <span className="ai-usage-value" style={{ color }}>{Math.round(pct)}%</span>}
-      {ok && <Chevron dir="right" size={14} className="ai-usage-chevron" />}
+      {ok && metered && <span className="tokens-go-brrr-value" style={{ color }}>{Math.round(pct)}%</span>}
+      {ok && <Chevron dir="right" size={14} className="tokens-go-brrr-chevron" />}
     </div>
   );
 }
@@ -560,9 +560,9 @@ function WindowPicker({ tools, selectedKind, onSelect }) {
   const offered = windowsOffered(tools);
   if (offered.length < 2) return null;
   return (
-    <div className="ai-usage-windowbar">
+    <div className="tokens-go-brrr-windowbar">
       {offered.map(({ kind, label }) => (
-        <button key={kind} className={"ai-usage-window-btn" + (kind === selectedKind ? " selected" : "")}
+        <button key={kind} className={"tokens-go-brrr-window-btn" + (kind === selectedKind ? " selected" : "")}
           onClick={() => kind !== selectedKind && onSelect(kind)}>{label}</button>
       ))}
     </div>
@@ -575,10 +575,10 @@ function ListScreen({ tools, nav, hasLatest, onWindow }) {
     <>
       <Header title="AI usage" withSettings latest={hasLatest} nav={nav} />
       {tools.length === 0 ? (
-        <div className="ai-usage-empty">{"No providers yet.\nSign in to Cursor and refresh."}</div>
+        <div className="tokens-go-brrr-empty">{"No providers yet.\nSign in to Cursor and refresh."}</div>
       ) : (
         <>
-          <div className="ai-usage-section">
+          <div className="tokens-go-brrr-section">
             {tools.map((t) => (
               <ProviderRow key={t.id} tool={t} selectedKind={selectedKind} onOpen={() => nav("detail", { toolId: t.id })} />
             ))}
@@ -592,11 +592,11 @@ function ListScreen({ tools, nav, hasLatest, onWindow }) {
 
 function SessionRow({ session }) {
   return (
-    <div className="ai-usage-session-row">
-      <span className={"ai-usage-session-mark" + (session.paused ? " paused" : "")} />
-      <span className="ai-usage-session-name">{sessionLabel(session)}</span>
-      {session.backend?.model && <span className="ai-usage-session-model">{session.backend.model}</span>}
-      <span className="ai-usage-session-state">{session.paused ? "paused" : "running"}</span>
+    <div className="tokens-go-brrr-session-row">
+      <span className={"tokens-go-brrr-session-mark" + (session.paused ? " paused" : "")} />
+      <span className="tokens-go-brrr-session-name">{sessionLabel(session)}</span>
+      {session.backend?.model && <span className="tokens-go-brrr-session-model">{session.backend.model}</span>}
+      <span className="tokens-go-brrr-session-state">{session.paused ? "paused" : "running"}</span>
     </div>
   );
 }
@@ -606,12 +606,12 @@ function MetricBlock({ m }) {
   const color = colorFor(pct);
   return (
     <div className="vbox">
-      <div className="ai-usage-metric-top">
+      <div className="tokens-go-brrr-metric-top">
         <span className="grow">{m.label}</span>
-        <span className="ai-usage-detail-value" style={{ color }}>{Math.round(pct)}%</span>
+        <span className="tokens-go-brrr-detail-value" style={{ color }}>{Math.round(pct)}%</span>
       </div>
       <Meter pct={pct} color={color} />
-      <span className="ai-usage-detail-reset">{m.resets ?? ""}</span>
+      <span className="tokens-go-brrr-detail-reset">{m.resets ?? ""}</span>
     </div>
   );
 }
@@ -620,13 +620,13 @@ function SessionsBlock({ tool, onViewAll }) {
   const sessions = sessionRows(tool);
   const active = sessions.filter((s) => !s.paused);
   return (
-    <div className="ai-usage-sessions-block">
-      <span className="ai-usage-sessions-heading">Sessions</span>
+    <div className="tokens-go-brrr-sessions-block">
+      <span className="tokens-go-brrr-sessions-heading">Sessions</span>
       {active.length ? active.map((s, i) => <SessionRow key={i} session={s} />)
-        : <span className="ai-usage-sessions-empty">No active sessions</span>}
-      <button className="ai-usage-view-all" onClick={onViewAll}>
-        <span className="ai-usage-view-all-label">View all sessions</span>
-        <Chevron dir="right" size={14} className="ai-usage-chevron" />
+        : <span className="tokens-go-brrr-sessions-empty">No active sessions</span>}
+      <button className="tokens-go-brrr-view-all" onClick={onViewAll}>
+        <span className="tokens-go-brrr-view-all-label">View all sessions</span>
+        <Chevron dir="right" size={14} className="tokens-go-brrr-chevron" />
       </button>
     </div>
   );
@@ -640,21 +640,21 @@ function DetailScreen({ tool, nav }) {
   return (
     <>
       <DetailHeader title={tool.name} icon={tool.icon} back={() => nav("list")} />
-      <div className="ai-usage-detail-body">
-        {via && <span className="ai-usage-via-note">{note}</span>}
+      <div className="tokens-go-brrr-detail-body">
+        {via && <span className="tokens-go-brrr-via-note">{note}</span>}
         {(tool.metrics ?? []).map((m) => <MetricBlock key={m.key} m={m} />)}
         {sessionRows(tool).length > 0 && <SessionsBlock tool={tool} onViewAll={() => nav("sessions", { toolId: tool.id })} />}
       </div>
-      <button className="ai-usage-dash-btn">Open dashboard</button>
+      <button className="tokens-go-brrr-dash-btn">Open dashboard</button>
     </>
   );
 }
 
 function FilterChips({ active, paused, filter, setFilter }) {
   return (
-    <div className="ai-usage-sessions-filters">
+    <div className="tokens-go-brrr-sessions-filters">
       {[["active", "Active", active], ["paused", "Paused", paused]].map(([key, text, n]) => (
-        <button key={key} className={"ai-usage-filter-chip" + (filter === key ? " active" : "")}
+        <button key={key} className={"tokens-go-brrr-filter-chip" + (filter === key ? " active" : "")}
           onClick={() => setFilter(key)}>{text} {n}</button>
       ))}
     </div>
@@ -669,12 +669,12 @@ function SessionList({ tool, nav, filter, setFilter }) {
   return (
     <>
       <DetailHeader title="Sessions" icon={tool.icon} back={() => nav("detail", { toolId: tool.id })} />
-      <div className="ai-usage-sessions-screen">
-        <span className="ai-usage-sessions-stats">{`${active.length} active · ${paused.length} paused · ${sessions.length} total`}</span>
+      <div className="tokens-go-brrr-sessions-screen">
+        <span className="tokens-go-brrr-sessions-stats">{`${active.length} active · ${paused.length} paused · ${sessions.length} total`}</span>
         <FilterChips active={active.length} paused={paused.length} filter={filter} setFilter={setFilter} />
-        <div className="ai-usage-sessions-list">
+        <div className="tokens-go-brrr-sessions-list">
           {shown.length ? shown.map((s, i) => <SessionRow key={i} session={s} />)
-            : <span className="ai-usage-sessions-empty">{filter === "paused" ? "No paused sessions" : "No active sessions"}</span>}
+            : <span className="tokens-go-brrr-sessions-empty">{filter === "paused" ? "No paused sessions" : "No active sessions"}</span>}
         </div>
       </div>
     </>
@@ -684,18 +684,18 @@ function SessionList({ tool, nav, filter, setFilter }) {
 function LandingQuote({ billboard }) {
   return (
     <>
-      <div className="ai-usage-landing-quote-row">
-        <span className="ai-usage-landing-mark" style={{ alignSelf: "flex-start" }}>{"“"}</span>
-        <span className="ai-usage-landing-quote">{billboard.text}</span>
-        <span className="ai-usage-landing-mark" style={{ alignSelf: "flex-end" }}>{"”"}</span>
+      <div className="tokens-go-brrr-landing-quote-row">
+        <span className="tokens-go-brrr-landing-mark" style={{ alignSelf: "flex-start" }}>{"“"}</span>
+        <span className="tokens-go-brrr-landing-quote">{billboard.text}</span>
+        <span className="tokens-go-brrr-landing-mark" style={{ alignSelf: "flex-end" }}>{"”"}</span>
       </div>
-      {billboard.share && <span className="ai-usage-landing-share">{billboard.share}</span>}
+      {billboard.share && <span className="tokens-go-brrr-landing-share">{billboard.share}</span>}
       {(billboard.featured?.name || billboard.featured?.providerId) && (
-        <div className="ai-usage-landing-featured">
-          <div className="ai-usage-landing-icon"><ProviderIcon id={billboard.featured.providerId ?? "cursor"} size={22} /></div>
+        <div className="tokens-go-brrr-landing-featured">
+          <div className="tokens-go-brrr-landing-icon"><ProviderIcon id={billboard.featured.providerId ?? "cursor"} size={22} /></div>
           <div className="vbox grow">
-            <span className="ai-usage-landing-name">{billboard.featured.name ?? billboard.featured.providerId}</span>
-            {ROLE_COPY[billboard.featured.role] && <span className="ai-usage-landing-role">{ROLE_COPY[billboard.featured.role]}</span>}
+            <span className="tokens-go-brrr-landing-name">{billboard.featured.name ?? billboard.featured.providerId}</span>
+            {ROLE_COPY[billboard.featured.role] && <span className="tokens-go-brrr-landing-role">{ROLE_COPY[billboard.featured.role]}</span>}
           </div>
         </div>
       )}
@@ -707,23 +707,23 @@ function LandingScreen({ billboard, mode, nav }) {
   return (
     <>
       <Header title="AI usage" nav={nav} />
-      <div className="ai-usage-landing"><LandingQuote billboard={billboard} /></div>
-      <div className="ai-usage-landing-actions">
-        <button className="ai-usage-landing-continue" onClick={() => nav("list")}>Continue</button>
-        {billboard.share && <button className="ai-usage-landing-copy">Copy</button>}
+      <div className="tokens-go-brrr-landing"><LandingQuote billboard={billboard} /></div>
+      <div className="tokens-go-brrr-landing-actions">
+        <button className="tokens-go-brrr-landing-continue" onClick={() => nav("list")}>Continue</button>
+        {billboard.share && <button className="tokens-go-brrr-landing-copy">Copy</button>}
       </div>
-      {mode === "latest" && <span className="ai-usage-landing-note">Earlier update</span>}
+      {mode === "latest" && <span className="tokens-go-brrr-landing-note">Earlier update</span>}
     </>
   );
 }
 
 function GuideItem({ color, title, desc }) {
   return (
-    <div className="ai-usage-guide-item">
-      <span className="ai-usage-guide-dot" style={{ background: color }} />
-      <div className="ai-usage-guide-text">
-        <span className="ai-usage-guide-title">{title}</span>
-        <span className="ai-usage-guide-desc">{desc}</span>
+    <div className="tokens-go-brrr-guide-item">
+      <span className="tokens-go-brrr-guide-dot" style={{ background: color }} />
+      <div className="tokens-go-brrr-guide-text">
+        <span className="tokens-go-brrr-guide-title">{title}</span>
+        <span className="tokens-go-brrr-guide-desc">{desc}</span>
       </div>
     </div>
   );
@@ -733,7 +733,7 @@ function Guide({ nav }) {
   return (
     <>
       <DetailHeader title="Status colors" back={() => nav("list")} />
-      <div className="ai-usage-guide-body">
+      <div className="tokens-go-brrr-guide-body">
         <GuideItem color={COLOR.ok} title="Healthy" desc={"Plenty of headroom — under 70% used."} />
         <GuideItem color={COLOR.wait} title="Caution" desc="Getting close — 70 to 89% used." />
         <GuideItem color={COLOR.crit} title="Critical" desc={"At or near your limit — 90% and up."} />
@@ -746,17 +746,17 @@ function About({ nav }) {
   return (
     <>
       <DetailHeader title="About" back={() => nav("list")} />
-      <div className="ai-usage-guide-body">
-        <div className="ai-usage-guide-text">
-          <span className="ai-usage-guide-title">AI usage</span>
-          <span className="ai-usage-guide-desc">Local GNOME Shell indicator for AI coding limits. Cursor is live; OpenCode and Claude Code are next.</span>
+      <div className="tokens-go-brrr-guide-body">
+        <div className="tokens-go-brrr-guide-text">
+          <span className="tokens-go-brrr-guide-title">AI usage</span>
+          <span className="tokens-go-brrr-guide-desc">Local GNOME Shell indicator for AI coding limits. Cursor is live; OpenCode and Claude Code are next.</span>
         </div>
-        <div className="ai-usage-guide-text">
-          <span className="ai-usage-guide-title">Extension v1</span>
-          <span className="ai-usage-guide-desc">{`Daemon v${MOCK.version} · updated ${relativeTime(MOCK.updated_at)}`}</span>
+        <div className="tokens-go-brrr-guide-text">
+          <span className="tokens-go-brrr-guide-title">Extension v1</span>
+          <span className="tokens-go-brrr-guide-desc">{`Daemon v${MOCK.version} · updated ${relativeTime(MOCK.updated_at)}`}</span>
         </div>
       </div>
-      <button className="ai-usage-dash-btn ai-usage-refresh-btn">Refresh now</button>
+      <button className="tokens-go-brrr-dash-btn tokens-go-brrr-refresh-btn">Refresh now</button>
     </>
   );
 }

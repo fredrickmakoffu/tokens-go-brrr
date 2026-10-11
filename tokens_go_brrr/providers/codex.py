@@ -252,7 +252,7 @@ class CodexProvider:
             headers={
                 "Authorization": f"Bearer {access_token}",
                 "Content-Type": "application/json",
-                "User-Agent": "cursor-spend-monitor",
+                "User-Agent": "tokens-go-brrr",
             },
         )
         try:

@@ -80,7 +80,7 @@
     "privacy.ext.t": "The extension holds nothing",
     "privacy.ext.d": "No credentials and no network calls. It reads state from the local daemon.",
     "privacy.history.t": "History stays on your machine",
-    "privacy.history.d": "Usage history is kept in ~/.local/share/cursor-spend-monitor for 90 days. Set history_days to 0 to stop recording.",
+    "privacy.history.d": "Usage history is kept in ~/.local/share/tokens-go-brrr for 90 days. Set history_days to 0 to stop recording.",
     "privacy.prompts.t": "No prompts leave",
     "privacy.prompts.d": "Insights are written from templates. If you turn on llm_notifications, a model rewrites them from token counts, never prompts, transcripts or file contents.",
 
@@ -349,7 +349,7 @@
     "privacy.ext.t": "L’extension ne garde rien",
     "privacy.ext.d": "Aucun identifiant, aucun appel réseau. Elle lit l’état auprès du démon local.",
     "privacy.history.t": "L’historique reste sur votre machine",
-    "privacy.history.d": "L’historique d’usage est conservé 90 jours dans ~/.local/share/cursor-spend-monitor. Mettez history_days à 0 pour arrêter l’enregistrement.",
+    "privacy.history.d": "L’historique d’usage est conservé 90 jours dans ~/.local/share/tokens-go-brrr. Mettez history_days à 0 pour arrêter l’enregistrement.",
     "privacy.prompts.t": "Aucun prompt ne sort",
     "privacy.prompts.d": "Les analyses sont écrites à partir de modèles de phrases. Si vous activez llm_notifications, un modèle les reformule à partir de nombres de tokens, jamais de prompts, de transcriptions ni de contenu de fichiers.",
 
@@ -610,7 +610,7 @@
     "privacy.ext.t": "A extensão não guarda nada",
     "privacy.ext.d": "Sem credenciais e sem chamadas de rede. Ela lê o estado do daemon local.",
     "privacy.history.t": "O histórico fica na sua máquina",
-    "privacy.history.d": "O histórico de uso é mantido em ~/.local/share/cursor-spend-monitor por 90 dias. Defina history_days como 0 para parar de gravar.",
+    "privacy.history.d": "O histórico de uso é mantido em ~/.local/share/tokens-go-brrr por 90 dias. Defina history_days como 0 para parar de gravar.",
     "privacy.prompts.t": "Nenhum prompt sai",
     "privacy.prompts.d": "Os insights são escritos a partir de modelos de frase. Se você ativar llm_notifications, um modelo os reescreve a partir de contagens de tokens, nunca de prompts, transcrições ou conteúdo de arquivos.",
 

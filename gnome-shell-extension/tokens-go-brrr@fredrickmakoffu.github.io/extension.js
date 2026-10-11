@@ -1,5 +1,5 @@
 // tokens-go-brrr — GNOME Shell indicator matching design/menu-bar-concept.html.
-// Data comes from the cursor-spend-monitor daemon over D-Bus.
+// Data comes from the tokens-go-brrr daemon over D-Bus.
 
 import Clutter from "gi://Clutter";
 import GLib from "gi://GLib";
@@ -25,11 +25,11 @@ import {
     ucFirst,
 } from "./i18n.js";
 
-const BUS_NAME = "io.github.fredrickmakoffu.AIUsage";
-const OBJECT_PATH = "/io/github/fredrickmakoffu/AIUsage";
+const BUS_NAME = "io.github.fredrickmakoffu.TokensGoBrrr";
+const OBJECT_PATH = "/io/github/fredrickmakoffu/TokensGoBrrr";
 const IFACE_XML = `
 <node>
-  <interface name="io.github.fredrickmakoffu.AIUsage">
+  <interface name="io.github.fredrickmakoffu.TokensGoBrrr">
     <property name="Version" type="s" access="read"/>
     <method name="GetState"><arg type="s" direction="out" name="json"/></method>
     <method name="Refresh"/>
@@ -40,11 +40,7 @@ const IFACE_XML = `
     <method name="Acknowledge">
       <arg type="u" direction="in" name="id"/>
     </method>
-    <method name="LlmLog">
-      <arg type="s" direction="in" name="day"/>
-      <arg type="s" direction="out" name="json"/>
-    </method>
-    <method name="ClearLlmLog"/>
+    <method name="LlmLogReport"><arg type="s" direction="out" name="path"/></method>
     <method name="Quit"/>
     <signal name="StateChanged"><arg type="s" name="json"/></signal>
   </interface>
@@ -52,7 +48,7 @@ const IFACE_XML = `
 const UsageProxy = Gio.DBusProxy.makeProxyWrapper(IFACE_XML);
 
 // Status colours and the two text colours set inline from JS. The stylesheet
-// carries the rest, and its light overrides sit under .ai-usage-light; this table
+// carries the rest, and its light overrides sit under .tokens-go-brrr-light; this table
 // is the same split for the colours that are not in CSS. The light values are the
 // website's, darkened until each reads at 4.5:1 on the paper surface.
 const PALETTES = {
@@ -86,7 +82,7 @@ const BADGE_FILES = {
 };
 const CONFIG_PATH = GLib.build_filenamev([
     GLib.get_user_config_dir(),
-    "cursor-spend-monitor",
+    "tokens-go-brrr",
     "config.json",
 ]);
 const SCREEN_EASE = 160;
@@ -415,10 +411,10 @@ function wrappedLabel(text, styleClass, extra = {}) {
 
 // Thin progress bar: .bar / .bar-fill in the mockup.
 const Bar = GObject.registerClass(
-    class AiUsageBar extends St.Widget {
+    class TokensGoBrrrBar extends St.Widget {
         _init(pct, color, elapsed = null) {
-            super._init({ style_class: "ai-usage-bar", x_expand: true });
-            this._fill = new St.Widget({ style_class: "ai-usage-bar-fill" });
+            super._init({ style_class: "tokens-go-brrr-bar", x_expand: true });
+            this._fill = new St.Widget({ style_class: "tokens-go-brrr-bar-fill" });
             this.add_child(this._fill);
             // The pace tick marks how far through its window the meter is: a
             // fill past the tick is spending faster than time is passing. Too
@@ -428,7 +424,7 @@ const Bar = GObject.registerClass(
                     ? Math.min(elapsed, 100)
                     : null;
             if (this._elapsed !== null) {
-                this._tick = new St.Widget({ style_class: "ai-usage-bar-tick" });
+                this._tick = new St.Widget({ style_class: "tokens-go-brrr-bar-tick" });
                 this.add_child(this._tick);
             }
             this.setValue(pct, color);
@@ -505,9 +501,9 @@ const BADGE_ROW_SPACING = 4;
 // report more windows than fit across 360px (Claude adds Opus and Sonnet buckets),
 // and Clutter's own FlowLayout stacks them at the same x instead of wrapping.
 const BadgeFlow = GObject.registerClass(
-    class AiUsageBadgeFlow extends St.Widget {
+    class TokensGoBrrrBadgeFlow extends St.Widget {
         _init() {
-            super._init({ style_class: "ai-usage-meta", x_expand: true });
+            super._init({ style_class: "tokens-go-brrr-meta", x_expand: true });
         }
 
         _badges() {
@@ -607,17 +603,17 @@ const Row = GObject.registerClass(
             select: { param_types: [GObject.TYPE_STRING] },
         },
     },
-    class AiUsageRow extends PopupMenu.PopupBaseMenuItem {
+    class TokensGoBrrrRow extends PopupMenu.PopupBaseMenuItem {
         _init(icons, tool, bump, selectedKind = null) {
             const ok = !tool.status || tool.status === "ok";
             super._init({
-                style_class: "ai-usage-row",
+                style_class: "tokens-go-brrr-row",
                 reactive: ok,
                 activate: ok,
                 hover: ok,
                 can_focus: ok,
             });
-            if (!ok) this.add_style_class_name("ai-usage-row-disabled");
+            if (!ok) this.add_style_class_name("tokens-go-brrr-row-disabled");
 
             const primary = primaryOf(tool);
             const pct = clampPct(primary?.value ?? 0);
@@ -632,10 +628,10 @@ const Row = GObject.registerClass(
 
             this.add_child(
                 new St.Bin({
-                    style_class: "ai-usage-badge",
+                    style_class: "tokens-go-brrr-badge",
                     y_align: Clutter.ActorAlign.START,
                     child: new St.Icon({
-                        style_class: "ai-usage-badge-icon",
+                        style_class: "tokens-go-brrr-badge-icon",
                         gicon: icons.badge(tool.icon),
                         icon_size: 15,
                         x_align: Clutter.ActorAlign.CENTER,
@@ -645,28 +641,28 @@ const Row = GObject.registerClass(
             );
 
             const info = new St.BoxLayout({
-                style_class: "ai-usage-info",
+                style_class: "tokens-go-brrr-info",
                 orientation: Clutter.Orientation.VERTICAL,
                 x_expand: true,
                 y_align: Clutter.ActorAlign.CENTER,
             });
             const nameRow = new St.BoxLayout({
-                style_class: "ai-usage-name-row",
+                style_class: "tokens-go-brrr-name-row",
                 x_expand: true,
             });
             nameRow.add_child(
-                label(tool.name, "ai-usage-name", {
+                label(tool.name, "tokens-go-brrr-name", {
                     y_align: Clutter.ActorAlign.CENTER,
                 }),
             );
             const tag = via
                 ? tr("row.via", { via: via.name })
                 : metered
-                  ? tagText(primary?.label)
-                  : "";
+                    ? tagText(primary?.label)
+                    : "";
             if (tag) {
                 nameRow.add_child(
-                    label(tag.toUpperCase(), "ai-usage-tag", {
+                    label(tag.toUpperCase(), "tokens-go-brrr-tag", {
                         y_align: Clutter.ActorAlign.CENTER,
                     }),
                 );
@@ -675,7 +671,7 @@ const Row = GObject.registerClass(
             if (metered) {
                 // Only a metered row has a number to show; an unmetered one
                 // still opens, because its detail screen lists the sessions.
-                this._value = label(`${Math.round(pct)}%`, "ai-usage-value", {
+                this._value = label(`${Math.round(pct)}%`, "tokens-go-brrr-value", {
                     style: `color: ${statusTextColor(pct, muted)};`,
                     y_align: Clutter.ActorAlign.CENTER,
                 });
@@ -704,8 +700,8 @@ const Row = GObject.registerClass(
                     wrappedLabel(
                         subText,
                         pct >= CRITICAL_AT && metered && !muted
-                            ? "ai-usage-sub crit"
-                            : "ai-usage-sub",
+                            ? "tokens-go-brrr-sub crit"
+                            : "tokens-go-brrr-sub",
                         pct >= CRITICAL_AT && metered && !muted
                             ? { style: `color: ${color};` }
                             : {},
@@ -717,7 +713,7 @@ const Row = GObject.registerClass(
             if (ok) {
                 this.add_child(
                     new St.Icon({
-                        style_class: "ai-usage-chevron",
+                        style_class: "tokens-go-brrr-chevron",
                         gicon: icons.chevronRight,
                         icon_size: 14,
                         y_align: Clutter.ActorAlign.START,
@@ -738,8 +734,8 @@ const Row = GObject.registerClass(
         // this actor as focused, so asking it there would re-add the class on the row
         // the pointer just left.
         _setKeyboardFocus(on) {
-            if (on) this.add_style_class_name("ai-usage-keyboard-focus");
-            else this.remove_style_class_name("ai-usage-keyboard-focus");
+            if (on) this.add_style_class_name("tokens-go-brrr-keyboard-focus");
+            else this.remove_style_class_name("tokens-go-brrr-keyboard-focus");
         }
 
         vfunc_key_focus_in() {
@@ -885,24 +881,24 @@ function templateText(template) {
         case "warm": {
             const work = p.sessions
                 ? tr("tpl.warm.main", {
-                      n: p.sessions,
-                      hours: p.hours,
-                      tokens: formatTokens(p.tokens),
-                  }) +
-                  (p.project ? tr("tpl.warm.project", { project: p.project }) : "") +
-                  "."
+                    n: p.sessions,
+                    hours: p.hours,
+                    tokens: formatTokens(p.tokens),
+                }) +
+                (p.project ? tr("tpl.warm.project", { project: p.project }) : "") +
+                "."
                 : tr("tpl.warm.none", { hours: p.hours });
             // Usage the meters saw and this machine did not: said first, because
             // it is the part a person could not have known.
             const away = p.elsewhere
                 ? tr("tpl.warm.elsewhere", {
-                      points: p.elsewhere.points,
-                      provider: p.elsewhere.provider,
-                      label: metricLabel(p.elsewhere.label),
-                      time: GLib.DateTime.new_from_unix_local(p.elsewhere.since).format(
-                          "%H:%M",
-                      ),
-                  })
+                    points: p.elsewhere.points,
+                    provider: p.elsewhere.provider,
+                    label: metricLabel(p.elsewhere.label),
+                    time: GLib.DateTime.new_from_unix_local(p.elsewhere.since).format(
+                        "%H:%M",
+                    ),
+                })
                 : "";
             let text = [away, work].filter(Boolean).join(" ");
             if (p.meter)
@@ -959,10 +955,10 @@ function templateText(template) {
             let text = p.spent
                 ? tr("tpl.actionable.spent", vars)
                 : tr("tpl.actionable.at", vars) +
-                  (p.etaSeconds
-                      ? tr("tpl.actionable.eta", { dur: duration(p.etaSeconds) })
-                      : "") +
-                  ".";
+                (p.etaSeconds
+                    ? tr("tpl.actionable.eta", { dur: duration(p.etaSeconds) })
+                    : "") +
+                ".";
             if (p.better) text += tr("tpl.actionable.better", { better: p.better });
             return text;
         }
@@ -990,7 +986,7 @@ function shareText(message) {
 }
 
 const Indicator = GObject.registerClass(
-    class AiUsageIndicator extends PanelMenu.Button {
+    class TokensGoBrrrIndicator extends PanelMenu.Button {
         destroy() {
             if (this._schemeId) {
                 this._interface.disconnect(this._schemeId);
@@ -1014,8 +1010,8 @@ const Indicator = GObject.registerClass(
                 const light =
                     this._interface.get_string("color-scheme") === "prefer-light";
                 Object.assign(COLOR, light ? PALETTES.light : PALETTES.dark);
-                if (light) this.menu.actor.add_style_class_name("ai-usage-light");
-                else this.menu.actor.remove_style_class_name("ai-usage-light");
+                if (light) this.menu.actor.add_style_class_name("tokens-go-brrr-light");
+                else this.menu.actor.remove_style_class_name("tokens-go-brrr-light");
                 if (rerender) this._render(false);
             };
             this._schemeId = this._interface.connect(
@@ -1027,15 +1023,13 @@ const Indicator = GObject.registerClass(
 
         _init(ext) {
             super._init(0.5, tr("brand"), false);
-            this.add_style_class_name("ai-usage-panel-button");
+            this.add_style_class_name("tokens-go-brrr-panel-button");
             this._ext = ext;
             this._icons = ext.icons;
             this._state = null; // parsed daemon state, or null when the daemon is away
             this._screen = "list";
             this._toolId = null;
             this._sessionsFilter = "active"; // 'active' | 'paused' on the sessions screen
-            this._llmLog = null; // the daemon's LLM log payload for the day on screen
-            this._llmOpen = new Set(); // entries expanded on the LLM activity screen
             this._lastSwapped = null;
             this._firstRender = true;
             this._probedMatch = null; // {toolId, project, title} from async pid probe
@@ -1056,14 +1050,14 @@ const Indicator = GObject.registerClass(
             this._landingShownThisOpen = false;
 
             this._dot = new St.Widget({
-                style_class: "ai-usage-dot",
+                style_class: "tokens-go-brrr-dot",
                 x_align: Clutter.ActorAlign.CENTER,
                 y_align: Clutter.ActorAlign.CENTER,
             });
             // Sessions appear beside the dot only while something is running, so the
             // panel stays a bare dot when it has nothing to say.
             this._sessions = new St.BoxLayout({
-                style_class: "ai-usage-sessions",
+                style_class: "tokens-go-brrr-sessions",
                 y_align: Clutter.ActorAlign.CENTER,
             });
             // The dot keeps the mockup's bare look, so the usual full-height panel pill
@@ -1071,7 +1065,7 @@ const Indicator = GObject.registerClass(
             // wraps the session chips too: they are part of the same button, so the
             // whole indicator has to light up as one target.
             this._halo = new St.BoxLayout({
-                style_class: "ai-usage-dot-halo",
+                style_class: "tokens-go-brrr-dot-halo",
                 y_align: Clutter.ActorAlign.CENTER,
                 accessible_name: tr("brand"),
             });
@@ -1093,7 +1087,7 @@ const Indicator = GObject.registerClass(
             this._retargetFocusedTerminal();
             this.connect("destroy", () => this._disconnectFocusWatch());
 
-            this.menu.actor.add_style_class_name("ai-usage-menu");
+            this.menu.actor.add_style_class_name("tokens-go-brrr-menu");
             this._watchColorScheme();
             this.menu.connect("open-state-changed", (_menu, open) => {
                 if (open) {
@@ -1377,7 +1371,7 @@ const Indicator = GObject.registerClass(
                 if (!running) continue;
 
                 const chip = new St.BoxLayout({
-                    style_class: "ai-usage-session",
+                    style_class: "tokens-go-brrr-session",
                     y_align: Clutter.ActorAlign.CENTER,
                 });
                 chip.add_child(this._sessionBadge(tool));
@@ -1387,7 +1381,7 @@ const Indicator = GObject.registerClass(
                     chip.add_child(
                         label(
                             truncateProject(project),
-                            "ai-usage-session-project",
+                            "tokens-go-brrr-session-project",
                             {
                                 y_align: Clutter.ActorAlign.CENTER,
                             },
@@ -1400,14 +1394,14 @@ const Indicator = GObject.registerClass(
                 const pct = clampPct(primaryOf(tool)?.value ?? 0);
                 if (hasMeters(tool) && pct >= CAUTION_AT) {
                     chip.add_child(
-                        label(`${Math.round(pct)}%`, "ai-usage-session-pct", {
+                        label(`${Math.round(pct)}%`, "tokens-go-brrr-session-pct", {
                             style: `color: ${panelColorFor(pct)};`,
                             y_align: Clutter.ActorAlign.CENTER,
                         }),
                     );
                 }
                 chip.add_child(
-                    label(`\u00d7${running}`, "ai-usage-session-count", {
+                    label(`\u00d7${running}`, "tokens-go-brrr-session-count", {
                         y_align: Clutter.ActorAlign.CENTER,
                     }),
                 );
@@ -1421,7 +1415,7 @@ const Indicator = GObject.registerClass(
         _sessionBadge(tool) {
             const icon = () =>
                 new St.Icon({
-                    style_class: "ai-usage-session-icon",
+                    style_class: "tokens-go-brrr-session-icon",
                     gicon: this._icons.badge(tool.icon),
                     icon_size: 14,
                     y_align: Clutter.ActorAlign.CENTER,
@@ -1435,13 +1429,13 @@ const Indicator = GObject.registerClass(
 
             const stack = new St.Widget({
                 layout_manager: new Clutter.BinLayout(),
-                style_class: "ai-usage-session-stack",
+                style_class: "tokens-go-brrr-session-stack",
                 y_align: Clutter.ActorAlign.CENTER,
             });
             stack.add_child(icon());
             stack.add_child(
                 new St.Icon({
-                    style_class: "ai-usage-session-via",
+                    style_class: "tokens-go-brrr-session-via",
                     gicon: this._icons.badge(via.providerId),
                     icon_size: 9,
                     x_align: Clutter.ActorAlign.END,
@@ -1463,7 +1457,7 @@ const Indicator = GObject.registerClass(
             this._entryRows = [];
             this._entryBars = [];
             const screen = new St.BoxLayout({
-                style_class: "ai-usage-screen",
+                style_class: "tokens-go-brrr-screen",
                 orientation: Clutter.Orientation.VERTICAL,
                 x_expand: true,
             });
@@ -1473,7 +1467,6 @@ const Indicator = GObject.registerClass(
             else if (this._screen === "earlier") this._renderEarlier(screen);
             else if (this._screen === "guide") this._renderGuide(screen);
             else if (this._screen === "about") this._renderAbout(screen);
-            else if (this._screen === "llmlog") this._renderLlmLog(screen);
             else this._renderList(screen);
             this.menu.box.add_child(screen);
 
@@ -1536,22 +1529,22 @@ const Indicator = GObject.registerClass(
         // sub line. The back arrow, when there is one, leads the kicker.
         _screenHeader({ kicker, meta = "", title, sub = "", back = null }) {
             const box = new St.BoxLayout({
-                style_class: "ai-usage-hdr",
+                style_class: "tokens-go-brrr-hdr",
                 orientation: Clutter.Orientation.VERTICAL,
                 x_expand: true,
             });
             const top = new St.BoxLayout({
-                style_class: "ai-usage-hdr-top",
+                style_class: "tokens-go-brrr-hdr-top",
                 x_expand: true,
             });
             if (back) {
                 const button = new St.Button({
-                    style_class: "ai-usage-back",
+                    style_class: "tokens-go-brrr-back",
                     can_focus: true,
                     accessible_name: tr("ui.back"),
                     y_align: Clutter.ActorAlign.CENTER,
                     child: new St.Icon({
-                        style_class: "ai-usage-back-icon",
+                        style_class: "tokens-go-brrr-back-icon",
                         gicon: this._icons.chevronLeft,
                         icon_size: 16,
                     }),
@@ -1561,49 +1554,49 @@ const Indicator = GObject.registerClass(
             }
             top.add_child(
                 // The product name is a name, not a label: it keeps its own case.
-                label(kicker === tr("brand") ? kicker : kicker.toUpperCase(), "ai-usage-kicker", {
+                label(kicker === tr("brand") ? kicker : kicker.toUpperCase(), "tokens-go-brrr-kicker", {
                     x_expand: true,
                     y_align: Clutter.ActorAlign.CENTER,
                 }),
             );
             if (meta)
                 top.add_child(
-                    label(meta.toUpperCase(), "ai-usage-kicker", {
+                    label(meta.toUpperCase(), "tokens-go-brrr-kicker", {
                         y_align: Clutter.ActorAlign.CENTER,
                     }),
                 );
             box.add_child(top);
-            box.add_child(wrappedLabel(title, "ai-usage-title"));
-            if (sub) box.add_child(wrappedLabel(sub, "ai-usage-hdr-sub"));
+            box.add_child(wrappedLabel(title, "tokens-go-brrr-title"));
+            if (sub) box.add_child(wrappedLabel(sub, "tokens-go-brrr-hdr-sub"));
             return box;
         }
 
         // ExtSection: a group of rows under a top rule, with an optional label.
         _section(text = "") {
             const box = new St.BoxLayout({
-                style_class: "ai-usage-section",
+                style_class: "tokens-go-brrr-section",
                 orientation: Clutter.Orientation.VERTICAL,
                 x_expand: true,
             });
-            if (text) box.add_child(label(text.toUpperCase(), "ai-usage-section-label"));
+            if (text) box.add_child(label(text.toUpperCase(), "tokens-go-brrr-section-label"));
             return box;
         }
 
         // ExtFooter: status text on the left, ghost actions, then Settings.
         _footer(text, actions = [], withSettings = false) {
             const bar = new St.BoxLayout({
-                style_class: "ai-usage-footer",
+                style_class: "tokens-go-brrr-footer",
                 x_expand: true,
             });
             bar.add_child(
-                label(text, "ai-usage-footer-text", {
+                label(text, "tokens-go-brrr-footer-text", {
                     x_expand: true,
                     y_align: Clutter.ActorAlign.CENTER,
                 }),
             );
             const add = (text_, cb) => {
                 const b = new St.Button({
-                    style_class: "ai-usage-ghost-btn",
+                    style_class: "tokens-go-brrr-ghost-btn",
                     label: text_,
                     can_focus: true,
                     y_align: Clutter.ActorAlign.CENTER,
@@ -1620,7 +1613,7 @@ const Indicator = GObject.registerClass(
         // that are not meters.
         _listRow(kicker, title, meta, cb) {
             const row = new St.Button({
-                style_class: "ai-usage-list-row",
+                style_class: "tokens-go-brrr-list-row",
                 can_focus: true,
                 x_expand: true,
             });
@@ -1629,13 +1622,13 @@ const Indicator = GObject.registerClass(
                 orientation: Clutter.Orientation.VERTICAL,
                 x_expand: true,
             });
-            text.add_child(label(kicker.toUpperCase(), "ai-usage-kicker"));
-            text.add_child(wrappedLabel(title, "ai-usage-list-title"));
-            if (meta) text.add_child(wrappedLabel(meta, "ai-usage-sub"));
+            text.add_child(label(kicker.toUpperCase(), "tokens-go-brrr-kicker"));
+            text.add_child(wrappedLabel(title, "tokens-go-brrr-list-title"));
+            if (meta) text.add_child(wrappedLabel(meta, "tokens-go-brrr-sub"));
             box.add_child(text);
             box.add_child(
                 new St.Icon({
-                    style_class: "ai-usage-chevron",
+                    style_class: "tokens-go-brrr-chevron",
                     gicon: this._icons.chevronRight,
                     icon_size: 14,
                     y_align: Clutter.ActorAlign.CENTER,
@@ -1649,20 +1642,20 @@ const Indicator = GObject.registerClass(
         // ExtGuideItem: a mark, a title and a description.
         _guideItem(color, title, desc, mark = "square") {
             const item = new St.BoxLayout({
-                style_class: "ai-usage-guide-item",
+                style_class: "tokens-go-brrr-guide-item",
                 x_expand: true,
             });
             if (mark === "pace") {
                 item.add_child(
                     new St.Widget({
-                        style_class: "ai-usage-guide-tick",
+                        style_class: "tokens-go-brrr-guide-tick",
                         y_align: Clutter.ActorAlign.START,
                     }),
                 );
             } else if (color) {
                 item.add_child(
                     new St.Widget({
-                        style_class: "ai-usage-guide-dot",
+                        style_class: "tokens-go-brrr-guide-dot",
                         style: `background-color: ${color};`,
                         y_align: Clutter.ActorAlign.START,
                         y_expand: false,
@@ -1670,12 +1663,12 @@ const Indicator = GObject.registerClass(
                 );
             }
             const text = new St.BoxLayout({
-                style_class: "ai-usage-guide-text",
+                style_class: "tokens-go-brrr-guide-text",
                 orientation: Clutter.Orientation.VERTICAL,
                 x_expand: true,
             });
-            text.add_child(label(title, "ai-usage-guide-title"));
-            text.add_child(wrappedLabel(desc, "ai-usage-guide-desc"));
+            text.add_child(label(title, "tokens-go-brrr-guide-title"));
+            text.add_child(wrappedLabel(desc, "tokens-go-brrr-guide-desc"));
             item.add_child(text);
             return item;
         }
@@ -1728,9 +1721,9 @@ const Indicator = GObject.registerClass(
                 .sort((a, b) => b.value - a.value)[0];
             const tail = others
                 ? ` ${tr("sent.at", {
-                      label: metricLabel(others.label),
-                      pct: Math.round(clampPct(others.value)),
-                  })}`
+                    label: metricLabel(others.label),
+                    pct: Math.round(clampPct(others.value)),
+                })}`
                 : "";
             const label = metricLabel(primary.label);
             let window;
@@ -1738,10 +1731,10 @@ const Indicator = GObject.registerClass(
                 window =
                     primary.resetsSeconds > 0
                         ? tr("sent.atResets", {
-                              label,
-                              pct,
-                              dur: duration(primary.resetsSeconds),
-                          })
+                            label,
+                            pct,
+                            dur: duration(primary.resetsSeconds),
+                        })
                         : tr("sent.atSoon", { label, pct });
             } else {
                 window = tr("sent.at", { label, pct });
@@ -1813,9 +1806,9 @@ const Indicator = GObject.registerClass(
                 session.backend?.model
                     ? session.backend.name
                         ? tr("session.via", {
-                              model: session.backend.model,
-                              via: session.backend.name,
-                          })
+                            model: session.backend.model,
+                            via: session.backend.name,
+                        })
                         : session.backend.model
                     : null,
                 session.tty || null,
@@ -1828,14 +1821,14 @@ const Indicator = GObject.registerClass(
         // ExtSessionRow: a status mark, the project, its facts, and Focus.
         _sessionRow(session) {
             const row = new St.BoxLayout({
-                style_class: "ai-usage-session-row",
+                style_class: "tokens-go-brrr-session-row",
                 x_expand: true,
             });
             row.add_child(
                 new St.Widget({
                     style_class: session.paused
-                        ? "ai-usage-session-mark paused"
-                        : "ai-usage-session-mark",
+                        ? "tokens-go-brrr-session-mark paused"
+                        : "tokens-go-brrr-session-mark",
                     y_align: Clutter.ActorAlign.START,
                 }),
             );
@@ -1843,13 +1836,13 @@ const Indicator = GObject.registerClass(
                 orientation: Clutter.Orientation.VERTICAL,
                 x_expand: true,
             });
-            text.add_child(label(sessionLabel(session), "ai-usage-session-name"));
+            text.add_child(label(sessionLabel(session), "tokens-go-brrr-session-name"));
             const meta = this._sessionMeta(session);
-            if (meta) text.add_child(label(meta, "ai-usage-sub"));
+            if (meta) text.add_child(label(meta, "tokens-go-brrr-sub"));
             row.add_child(text);
             if (!session.paused && session.project) {
                 const focus = new St.Button({
-                    style_class: "ai-usage-focus-btn",
+                    style_class: "tokens-go-brrr-focus-btn",
                     label: tr("ui.focus"),
                     can_focus: true,
                     y_align: Clutter.ActorAlign.CENTER,
@@ -1885,9 +1878,8 @@ const Indicator = GObject.registerClass(
                         ? tr("list.roomy", { name: roomy.t.name })
                         : "",
                     running
-                        ? `${tr("list.agents", { n: running })}${
-                              projects ? ` ${tr("list.projects", { n: projects })}` : ""
-                          }.`
+                        ? `${tr("list.agents", { n: running })}${projects ? ` ${tr("list.projects", { n: projects })}` : ""
+                        }.`
                         : "",
                 ]
                     .filter(Boolean)
@@ -1901,14 +1893,14 @@ const Indicator = GObject.registerClass(
             // only while it works (and for a few seconds at most), then a new
             // note may arrive; an unchanged picture simply makes the line vanish.
             if (this._state?.live?.catchingUp)
-                screen.add_child(label(tr("live.catchingUp"), "ai-usage-sessions-empty"));
+                screen.add_child(label(tr("live.catchingUp"), "tokens-go-brrr-sessions-empty"));
             if (!tools.length) {
                 const text = this._state
                     ? tr("empty.noProviders")
                     : tr("empty.noDaemon", {
-                          cmd: "systemctl --user start cursor-spend-monitor",
-                      });
-                screen.add_child(wrappedLabel(text, "ai-usage-empty"));
+                        cmd: "systemctl --user start tokens-go-brrr",
+                    });
+                screen.add_child(wrappedLabel(text, "tokens-go-brrr-empty"));
                 screen.add_child(this._footer("", [], true));
                 return;
             }
@@ -1977,28 +1969,28 @@ const Indicator = GObject.registerClass(
                     const pct = clampPct(m.value);
                     const color = muted ? COLOR.muted : colorFor(pct);
                     const block = new St.BoxLayout({
-                        style_class: "ai-usage-limit-row",
+                        style_class: "tokens-go-brrr-limit-row",
                         orientation: Clutter.Orientation.VERTICAL,
                         x_expand: true,
                     });
                     const top = new St.BoxLayout({
-                        style_class: "ai-usage-name-row",
+                        style_class: "tokens-go-brrr-name-row",
                         x_expand: true,
                     });
                     top.add_child(
-                        label(metricLabel(m.label), "ai-usage-name", {
+                        label(metricLabel(m.label), "tokens-go-brrr-name", {
                             y_align: Clutter.ActorAlign.CENTER,
                         }),
                     );
                     if (m === this._tightestMetric(tool) && tool.metrics.length > 1)
                         top.add_child(
-                            label(tr("ui.tightest").toUpperCase(), "ai-usage-tag", {
+                            label(tr("ui.tightest").toUpperCase(), "tokens-go-brrr-tag", {
                                 y_align: Clutter.ActorAlign.CENTER,
                             }),
                         );
                     top.add_child(new St.Widget({ x_expand: true }));
                     top.add_child(
-                        label(`${Math.round(pct)}%`, "ai-usage-value", {
+                        label(`${Math.round(pct)}%`, "tokens-go-brrr-value", {
                             style: `color: ${statusTextColor(pct, muted)};`,
                             y_align: Clutter.ActorAlign.CENTER,
                         }),
@@ -2011,7 +2003,7 @@ const Indicator = GObject.registerClass(
                     if (text) {
                         const crit = pct >= CRITICAL_AT && !muted;
                         block.add_child(
-                            wrappedLabel(text, crit ? "ai-usage-sub crit" : "ai-usage-sub", {
+                            wrappedLabel(text, crit ? "tokens-go-brrr-sub crit" : "tokens-go-brrr-sub", {
                                 style: crit ? `color: ${color};` : "",
                             }),
                         );
@@ -2021,13 +2013,13 @@ const Indicator = GObject.registerClass(
                 screen.add_child(limits);
             } else if (via) {
                 const note = new St.BoxLayout({
-                    style_class: "ai-usage-limit-row",
+                    style_class: "tokens-go-brrr-limit-row",
                     x_expand: true,
                 });
                 note.add_child(
                     wrappedLabel(
                         `${via.name}${via.model ? ` · ${via.model}` : ""} — ${errorText(tool.error) || tr("tool.noLimitsAvailable")}`,
-                        "ai-usage-sub",
+                        "tokens-go-brrr-sub",
                     ),
                 );
                 screen.add_child(note);
@@ -2061,7 +2053,7 @@ const Indicator = GObject.registerClass(
                             cb: () =>
                                 this._openUri(
                                     tool.dashboardUrl ||
-                                        "https://cursor.com/dashboard",
+                                    "https://cursor.com/dashboard",
                                 ),
                         },
                     ],
@@ -2092,7 +2084,7 @@ const Indicator = GObject.registerClass(
 
             // ExtFilterChips: square chips with counts.
             const filters = new St.BoxLayout({
-                style_class: "ai-usage-sessions-filters",
+                style_class: "tokens-go-brrr-sessions-filters",
                 x_expand: true,
             });
             for (const [key, text] of [
@@ -2103,8 +2095,8 @@ const Indicator = GObject.registerClass(
                 const count = key === "active" ? active.length : paused.length;
                 const btn = new St.Button({
                     style_class: selected
-                        ? "ai-usage-filter-chip active"
-                        : "ai-usage-filter-chip",
+                        ? "tokens-go-brrr-filter-chip active"
+                        : "tokens-go-brrr-filter-chip",
                     label: `${text} ${count}`,
                     can_focus: true,
                     y_align: Clutter.ActorAlign.CENTER,
@@ -2129,7 +2121,7 @@ const Indicator = GObject.registerClass(
                         this._sessionsFilter === "paused"
                             ? tr("sessions.noPaused")
                             : tr("sessions.noActive"),
-                        "ai-usage-sessions-empty",
+                        "tokens-go-brrr-sessions-empty",
                     ),
                 );
             }
@@ -2178,9 +2170,9 @@ const Indicator = GObject.registerClass(
             );
             const daemon = this._state
                 ? tr("about.daemon", {
-                      v: this._state.version ?? "?",
-                      ago: relativeTime(this._state.updated_at),
-                  })
+                    v: this._state.version ?? "?",
+                    ago: relativeTime(this._state.updated_at),
+                })
                 : tr("about.daemonDown");
             const section = this._section();
             section.add_child(
@@ -2197,7 +2189,7 @@ const Indicator = GObject.registerClass(
                 ),
             );
             const refresh = new St.Button({
-                style_class: "ai-usage-secondary-btn ai-usage-about-refresh",
+                style_class: "tokens-go-brrr-secondary-btn tokens-go-brrr-about-refresh",
                 label: tr("ui.refresh"),
                 can_focus: true,
                 x_expand: true,
@@ -2208,176 +2200,16 @@ const Indicator = GObject.registerClass(
 
         // -- the LLM activity log ----------------------------------------------
 
+        // Like Settings: the log can run to hundreds of calls after a long day,
+        // so the daemon writes it as a text document and the menu opens that.
         _openLlmLog() {
-            this._llmLog = null;
-            this._llmOpen = new Set();
-            this._loadLlmLog("");
-            this._navigate("llmlog");
-        }
-
-        _loadLlmLog(day) {
-            this._ext.fetchLlmLog(day, (data) => {
-                this._llmLog = data ?? { unavailable: true };
-                this._llmOpen = new Set();
-                if (this._screen === "llmlog" && this.menu.isOpen)
-                    this._render(false);
+            this._ext.llmLogReport((path) => {
+                if (!path) {
+                    Main.notify(tr("brand"), tr("llm.unavailable"));
+                    return;
+                }
+                this._openUri(Gio.File.new_for_path(path).get_uri());
             });
-        }
-
-        _renderLlmLog(screen) {
-            const data = this._llmLog;
-            screen.add_child(
-                this._screenHeader({
-                    kicker: tr("llm.kicker"),
-                    title: tr("llm.title"),
-                    sub: tr("llm.sub"),
-                    back: () => this._navigate("about"),
-                }),
-            );
-            const note = (text) => {
-                const box = this._section();
-                box.add_child(label(text, "ai-usage-sessions-empty"));
-                screen.add_child(box);
-            };
-            if (!data) {
-                note(tr("llm.loading"));
-                return;
-            }
-            if (data.unavailable) {
-                note(tr("llm.unavailable"));
-                return;
-            }
-            if (!data.enabled) {
-                note(tr("llm.off"));
-                return;
-            }
-            if (!data.days?.length) {
-                note(tr("llm.emptyAll"));
-                screen.add_child(this._llmFooter(data));
-                return;
-            }
-
-            // Newest day first in `days`, so "earlier" is the next index.
-            const at = data.days.indexOf(data.day);
-            const earlier = data.days[at + 1];
-            const later = at > 0 ? data.days[at - 1] : undefined;
-            const nav = new St.BoxLayout({
-                style_class: "ai-usage-sessions-filters",
-                x_expand: true,
-            });
-            const step = (text, day) => {
-                const btn = new St.Button({
-                    style_class: "ai-usage-filter-chip",
-                    label: text,
-                    can_focus: day !== undefined,
-                    reactive: day !== undefined,
-                    opacity: day !== undefined ? 255 : 90,
-                    accessible_name: text,
-                    y_align: Clutter.ActorAlign.CENTER,
-                });
-                if (day !== undefined)
-                    btn.connect("clicked", () => this._loadLlmLog(day));
-                return btn;
-            };
-            nav.add_child(step("‹", earlier));
-            nav.add_child(
-                label(data.day, "ai-usage-kicker", {
-                    x_expand: true,
-                    x_align: Clutter.ActorAlign.CENTER,
-                    y_align: Clutter.ActorAlign.CENTER,
-                }),
-            );
-            nav.add_child(step("›", later));
-            screen.add_child(nav);
-
-            const summary = data.summary ?? {};
-            screen.add_child(
-                wrappedLabel(
-                    tr("llm.summary", {
-                        calls: summary.calls ?? 0,
-                        failed: summary.failures ?? 0,
-                        tin: formatTokens(summary.tokens_in ?? 0),
-                        tout: formatTokens(summary.tokens_out ?? 0),
-                    }),
-                    "ai-usage-hdr-sub",
-                ),
-            );
-
-            const list = this._section();
-            const entries = [...(data.entries ?? [])].reverse();
-            if (!entries.length) {
-                list.add_child(label(tr("llm.empty"), "ai-usage-sessions-empty"));
-            }
-            entries.forEach((entry, i) => list.add_child(this._llmRow(entry, i)));
-            screen.add_child(list);
-            screen.add_child(this._llmFooter(data));
-        }
-
-        _llmRow(entry, index) {
-            const open = this._llmOpen.has(index);
-            const outcome = String(entry.outcome ?? "");
-            const time = String(entry.ts ?? "").slice(11, 19);
-            const who = [entry.provider, entry.model].filter(Boolean).join(" · ");
-            const bits = [tr(`llm.outcome.${outcome}`)];
-            if (outcome === "skipped" && entry.reason)
-                bits.push(tr("llm.skipped", { reason: entry.reason }));
-            if (entry.latency_ms !== undefined)
-                bits.push(`${entry.latency_ms} ms`);
-            if (entry.tokens_in !== undefined || entry.tokens_out !== undefined)
-                bits.push(
-                    `${formatTokens(entry.tokens_in ?? 0)} → ${formatTokens(entry.tokens_out ?? 0)}`,
-                );
-
-            const row = new St.Button({
-                style_class: "ai-usage-list-row",
-                can_focus: true,
-                x_expand: true,
-            });
-            const box = new St.BoxLayout({
-                orientation: Clutter.Orientation.VERTICAL,
-                x_expand: true,
-            });
-            box.add_child(
-                label(
-                    [time, entry.trigger].filter(Boolean).join(" · ").toUpperCase(),
-                    "ai-usage-kicker",
-                ),
-            );
-            box.add_child(wrappedLabel(who || "—", "ai-usage-list-title"));
-            box.add_child(wrappedLabel(bits.join(" · "), "ai-usage-sub"));
-            if (open) {
-                const detail = (title, text) => {
-                    if (!text) return;
-                    box.add_child(
-                        label(title.toUpperCase(), "ai-usage-section-label"),
-                    );
-                    box.add_child(wrappedLabel(String(text), "ai-usage-guide-desc"));
-                };
-                detail(tr("llm.prompt"), entry.prompt);
-                detail(tr("llm.reply"), entry.reply);
-                detail(tr("llm.error"), entry.error);
-            }
-            row.set_child(box);
-            row.connect("clicked", () => {
-                if (this._llmOpen.has(index)) this._llmOpen.delete(index);
-                else this._llmOpen.add(index);
-                this._render(false);
-            });
-            return row;
-        }
-
-        _llmFooter(data) {
-            return this._footer(
-                tr("llm.where", { dir: data.directory ?? "" }),
-                [
-                    {
-                        label: tr("llm.clear"),
-                        cb: () =>
-                            this._ext.clearLlmLog(() => this._loadLlmLog("")),
-                    },
-                ],
-                false,
-            );
         }
 
         // -- the landing page and the insights behind it -----------------------
@@ -2413,12 +2245,12 @@ const Indicator = GObject.registerClass(
             const featured = billboard.featured;
             if (featured?.name || featured?.providerId) {
                 const row = new St.BoxLayout({
-                    style_class: "ai-usage-landing-featured",
+                    style_class: "tokens-go-brrr-landing-featured",
                     x_expand: true,
                 });
                 row.add_child(
                     new St.Icon({
-                        style_class: "ai-usage-landing-icon",
+                        style_class: "tokens-go-brrr-landing-icon",
                         gicon: this._icons.badge(featured.providerId ?? "cursor"),
                         icon_size: 16,
                         y_align: Clutter.ActorAlign.CENTER,
@@ -2428,7 +2260,7 @@ const Indicator = GObject.registerClass(
                 row.add_child(
                     label(
                         `${featured.name ?? featured.providerId ?? ""}${role ? ` · ${role}` : ""}`,
-                        "ai-usage-sub",
+                        "tokens-go-brrr-sub",
                         { y_align: Clutter.ActorAlign.CENTER },
                     ),
                 );
@@ -2436,11 +2268,11 @@ const Indicator = GObject.registerClass(
             }
 
             const actions = new St.BoxLayout({
-                style_class: "ai-usage-landing-actions",
+                style_class: "tokens-go-brrr-landing-actions",
                 x_expand: true,
             });
             const cont = new St.Button({
-                style_class: "ai-usage-primary-btn",
+                style_class: "tokens-go-brrr-primary-btn",
                 label: tr("ui.continue"),
                 can_focus: true,
                 x_expand: true,
@@ -2449,7 +2281,7 @@ const Indicator = GObject.registerClass(
             actions.add_child(cont);
             if ((this._state?.recentMessages ?? []).length > 1) {
                 const earlier = new St.Button({
-                    style_class: "ai-usage-secondary-btn",
+                    style_class: "tokens-go-brrr-secondary-btn",
                     label: tr("ui.earlier"),
                     can_focus: true,
                 });
@@ -2458,7 +2290,7 @@ const Indicator = GObject.registerClass(
             }
             if (billboard.share) {
                 const copy = new St.Button({
-                    style_class: "ai-usage-ghost-btn",
+                    style_class: "tokens-go-brrr-ghost-btn",
                     label: tr("ui.copy"),
                     can_focus: true,
                     y_align: Clutter.ActorAlign.CENTER,
@@ -2487,7 +2319,7 @@ const Indicator = GObject.registerClass(
             );
             const section = this._section();
             if (!messages.length)
-                section.add_child(label(tr("earlier.empty"), "ai-usage-sessions-empty"));
+                section.add_child(label(tr("earlier.empty"), "tokens-go-brrr-sessions-empty"));
             for (const m of messages) {
                 section.add_child(
                     this._listRow(
@@ -2514,7 +2346,7 @@ const Indicator = GObject.registerClass(
             if (offered.length < 2) return null;
 
             const bar = new St.BoxLayout({
-                style_class: "ai-usage-windowbar",
+                style_class: "tokens-go-brrr-windowbar",
                 x_expand: true,
             });
             for (const { kind, key } of offered) {
@@ -2522,8 +2354,8 @@ const Indicator = GObject.registerClass(
                 const active = kind === selectedKind;
                 const button = new St.Button({
                     style_class: active
-                        ? "ai-usage-window-btn selected"
-                        : "ai-usage-window-btn",
+                        ? "tokens-go-brrr-window-btn selected"
+                        : "tokens-go-brrr-window-btn",
                     label: text,
                     can_focus: true,
                     x_expand: true,
@@ -2583,7 +2415,7 @@ const Indicator = GObject.registerClass(
                     global.create_app_launch_context(0, -1),
                 );
             } catch (e) {
-                console.error(`[ai-usage] failed to open ${uri}: ${e.message}`);
+                console.error(`[tokens-go-brrr] failed to open ${uri}: ${e.message}`);
             }
         }
 
@@ -2595,7 +2427,7 @@ const Indicator = GObject.registerClass(
     },
 );
 
-export default class AiUsageExtension extends Extension {
+export default class TokensGoBrrrExtension extends Extension {
     enable() {
         this.icons = {
             badge: (name) => this._badgeIcon(name),
@@ -2617,7 +2449,7 @@ export default class AiUsageExtension extends Extension {
                 if (error) {
                     if (!this._cancellable?.is_cancelled())
                         console.error(
-                            `[ai-usage] D-Bus proxy failed: ${error.message}`,
+                            `[tokens-go-brrr] D-Bus proxy failed: ${error.message}`,
                         );
                     return;
                 }
@@ -2671,7 +2503,7 @@ export default class AiUsageExtension extends Extension {
         try {
             this._indicator?.setState(JSON.parse(json));
         } catch (e) {
-            console.error(`[ai-usage] bad state payload: ${e.message}`);
+            console.error(`[tokens-go-brrr] bad state payload: ${e.message}`);
         }
     }
 
@@ -2685,7 +2517,7 @@ export default class AiUsageExtension extends Extension {
             if (error) {
                 if (!this._cancellable?.is_cancelled())
                     console.error(
-                        `[ai-usage] GetState failed: ${error.message}`,
+                        `[tokens-go-brrr] GetState failed: ${error.message}`,
                     );
                 return;
             }
@@ -2694,57 +2526,32 @@ export default class AiUsageExtension extends Extension {
     }
 
     refresh() {
-        if (this._proxy?.g_name_owner) this._proxy.RefreshRemote(() => {});
+        if (this._proxy?.g_name_owner) this._proxy.RefreshRemote(() => { });
     }
 
     setPrimary(providerId, metricKey) {
         if (this._proxy?.g_name_owner)
-            this._proxy.SetPrimaryRemote(providerId, metricKey, () => {});
+            this._proxy.SetPrimaryRemote(providerId, metricKey, () => { });
     }
 
-    // The LLM log is read through the daemon, never from its files. Defensive
-    // for the same reason as acknowledge(): an older daemon has no such method,
-    // and the screen should say so instead of breaking.
-    fetchLlmLog(day, callback) {
+    // The daemon writes the LLM log to a text file and tells us where. Defensive
+    // like acknowledge(): an older daemon has no such method, so say so instead
+    // of breaking.
+    llmLogReport(callback) {
         if (
             !this._proxy?.g_name_owner ||
-            typeof this._proxy.LlmLogRemote !== "function"
+            typeof this._proxy.LlmLogReportRemote !== "function"
         ) {
-            callback(null);
+            callback("");
             return;
         }
         try {
-            this._proxy.LlmLogRemote(day, (result, error) => {
-                if (error) {
-                    callback(null);
-                    return;
-                }
-                try {
-                    callback(JSON.parse(result[0]));
-                } catch (e) {
-                    console.error(`[ai-usage] bad LLM log payload: ${e.message}`);
-                    callback(null);
-                }
-            });
+            this._proxy.LlmLogReportRemote((result, error) =>
+                callback(error ? "" : String(result?.[0] ?? "")),
+            );
         } catch (e) {
-            console.error(`[ai-usage] LLM log failed: ${e.message}`);
-            callback(null);
-        }
-    }
-
-    clearLlmLog(callback) {
-        if (
-            !this._proxy?.g_name_owner ||
-            typeof this._proxy.ClearLlmLogRemote !== "function"
-        ) {
-            callback();
-            return;
-        }
-        try {
-            this._proxy.ClearLlmLogRemote(() => callback());
-        } catch (e) {
-            console.error(`[ai-usage] clearing the LLM log failed: ${e.message}`);
-            callback();
+            console.error(`[tokens-go-brrr] LLM log report failed: ${e.message}`);
+            callback("");
         }
     }
 
@@ -2757,9 +2564,9 @@ export default class AiUsageExtension extends Extension {
         if (!this._proxy?.g_name_owner) return;
         if (typeof this._proxy.AcknowledgeRemote !== "function") return;
         try {
-            this._proxy.AcknowledgeRemote(messageId, () => {});
+            this._proxy.AcknowledgeRemote(messageId, () => { });
         } catch (e) {
-            console.error(`[ai-usage] acknowledge failed: ${e.message}`);
+            console.error(`[tokens-go-brrr] acknowledge failed: ${e.message}`);
         }
     }
 }

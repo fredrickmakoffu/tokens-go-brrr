@@ -22,11 +22,11 @@ caution, so an idle-but-healthy tool costs a logo and two characters.
 
 ```bash
 chmod +x install.sh && ./install.sh
-cursor-spend-monitor setup
-systemctl --user enable --now cursor-spend-monitor.service
+tokens-go-brrr setup
+systemctl --user enable --now tokens-go-brrr.service
 ```
 
-`install.sh` also installs the Barlow fonts the popover is set in (to `~/.local/share/fonts/ai-usage/`); `./install-fonts.sh` does only that. Log out and back in so GNOME Shell picks up the extension. Needs GNOME Shell 45 or newer.
+`install.sh` also installs the Barlow fonts the popover is set in (to `~/.local/share/fonts/tokens-go-brrr/`); `./install-fonts.sh` does only that. Log out and back in so GNOME Shell picks up the extension. Needs GNOME Shell 45 or newer.
 
 ## Providers
 
@@ -139,7 +139,7 @@ usage route long before any quota is spent. Inside the cooldown the panel is
 served state that is at most a minute old, which is the same number a fresh poll
 would have returned. The scheduled poll is not affected.
 
-`~/.config/cursor-spend-monitor/config.json`:
+`~/.config/tokens-go-brrr/config.json`:
 
 ```json
 {
@@ -159,7 +159,7 @@ Chip swaps persist in `primary_overrides`.
 
 ```text
 GNOME Shell extension (status dot + popover)
-        ↑  io.github.fredrickmakoffu.AIUsage on the session bus
+        ↑  io.github.fredrickmakoffu.TokensGoBrrr on the session bus
    daemon (poll, alert, publish)
         ↑
   ProviderSnapshot[] ← providers/cursor (+ opencode, claude later)
@@ -182,17 +182,17 @@ daemon and sends back two commands: `Refresh` and `SetPrimary`.
 ## Status bars and scripts
 
 `status` reads the state the daemon already published to
-`/run/user/$UID/cursor-spend-monitor/state.json`. That means **no credentials, no
+`/run/user/$UID/tokens-go-brrr/state.json`. That means **no credentials, no
 network call and no rate limit**, so it is safe to run as often as a status bar
 redraws — about 0.1s per call, against 3.6s and one request per provider if it
 has to fetch. When no daemon is running, or its state has gone stale (two missed
 polls), it falls back to fetching directly and says so; `--live` forces that.
 
 ```bash
-cursor-spend-monitor status --json                       # full payload
-cursor-spend-monitor status --json --compact             # one line, for jq
-cursor-spend-monitor status --format "{icon} {pct}%"     # cursor 37%  claude 62%
-cursor-spend-monitor status --format "{name} {pct}%" --provider claude
+tokens-go-brrr status --json                       # full payload
+tokens-go-brrr status --json --compact             # one line, for jq
+tokens-go-brrr status --format "{icon} {pct}%"     # cursor 37%  claude 62%
+tokens-go-brrr status --format "{name} {pct}%" --provider claude
 ```
 
 Template fields: `{id}` `{name}` `{icon}` `{plan}` `{status}` `{pct}` `{label}`
@@ -217,8 +217,8 @@ Exit codes: `0` every provider shown is fine, `1` at least one needs attention,
 and Makefiles — so a two-hour run does not start at 97%.
 
 ```bash
-cursor-spend-monitor check --min 20 --provider claude || echo "wait for the reset"
-cursor-spend-monitor check --min 10 --any --quiet
+tokens-go-brrr check --min 20 --provider claude || echo "wait for the reset"
+tokens-go-brrr check --min 10 --any --quiet
 ```
 
 | Exit | Meaning |
@@ -236,7 +236,7 @@ have headroom; `--any` passes when one does.
 `best` answers the question that comes with paying for four subscriptions:
 
 ```console
-$ cursor-spend-monitor best --explain
+$ tokens-go-brrr best --explain
 Use Cursor — 63% left (Claude Code 35% left, OpenCode 20% left).
 ```
 
@@ -245,7 +245,7 @@ subscription cannot decide an answer twice.
 
 ## Burn rate
 
-Every poll is recorded to `~/.local/share/cursor-spend-monitor/history.db`, one
+Every poll is recorded to `~/.local/share/tokens-go-brrr/history.db`, one
 row per meter, kept for `history_days` (90 by default; `0` turns recording off).
 From that series each meter gets a time-to-exhaustion:
 
@@ -290,12 +290,12 @@ was spent on*: tokens per provider, model, project and hour, harvested
 idempotently from each tool's own store.
 
 ```bash
-cursor-spend-monitor harvest                   # read every store into the ledger
-cursor-spend-monitor harvest --provider claude  # one provider only
-cursor-spend-monitor harvest --full            # ignore watermarks, re-read all
-cursor-spend-monitor report                    # this month, by provider
-cursor-spend-monitor report --week --by model  # last 7 days, by model
-cursor-spend-monitor report --checks           # cross-check disagreements
+tokens-go-brrr harvest                   # read every store into the ledger
+tokens-go-brrr harvest --provider claude  # one provider only
+tokens-go-brrr harvest --full            # ignore watermarks, re-read all
+tokens-go-brrr report                    # this month, by provider
+tokens-go-brrr report --week --by model  # last 7 days, by model
+tokens-go-brrr report --checks           # cross-check disagreements
 ```
 
 | Source | What it gives | Fidelity |
@@ -318,9 +318,9 @@ Digests and alerts are composed from the ledger, and **work with no LLM
 configured**: the wording is a template until a generator is enabled.
 
 ```bash
-cursor-spend-monitor quote                     # the latest generated message
-cursor-spend-monitor quote --generate --slot weekly
-cursor-spend-monitor quote --tweet             # SHARE: line, copied to clipboard
+tokens-go-brrr quote                     # the latest generated message
+tokens-go-brrr quote --generate --slot weekly
+tokens-go-brrr quote --tweet             # SHARE: line, copied to clipboard
 ```
 
 The daemon sends a digest on its schedule (daily at `notify_daily_hour`, weekly
@@ -402,7 +402,7 @@ another computer, which the local transcripts can never show.
 
 **Every model call is logged**, so you can see exactly what was sent and what
 came back. One file per local day under
-`~/.local/share/cursor-spend-monitor/llm-calls/YYYY-MM-DD.jsonl`, one JSON
+`~/.local/share/tokens-go-brrr/llm-calls/YYYY-MM-DD.jsonl`, one JSON
 object per line: time, why it ran, provider and model, outcome (including
 refusals and skips), latency, tokens, the prompt and the reply. Open it in the
 panel from **About → LLM activity**. Credentials are never written.

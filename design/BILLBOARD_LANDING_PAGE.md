@@ -253,7 +253,7 @@ acknowledges, while a genuinely new message still gets through.
 └────────────────────────────────────────────┘
 ```
 
-- **Quote** — `wrappedLabel(billboard.text, "ai-usage-landing-quote")`. There is
+- **Quote** — `wrappedLabel(billboard.text, "tokens-go-brrr-landing-quote")`. There is
   no quote styling in the extension today; it is new CSS, not a reuse.
 - **Featured AI** — `icons.badge(featured.providerId)` (the same badge stack the
   session chips use) plus `featured.name`, and one line of role copy:
@@ -288,16 +288,16 @@ surprising. *(Decision 6.)*
 
 ## 7. Styles
 
-New classes in `stylesheet.css`, all namespaced `ai-usage-landing-*`:
-`ai-usage-landing`, `-quote`, `-share`, `-featured`, `-name`, `-role`,
-`-continue`, `-skip`, plus `ai-usage-dot.has-update`.
+New classes in `stylesheet.css`, all namespaced `tokens-go-brrr-landing-*`:
+`tokens-go-brrr-landing`, `-quote`, `-share`, `-featured`, `-name`, `-role`,
+`-continue`, `-skip`, plus `tokens-go-brrr-dot.has-update`.
 
-Reused as-is: `ai-usage-badge`, `ai-usage-badge-icon`, `ai-usage-chevron`,
-`ai-usage-header-btn`, `ai-usage-screen`, and the existing entry animation
+Reused as-is: `tokens-go-brrr-badge`, `tokens-go-brrr-badge-icon`, `tokens-go-brrr-chevron`,
+`tokens-go-brrr-header-btn`, `tokens-go-brrr-screen`, and the existing entry animation
 (`ROW_EASE`) so the quote settles the same way a row does.
 
 The quote should follow the type scale already in `stylesheet.css` — larger
-than `ai-usage-name`, wrapped to at most three or four lines, and never
+than `tokens-go-brrr-name`, wrapped to at most three or four lines, and never
 truncated: a message that has to be ellipsised is too long, and the generator's
 own limit is three sentences.
 
@@ -342,7 +342,7 @@ own limit is three sentences.
 | `daemon.py` | publish `billboard` and `latest_message`; `acknowledge(id)` handler; `billboard_enabled` respected |
 | `dbus_service.py` | `Acknowledge` in the interface XML, in `_method_call`, and a new constructor callback |
 | `extension.js` | `landing` screen; open-flow routing; `_landingShownId`; Continue / Skip / Copy; Latest header button; dot marker |
-| `stylesheet.css` | the `ai-usage-landing-*` classes and `has-update` |
+| `stylesheet.css` | the `tokens-go-brrr-landing-*` classes and `has-update` |
 | `config.py` | the three settings above |
 | `devtest/mock_daemon.py` | a `billboard` and `latest_message`, plus a way to cycle to the next one |
 | `devtest/stress_daemon.py` | a maximum-length quote, to prove wrapping |

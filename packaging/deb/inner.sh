@@ -22,4 +22,4 @@ fi
 
 sed "s/@VERSION@/$VER/" /src/packaging/deb/control.in > "$PKG/DEBIAN/control"
 install -m 0755 /src/packaging/deb/postinst "$PKG/DEBIAN/postinst"
-dpkg-deb --root-owner-group --build "$PKG" "/out/cursor-spend-monitor_${VER}_all.deb" >/dev/null
+dpkg-deb --root-owner-group --build "$PKG" "/out/tokens-go-brrr_${VER}_all.deb" >/dev/null
