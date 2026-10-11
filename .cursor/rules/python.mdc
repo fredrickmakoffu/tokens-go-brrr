@@ -1,0 +1,43 @@
+---
+description: Python style, fail-soft policy, tests, and Ruff
+globs: "**/*.py"
+alwaysApply: false
+---
+
+# Python standards
+
+## Shape
+
+- Python ≥ 3.11, `from __future__ import annotations`, `X | None` unions.
+- Line length **100** (Ruff `line-length = 100`). Prefer ≤88 when easy.
+- `snake_case` modules/functions; `PascalCase` classes; relative imports inside the package.
+- Module docstring on every new module (purpose in one short paragraph). "Why" comments over restating code.
+- Prefer `logging` only if introducing a shared logger; today daemons use `print(..., file=sys.stderr)` — match the file you edit; do not mix both in one module.
+
+## Fail-soft (product law)
+
+- Panel and daemon must stay up: catch at provider/harvester/ledger edges; `# noqa: BLE001` only with a one-line why.
+- **Meters / utilization:** unparsable → drop the meter or use `error_snapshot`, do **not** invent a healthy `0%`.
+- **Config coercion:** invalid → documented default; include `OverflowError` in `_as_int` / `_as_float`.
+- Reuse shared helpers — do not clone `_as_int`, `_parse_iso`, `_jwt_exp`, HTTP GET/POST. Put new shared coercion in one util module if none fits.
+
+## Types and patterns
+
+- Annotate public functions. Use `Protocol` for `Provider` / `Harvester`; keep `process_specs` a **tuple**, not a mutable list.
+- Prefer `dataclasses.replace` over hand-copying snapshot fields.
+- User-Agent: `tokens-go-brrr/<version>` from package version — not a hard-coded `0.1`.
+
+## Tests
+
+- **unittest** only (`python3 -m unittest discover -s tests`). No pytest unless the project decides to migrate.
+- Fakes + temp dirs; no network in unit tests. Mirror fail-soft behaviour.
+- After behaviour changes: run the relevant test module, then full suite before claiming done.
+
+## Lint
+
+```bash
+make lint           # Ruff E/F/I — required
+make format-check   # optional until a format pass lands
+```
+
+Do not mass-reformat unrelated files. Match surrounding style; use `ruff format` only on files you touch when convenient.

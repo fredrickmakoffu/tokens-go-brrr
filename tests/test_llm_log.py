@@ -16,7 +16,6 @@ from pathlib import Path
 from unittest import mock
 
 from tokens_go_brrr import llm_composer as llm
-from tokens_go_brrr import llm_log
 from tokens_go_brrr.llm_log import LlmLog
 from tokens_go_brrr.notify_engine import INFORMATIVE, Message
 

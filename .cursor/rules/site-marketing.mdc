@@ -1,0 +1,29 @@
+---
+description: Landing site structure, i18n, and marketing voice
+globs: "site/**/*"
+alwaysApply: false
+---
+
+# Site and marketing
+
+## Structure
+
+- One job per section (hero → download → what it does → privacy → FAQ → releases).
+- Hero budget: brand, one headline, one supporting line, one CTA group, one dominant visual idea — no stat strips or secondary promos in the first viewport.
+- No cards unless they wrap a real interaction.
+- Interactive burn meter is the brand demo; keep the gag consistent (`−1.2k` / `Copied −4k`).
+
+## Brand and i18n
+
+- Display brand: `Tokens go brrr`. Technical ids stay `tokens-go-brrr`.
+- All copy through `t("key")` / `site/i18n.js` (en, fr, pt-BR). Do not hardcode English in JSX except intentional brand/provider invariants.
+- Brand and provider names stay identical across locales. Lowercase via `html[data-lower]`.
+- Theme: system until first click; then sticky (`tgb-theme`). Tokens in `styles.css` for light + `[data-theme="dark"]`.
+- After token colour changes: `python3 scripts/check_contrast.py` (update the script's pairs too — it does not parse CSS).
+
+## Shipping constraints
+
+- No bundler today: React/Babel from CDN + plain JSX. Do not introduce a build step casually.
+- `ds_bundle.js` is vendored; if regenerated, re-apply `window.t` patches and scrub stale `"AI usage"` kit titles.
+- Public releases repo is `tokens-go-brrr-releases` (not `cursor-spend-monitor-releases`).
+- Keep `ABOUT.version` in `data.jsx` aligned with `pyproject.toml` when cutting site-visible releases.

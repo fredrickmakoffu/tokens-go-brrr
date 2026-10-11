@@ -18,10 +18,11 @@ from . import (
     harvesters,
     history,
     ledger,
+    llm_budget,
+    llm_log,
     notify_engine,
 )
 from . import llm_composer as llm
-from . import llm_budget, llm_log
 from .config import MonitorConfig, write_state
 from .dbus_service import UsageService
 from .instances import InstanceReport, scan, signature

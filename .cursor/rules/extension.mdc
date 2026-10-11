@@ -1,0 +1,36 @@
+---
+description: GNOME Shell extension presentation and D-Bus rules
+globs: "gnome-shell-extension/**/*"
+alwaysApply: false
+---
+
+# Extension standards
+
+## Role
+
+Presentation only for policy: paint `state.json` / D-Bus payload. Do not re-implement billboard priority, digests, or ack rules in GJS.
+
+```js
+// Landing interrupt — entire routing rule
+const billboard = this._state?.billboard;
+if (billboard && billboard.id !== this._landingShownId) showLandingPage(billboard);
+```
+
+## Contracts
+
+- Prefer **data not sentences** over the wire: `resetsSeconds`, `template: {id, params}`. English `text` remains for CLI / LLM rewrite.
+- New user-visible strings: add keys to **all** catalogs in `locales.js` (en, fr, pt-BR) and a `templateText` case when adding a `tpl.*`.
+- Locale override env is still `AI_USAGE_LANG` (legacy name — do not rename without a migration plan).
+- Keep `metadata.version` (integer) stable for GNOME hot-reload; bump `version-name` with semver via `scripts/bump_version.py`.
+- D-Bus `IFACE_XML` must match `tokens_go_brrr/dbus_service.py`. Update both in the same change.
+
+## Design system (popover)
+
+- Square geometry, hairlines `#4b4b4e`, graphite `#2b2b2d`, snow `#f5f5f8`, steel `#94bce3`, Barlow (+ Condensed where used), ~380px width.
+- Status: percentage beside colour; caution is hollow; respect `enable-animations`; never overshoot meter animation.
+- Dark literals in CSS; light block via `python3 scripts/gen_light_css.py` after dark edits. JS colours live in `PALETTES`.
+- Class prefix: `tokens-go-brrr-*` only.
+
+## Devtest
+
+Prefer `devtest/layout-smoke.sh` / mock daemon over ad-hoc Shell reloads when checking layout.

@@ -1,0 +1,38 @@
+---
+description: Layer boundaries and where new code belongs
+alwaysApply: true
+---
+
+# Architecture
+
+```text
+Extension (GJS)  ←D-Bus/state.json→  UsageDaemon
+                                      ├─ providers/   live meters (panel)
+                                      ├─ harvesters/  ledger fill (analytics)
+                                      ├─ ledger/      sessions, messages, billboard
+                                      ├─ notify*      alerts + digests + live notes
+                                      └─ llm_*        optional wording (templates first)
+```
+
+## Boundaries
+
+1. **Daemon owns policy; extension renders.** Billboard, ack, digests, which message interrupts — Python. Extension compares `billboard.id` and paints.
+2. **Providers** return `ProviderSnapshot` / `Meter`. HTTP and auth stay inside the provider (or a tiny shared helper). Do not grow `api.py` into a multi-vendor layer — it is Cursor-only; prefer `providers/cursor_*` for new Cursor HTTP.
+3. **Harvesters** are fail-soft: never raise out of `harvest`; never invent zeros; mark estimates. Write only via `ledger.upsert_*`.
+4. **Published state** (`state.build_payload` + schema) is the only contract for CLI and extension. Keep `write_state` / `read_state` in the same module family.
+5. **D-Bus** (`dbus_service.py`) is a thin adapter — no providers, ledger, or notify logic.
+6. **stdlib only** in `tokens_go_brrr` (`dependencies = []`). No new PyPI deps without an explicit decision.
+7. **Templates first; LLM optional.** Model failure must fall back to templates. Every model call is logged; never log credentials.
+
+## Size discipline
+
+Prefer extracting along existing seams before growing god modules further:
+
+| Hot file | Prefer next change lands in |
+|----------|-----------------------------|
+| `ledger.py` | schema / sessions / messages / queries |
+| `notify_engine.py` | digest / events / billboard / live_notes |
+| `daemon.py` | polling / borrowing / note workers |
+| `extension.js` | small modules only if GNOME packaging allows; else clear section headers |
+
+Do not refactor god modules "for cleanliness" unless the task needs a seam. When you touch them, add a clear section or extract the piece you are changing.
