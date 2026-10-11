@@ -1,0 +1,28 @@
+---
+description: How to treat design/ handovers and product invariants
+globs: "design/**/*"
+alwaysApply: false
+---
+
+# Design docs
+
+`design/` holds product law and historical handovers. Prefer code + tests as truth when a doc status line disagrees.
+
+## Living invariants (enforce in code)
+
+From billboard / live notes / ledger docs:
+
+1. Daemon decides interruption; extension only compares billboard id.
+2. Not every open shows landing — priority, freshness, ack.
+3. Silent hours do not suppress user-initiated landing.
+4. Latest is one message, not a notification centre.
+5. Cold / warm / hot open tiers; never block first paint; warm ≤4s.
+6. Templates first; LLM upgrade only; every model call logged; no secrets in logs.
+7. No invented zeros; storage fail-soft; ledger feeds the engine, not a dashboard UI.
+
+## Editing docs
+
+- When implementing a design marked "nothing implemented", **flip the status** in the same PR.
+- Handovers are snapshots: on edit, update version/test counts or mark **Historical** at the top.
+- Do not add a third mockup source of truth. Canonical UI: extension CSS + AI Usage DS tokens; `design/screens/` and old concept HTML are references unless a task says otherwise.
+- ASCII wireframes may still say "AI usage"; when rewriting, use `tokens-go-brrr` for product chrome.

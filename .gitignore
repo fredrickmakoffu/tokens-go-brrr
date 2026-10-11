@@ -9,6 +9,7 @@ dist/
 venv/
 .env
 .env.*
+.ruff_cache/
 *.png
 # ...but the extension ships brand marks, one of which is only available as a bitmap
 !gnome-shell-extension/**/icons/*.png

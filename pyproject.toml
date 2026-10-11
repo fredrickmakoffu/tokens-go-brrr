@@ -17,3 +17,19 @@ build-backend = "setuptools.build_meta"
 where = ["."]
 include = ["tokens_go_brrr*"]
 
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["tokens_go_brrr", "tests", "scripts"]
+
+[tool.ruff.lint]
+# Baseline enforced in CI. Widen later (UP, B, SIM, BLE, E501) once cleaned up.
+select = ["E", "F", "I"]
+ignore = [
+    "E501",  # line length — target 100; many legacy lines remain
+    "E741",  # ambiguous name (e.g. loop var `l`) — fix opportunistically
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

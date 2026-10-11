@@ -19,7 +19,9 @@ jobs:
       # The daemon imports PyGObject, which only exists as a distro package, so
       # use the system Python rather than setup-python.
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq python3-gi gir1.2-notify-0.7
+      - run: pip3 install --user -q ruff
       - run: python3 scripts/bump_version.py --check
+      - run: make lint
       - run: python3 -m unittest discover -s tests
 
   # Prove the packages still build on every PR into main, so a release never
