@@ -106,6 +106,53 @@ const BAR_GROW = 420;
 const CAUTION_AT = 70;
 const CRITICAL_AT = 90;
 
+// The design's blueprint frame: a "+" registration mark centred on each corner
+// of the button. St has no overflow or pseudo-elements, so the button sits in a
+// wrapper whose 5px margin leaves room for the 11px marks in its corners.
+function blueprintFrame(button) {
+    const A = Clutter.ActorAlign;
+    const frame = new St.Widget({
+        layout_manager: new Clutter.BinLayout(),
+        x_expand: button.x_expand,
+    });
+    button.set_style("margin: 5px;");
+    frame.add_child(button);
+    for (const [x, y] of [
+        [A.START, A.START],
+        [A.END, A.START],
+        [A.START, A.END],
+        [A.END, A.END],
+    ]) {
+        const mark = new St.Widget({
+            layout_manager: new Clutter.BinLayout(),
+            style_class: "tokens-go-brrr-corner",
+            x_expand: true,
+            y_expand: true,
+            x_align: x,
+            y_align: y,
+            reactive: false,
+        });
+        mark.add_child(
+            new St.Widget({
+                style_class: "tokens-go-brrr-corner-bar",
+                x_expand: true,
+                y_align: A.CENTER,
+                height: 1,
+            }),
+        );
+        mark.add_child(
+            new St.Widget({
+                style_class: "tokens-go-brrr-corner-bar",
+                y_expand: true,
+                x_align: A.CENTER,
+                width: 1,
+            }),
+        );
+        frame.add_child(mark);
+    }
+    return frame;
+}
+
 function colorFor(pct) {
     if (pct >= CRITICAL_AT) return COLOR.crit;
     if (pct >= CAUTION_AT) return COLOR.wait;
@@ -2412,8 +2459,20 @@ const Indicator = GObject.registerClass(
 
             const actions = new St.BoxLayout({
                 style_class: "tokens-go-brrr-landing-actions",
+                vertical: true,
                 x_expand: true,
             });
+            if (billboard.share) {
+                // Placeholder until the share snapshot is designed.
+                const share = new St.Button({
+                    style_class: "tokens-go-brrr-ghost-btn",
+                    label: tr("ui.share"),
+                    can_focus: true,
+                    x_align: Clutter.ActorAlign.END,
+                });
+                actions.add_child(share);
+            }
+            const row = new St.BoxLayout({ x_expand: true });
             const cont = new St.Button({
                 style_class: "tokens-go-brrr-primary-btn",
                 label: tr("ui.continue"),
@@ -2421,7 +2480,7 @@ const Indicator = GObject.registerClass(
                 x_expand: true,
             });
             cont.connect("clicked", () => this._leaveLanding());
-            actions.add_child(cont);
+            row.add_child(blueprintFrame(cont));
             if ((this._state?.recentMessages ?? []).length > 1) {
                 const earlier = new St.Button({
                     style_class: "tokens-go-brrr-secondary-btn",
@@ -2429,23 +2488,12 @@ const Indicator = GObject.registerClass(
                     can_focus: true,
                 });
                 earlier.connect("clicked", () => this._navigate("earlier"));
-                actions.add_child(earlier);
+                // The same 5px the primary's corner marks occupy, so both
+                // buttons share one height and baseline.
+                earlier.set_style("margin: 5px;");
+                row.add_child(earlier);
             }
-            if (billboard.share) {
-                const copy = new St.Button({
-                    style_class: "tokens-go-brrr-ghost-btn",
-                    label: tr("ui.copy"),
-                    can_focus: true,
-                    y_align: Clutter.ActorAlign.CENTER,
-                });
-                copy.connect("clicked", () =>
-                    St.Clipboard.get_default().set_text(
-                        St.ClipboardType.CLIPBOARD,
-                        shareText(billboard),
-                    ),
-                );
-                actions.add_child(copy);
-            }
+            actions.add_child(row);
             screen.add_child(actions);
         }
 
