@@ -2,9 +2,10 @@
 
 UUID: `tokens-go-brrr@fredrickmakoffu.github.io`
 
-A status dot in the top bar and a popover that mirrors `design/menu-bar-concept.html`
-one to one. The extension is presentation only: all data arrives from the
-`tokens-go-brrr` daemon over the session bus.
+A status dot in the top bar and a popover following the AI Usage design system
+(see `design/VISUAL_TRUTH.md`). The extension is presentation only: all data
+arrives from the `tokens-go-brrr` daemon over the session bus. Billboard /
+digest policy stays in the daemon.
 
 ## Interface
 
@@ -14,23 +15,36 @@ one to one. The extension is presentation only: all data arrives from the
 |--------|------|---------|
 | `Version` | property | Daemon version string |
 | `GetState` | method | Current state as JSON |
-| `Refresh` | method | Poll providers now |
+| `Refresh` | method | Poll providers now (also used when the popover opens) |
 | `SetPrimary(provider, metric)` | method | Persist a chip swap |
+| `Acknowledge(id)` | method | Dismiss the landing billboard |
+| `LlmLog(day)` | method | LLM call log for a day (JSON) |
+| `ClearLlmLog` | method | Wipe the LLM log |
+| `LlmLogReport` | method | Write the log to a temp file; return its path |
+| `Quit` | method | Stop the daemon |
 | `StateChanged(json)` | signal | Emitted after every poll |
 
-State payload:
+State payload (abridged; camelCase for GJS):
 
 ```json
 {
-  "version": "0.4.0",
-  "updated_at": "2026-09-13T15:00:00+00:00",
+  "schema": 1,
+  "version": "0.7.0",
+  "updated_at": "2026-10-11T12:00:00+00:00",
   "error": null,
+  "billboard": null,
+  "latestMessage": null,
   "tools": [
     {
       "id": "cursor", "name": "Cursor", "icon": "cursor",
-      "primary": "monthly", "status": "ok", "dashboardUrl": "https://cursor.com/dashboard",
+      "primary": "monthly", "status": "ok",
+      "dashboardUrl": "https://cursor.com/dashboard/spending",
       "metrics": [
-        {"key": "monthly", "label": "Monthly limit", "value": 74, "resets": "Resets in 12 days"}
+        {
+          "key": "monthly", "label": "Monthly limit", "value": 74,
+          "resets": "Resets in 12 days", "resetsSeconds": 1036800,
+          "kind": "monthly", "etaSeconds": null, "elapsed": 40
+        }
       ]
     }
   ]
@@ -241,14 +255,13 @@ and run the layout walk in either with `SCHEME=prefer-light .../layout-smoke.sh`
 
 ## Surface and font
 
-> **Superseded by the AI Usage design system.** The popover now follows the
-> blueprint look: square corners, 1px hairlines (`#4b4b4e`), graphite surface
-> `#2b2b2d`, snow text `#f5f5f8`, a single steel accent `#94bce3`, a 4px meter
-> track, and the design's signal hues for status (amber `#f0ba59`, red `#fd7562`).
-> Width is 380px. The gunmetal reasoning below is kept as history; the palette
-> values in it no longer apply.
+The live popover follows the AI Usage design system: square corners, 1px
+hairlines (`#4b4b4e`), graphite `#2b2b2d`, snow `#f5f5f8`, steel `#94bce3`,
+amber `#f0ba59`, red `#fd7562`, ~380px width. See `design/VISUAL_TRUTH.md`.
 
-The popover is gunmetal — `#24282f` with `#474a50` edges — rather than the
+### Historical — gunmetal reasoning (superseded)
+
+The popover was once gunmetal — `#24282f` with `#474a50` edges — rather than the
 mockup's near-black. Two things about it, and the second is why it is not slate.
 
 A surface wants a temperature. `#1c1c1e` has only a level, and reads as a hole

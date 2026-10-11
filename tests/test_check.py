@@ -8,7 +8,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from unittest import mock
 
 from tests.test_state import payload_dict, tool_dict
-from tokens_go_brrr import __main__ as cli
+from tokens_go_brrr.cli import app as cli
 from tokens_go_brrr.config import MonitorConfig
 
 

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from ..api import CursorUsageClient
 from ..instances import ProcessSpec
 from ..local_auth import read_local_auth
 from .base import Meter, ProviderSnapshot
+from .cursor_api import CursorUsageClient
 
 DASHBOARD_URL = "https://cursor.com/dashboard/spending"
 
@@ -93,5 +93,5 @@ class CursorProvider:
             dashboard_url=DASHBOARD_URL,
             status="ok",
             error=None,
-            fetched_at=datetime.now(timezone.utc),
+            fetched_at=datetime.now(UTC),
         )

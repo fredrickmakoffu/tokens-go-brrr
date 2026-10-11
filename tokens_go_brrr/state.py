@@ -14,11 +14,19 @@ on stdout is the same either way.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from . import config as _config
 from .coerce import parse_iso as _parse_iso
+
+
+def write_state(state: dict[str, Any]) -> None:
+    """Publish the panel payload next to where ``read_state`` loads it."""
+    path = _config.STATE_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(state, indent=2) + "\n")
+
 
 # Bumped only when a field changes meaning or disappears. Consumers pin it:
 # a status-bar config that reads `tools[].metrics[].value` should be able to
@@ -66,8 +74,8 @@ def age_seconds(payload: dict[str, Any]) -> float | None:
             mtime = _config.STATE_FILE.stat().st_mtime
         except OSError:
             return None
-        stamp = datetime.fromtimestamp(mtime, tz=timezone.utc)
-    return (datetime.now(timezone.utc) - stamp).total_seconds()
+        stamp = datetime.fromtimestamp(mtime, tz=UTC)
+    return (datetime.now(UTC) - stamp).total_seconds()
 
 
 def read_state(

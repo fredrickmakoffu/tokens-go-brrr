@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Protocol
+from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime
+from typing import Protocol
 
 from .. import burn
 from ..coerce import as_int as _as_int
 from ..instances import InstanceReport, ProcessSpec
+from .pi_backend import Backend
 
 # The window a meter measures, in terms every provider can agree on. Providers
 # name their meters differently for the same thing — Claude's five_hour and
@@ -47,7 +48,7 @@ class Meter:
         length = WINDOW_SECONDS.get(self.kind)
         if length is None or self.resets_at is None:
             return None
-        remaining = (self.resets_at - datetime.now(timezone.utc)).total_seconds()
+        remaining = (self.resets_at - datetime.now(UTC)).total_seconds()
         return max(0, min(100, _as_int(round(100 * (1 - remaining / length)))))
 
     def resets_in_seconds(self) -> int | None:
@@ -58,13 +59,13 @@ class Meter:
         """
         if self.resets_at is None:
             return None
-        delta = self.resets_at - datetime.now(timezone.utc)
+        delta = self.resets_at - datetime.now(UTC)
         return max(0, _as_int(delta.total_seconds()))
 
     def resets_label(self) -> str:
         if self.resets_at is None:
             return "—"
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         delta = self.resets_at - now
         secs = _as_int(delta.total_seconds())
         if secs <= 0:
@@ -98,7 +99,7 @@ class ProviderSnapshot:
     # id whose meters were copied onto this snapshot. `borrowed_from` being set
     # is what marks these metrics as somebody else's, so the status dot does not
     # count the same subscription twice.
-    backend: Any = None  # providers.pi_backend.Backend
+    backend: Backend | None = None
     borrowed_from: str | None = None
 
     @property
@@ -129,23 +130,9 @@ class ProviderSnapshot:
         keys = {m.key for m in self.metrics}
         if key not in keys:
             return self
-        return ProviderSnapshot(
-            provider_id=self.provider_id,
-            display_name=self.display_name,
-            icon=self.icon,
-            plan=self.plan,
-            metrics=list(self.metrics),
-            primary_key=key,
-            dashboard_url=self.dashboard_url,
-            status=self.status,
-            error=self.error,
-            fetched_at=self.fetched_at,
-            instances=self.instances,
-            backend=self.backend,
-            borrowed_from=self.borrowed_from,
-        )
+        return replace(self, primary_key=key)
 
-    def to_panel_dict(self) -> dict[str, Any]:
+    def to_panel_dict(self) -> dict:
         return {
             "id": self.provider_id,
             "name": self.display_name,
@@ -173,7 +160,7 @@ class ProviderSnapshot:
             ],
         }
 
-    def _via_dict(self) -> dict[str, Any] | None:
+    def _via_dict(self) -> dict | None:
         """What the panel needs to say "running on somebody else's account"."""
         if self.backend is None:
             return None
@@ -203,7 +190,7 @@ class ProviderSnapshot:
             dashboard_url=dashboard_url,
             status="auth_needed" if auth_needed else "error",
             error=message,
-            fetched_at=datetime.now(timezone.utc),
+            fetched_at=datetime.now(UTC),
         )
 
 

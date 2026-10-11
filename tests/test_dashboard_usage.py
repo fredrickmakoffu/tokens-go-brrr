@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -21,8 +21,8 @@ from tokens_go_brrr import ledger
 from tokens_go_brrr.api import AGGREGATED_PATH, POLICY_PATH, USAGE_PATH
 from tokens_go_brrr.harvesters.dashboard_usage import CursorApiHarvester
 
-CYCLE_END_MS = int(datetime(2026, 11, 1, tzinfo=timezone.utc).timestamp() * 1000)
-CYCLE_START_MS = int(datetime(2026, 10, 1, tzinfo=timezone.utc).timestamp() * 1000)
+CYCLE_END_MS = int(datetime(2026, 11, 1, tzinfo=UTC).timestamp() * 1000)
+CYCLE_START_MS = int(datetime(2026, 10, 1, tzinfo=UTC).timestamp() * 1000)
 
 # A stub session value for the fake auth. Held in a name rather than written at
 # the call site so it does not read as a credential.
@@ -163,9 +163,7 @@ class CursorCase(unittest.TestCase):
         ).fetchall()
 
     def checks(self) -> list[tuple]:
-        return self.con.execute(
-            "SELECT kind, detail, ok FROM checks ORDER BY id"
-        ).fetchall()
+        return self.con.execute("SELECT kind, detail, ok FROM checks ORDER BY id").fetchall()
 
 
 class ReadingTest(CursorCase):
@@ -242,9 +240,7 @@ class ReadingTest(CursorCase):
         harvester.harvest(self.con)
         client.call_args.clear()
         harvester.harvest(self.con, full=True)
-        self.assertEqual(
-            len([c for c in client.call_args if c[0] == AGGREGATED_PATH]), 2
-        )
+        self.assertEqual(len([c for c in client.call_args if c[0] == AGGREGATED_PATH]), 2)
 
 
 class CrossCheckTest(CursorCase):
@@ -294,9 +290,7 @@ class CrossCheckTest(CursorCase):
                 }
             ]
         )
-        client = FakeClient(
-            aggregated_payload=payload, period_payload=period(limit=2000)
-        )
+        client = FakeClient(aggregated_payload=payload, period_payload=period(limit=2000))
         self.harvester(client).harvest(self.con)
         flagged = [row for row in self.checks() if row[0] == "cost_unit"]
         self.assertEqual(flagged[0][2], 1)

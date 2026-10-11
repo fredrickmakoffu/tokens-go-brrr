@@ -9,7 +9,7 @@ from .pi import PiProvider
 
 DEFAULT_PROVIDERS = ["cursor", "claude", "opencode", "pi", "codex"]
 
-PROVIDERS: dict[str, type] = {
+PROVIDERS: dict[str, type[Provider]] = {
     "cursor": CursorProvider,
     "claude": ClaudeProvider,
     "codex": CodexProvider,

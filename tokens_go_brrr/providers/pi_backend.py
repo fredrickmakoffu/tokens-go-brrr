@@ -99,9 +99,7 @@ def _defaults() -> tuple[str, str]:
         settings = json.loads(SETTINGS_FILE.read_text())
     except (OSError, json.JSONDecodeError):
         return "", ""
-    return str(settings.get("defaultProvider") or ""), str(
-        settings.get("defaultModel") or ""
-    )
+    return str(settings.get("defaultProvider") or ""), str(settings.get("defaultModel") or "")
 
 
 def accounts() -> list[str]:
@@ -204,9 +202,7 @@ class BackendResolver:
 
     @staticmethod
     def _backend(account: str, model: str) -> Backend:
-        return Backend(
-            account=account, model=model, provider_id=METERED_BY.get(account, "")
-        )
+        return Backend(account=account, model=model, provider_id=METERED_BY.get(account, ""))
 
 
 def dominant(backends: list[Backend]) -> Backend | None:
@@ -227,9 +223,7 @@ def dominant(backends: list[Backend]) -> Backend | None:
         tally,
         key=lambda key: (tally[key], bool(METERED_BY.get(key[0]))),
     )
-    return Backend(
-        account=best[0], model=best[1], provider_id=METERED_BY.get(best[0], "")
-    )
+    return Backend(account=best[0], model=best[1], provider_id=METERED_BY.get(best[0], ""))
 
 
 __all__ = [

@@ -162,8 +162,7 @@ class OpenCodeHarvester:
             read.row_factory = sqlite3.Row
             has_messages = (
                 read.execute(
-                    "SELECT 1 FROM sqlite_master"
-                    " WHERE type = 'table' AND name = 'message' LIMIT 1"
+                    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'message' LIMIT 1"
                 ).fetchone()
                 is not None
             )

@@ -10,12 +10,12 @@ from .http_json import USER_AGENT, HttpJsonError, request_json_url
 
 STATE_DB = Path.home() / ".config" / "Cursor" / "User" / "globalStorage" / "state.vscdb"
 # pi-lens-ignore: python-hardcoded-secrets  # public api2.cursor.sh endpoint
-OAUTH_TOKEN_URL = "https://api2.cursor.sh/oauth/token"  # nosemgrep: public endpoint, name contains TOKEN
+OAUTH_TOKEN_URL = (
+    "https://api2.cursor.sh/oauth/token"  # nosemgrep: public endpoint, name contains TOKEN
+)
 # Public Cursor desktop OAuth client id (used by the IDE / community tools)
 # pi-lens-ignore: python-hardcoded-secrets  # public OAuth client id, not a credential
-OAUTH_CLIENT_ID = (
-    "KbZUR41cY7W6zRSdpSUJ7I7mLYBKOCmB"  # gitleaks:allow public OAuth client id
-)
+OAUTH_CLIENT_ID = "KbZUR41cY7W6zRSdpSUJ7I7mLYBKOCmB"  # gitleaks:allow public OAuth client id
 
 
 @dataclass
@@ -45,9 +45,7 @@ def read_local_auth() -> LocalCursorAuth | None:
         cur = con.cursor()
 
         def get(key: str) -> str:
-            row = cur.execute(
-                "SELECT value FROM ItemTable WHERE key = ?", (key,)
-            ).fetchone()
+            row = cur.execute("SELECT value FROM ItemTable WHERE key = ?", (key,)).fetchone()
             return str(row[0]) if row and row[0] is not None else ""
 
         access = get("cursorAuth/accessToken")
@@ -86,9 +84,7 @@ def refresh_access_token(refresh_token: str) -> tuple[str, str]:
     except OSError as exc:
         raise RuntimeError(f"Cursor OAuth refresh unreachable: {exc}") from exc
     except HttpJsonError as exc:
-        raise RuntimeError(
-            f"Token refresh failed: HTTP {exc.status}: {exc.body[:200]}"
-        ) from exc
+        raise RuntimeError(f"Token refresh failed: HTTP {exc.status}: {exc.body[:200]}") from exc
     except RuntimeError as exc:
         raise RuntimeError("Cursor OAuth refresh returned invalid JSON") from exc
     access = data.get("access_token") or data.get("accessToken")

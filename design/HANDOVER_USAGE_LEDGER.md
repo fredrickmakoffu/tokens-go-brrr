@@ -1,9 +1,8 @@
 # Handover — usage ledger, notifications, landing page
 
-**State:** shipped and merged. `main` @ `fa28bd3`, version **0.5.0**, [PR #10](https://github.com/fredrickmakoffu/cursor-spend-monitor/pull/10) merged as `2dc76eb`. **412 tests pass.**
-
-**Left:** a desktop checklist, a week of data, and one open question about Cursor's
-plan fields. **No code is outstanding.**
+**Historical.** Snapshot from the 0.5.0 ledger ship. Prefer the tree, `AGENTS.md`,
+and `.cursor/rules/` for current behaviour. CI runs on PRs (`make test` /
+`make lint`); billboard landing is implemented.
 
 ---
 

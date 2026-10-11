@@ -15,7 +15,7 @@ from .dashboard_usage import CursorApiHarvester
 from .opencode_db import OpenCodeHarvester
 from .pi_sessions import PiSessionHarvester
 
-REGISTRY: list[type] = [
+REGISTRY: list[type[Harvester]] = [
     OpenCodeHarvester,
     ClaudeTranscriptHarvester,
     CursorApiHarvester,

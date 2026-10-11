@@ -40,6 +40,11 @@ const IFACE_XML = `
     <method name="Acknowledge">
       <arg type="u" direction="in" name="id"/>
     </method>
+    <method name="LlmLog">
+      <arg type="s" direction="in" name="day"/>
+      <arg type="s" direction="out" name="json"/>
+    </method>
+    <method name="ClearLlmLog"/>
     <method name="LlmLogReport"><arg type="s" direction="out" name="path"/></method>
     <method name="Quit"/>
     <signal name="StateChanged"><arg type="s" name="json"/></signal>

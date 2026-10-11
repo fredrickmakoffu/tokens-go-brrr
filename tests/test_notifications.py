@@ -11,14 +11,14 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import tokens_go_brrr.notify_engine as notify
 from tokens_go_brrr import ledger
 from tokens_go_brrr.providers.base import Meter, ProviderSnapshot
 
-NOW = datetime(2026, 10, 6, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 6, 12, 0, tzinfo=UTC)
 
 
 def make(
@@ -66,9 +66,7 @@ def snap(
         display_name=name,
         icon=provider_id,
         plan=None,
-        metrics=[
-            Meter("five_hour", "5-hour limit", percent, kind="rolling", eta_seconds=eta)
-        ],
+        metrics=[Meter("five_hour", "5-hour limit", percent, kind="rolling", eta_seconds=eta)],
         primary_key="five_hour",
         status=status,
         borrowed_from=borrowed,
@@ -142,7 +140,7 @@ class DigestTest(NotifyCase):
                 make(
                     "claude",
                     "prev",
-                    started=datetime(2026, 9, 10, 9, tzinfo=timezone.utc),
+                    started=datetime(2026, 9, 10, 9, tzinfo=UTC),
                     tin=1000,
                 ),
                 make("claude", "now", started=NOW.replace(hour=9), tin=3000),
@@ -205,9 +203,7 @@ class FunAndShareTest(NotifyCase):
             ]
         )
         day = NOW.date().isoformat()
-        live = notify.digest_facts(
-            self.con, start=day, end=day, period="today", now=NOW
-        )
+        live = notify.digest_facts(self.con, start=day, end=day, period="today", now=NOW)
         self.assertEqual(live["streaks"]["current"], 4)
         # The same rows, read a month later: the streak is over by then.
         stale = notify.digest_facts(
@@ -266,9 +262,7 @@ class EventTest(NotifyCase):
         self.assertIn("is spent", messages[0].body)
 
     def test_a_borrowed_row_is_not_counted_twice(self):
-        messages = notify.event_messages(
-            [snap("pi", "Pi", percent=99, borrowed="opencode")]
-        )
+        messages = notify.event_messages([snap("pi", "Pi", percent=99, borrowed="opencode")])
         self.assertEqual(messages, [])
 
     def test_a_broken_provider_is_not_reported_as_a_limit(self):
@@ -307,7 +301,12 @@ class TemplateTest(NotifyCase):
     def test_the_monthly_digest_carries_the_change_against_last_month(self):
         self.seed(
             [
-                make("claude", "prev", started=datetime(2026, 9, 10, 9, tzinfo=timezone.utc), tin=1000),
+                make(
+                    "claude",
+                    "prev",
+                    started=datetime(2026, 9, 10, 9, tzinfo=UTC),
+                    tin=1000,
+                ),
                 make("claude", "now", started=NOW.replace(hour=9), tin=3000),
             ]
         )
@@ -391,22 +390,16 @@ class TemplateTest(NotifyCase):
 class MixerTest(NotifyCase):
     def test_the_daily_slot_is_a_digest_plus_a_fun_fact(self):
         self.seed([make(tin=100, tcr=900, started=NOW.replace(hour=9))])
-        kinds = [
-            m.kind for m in notify.scheduled_messages(self.con, slot="daily", now=NOW)
-        ]
+        kinds = [m.kind for m in notify.scheduled_messages(self.con, slot="daily", now=NOW)]
         self.assertIn(notify.INFORMATIVE, kinds)
 
     def test_the_monthly_slot_carries_a_share_line(self):
         self.seed([make(started=NOW.replace(hour=9))])
-        kinds = [
-            m.kind for m in notify.scheduled_messages(self.con, slot="monthly", now=NOW)
-        ]
+        kinds = [m.kind for m in notify.scheduled_messages(self.con, slot="monthly", now=NOW)]
         self.assertIn(notify.SHAREABLE, kinds)
 
     def test_an_unknown_slot_produces_nothing(self):
-        self.assertEqual(
-            notify.scheduled_messages(self.con, slot="hourly", now=NOW), []
-        )
+        self.assertEqual(notify.scheduled_messages(self.con, slot="hourly", now=NOW), [])
 
 
 class CooldownTest(NotifyCase):
@@ -428,7 +421,7 @@ class CooldownTest(NotifyCase):
             kind=notify.INFORMATIVE,
             key="k",
             body="old",
-            at=datetime.now(timezone.utc) - timedelta(hours=2),
+            at=datetime.now(UTC) - timedelta(hours=2),
         )
         self.assertTrue(notify.due(self.con, self.message(), cooldown_seconds=3600))
 
@@ -460,9 +453,7 @@ class RollingWindowTest(NotifyCase):
 
     def test_a_session_is_placed_by_when_it_ended(self):
         # Started 25h ago but ran 2h, so it ended 23h ago: inside the window.
-        self.seed(
-            [make(started=NOW - timedelta(hours=25), duration_s=2 * 3600)]
-        )
+        self.seed([make(started=NOW - timedelta(hours=25), duration_s=2 * 3600)])
         message = notify.daily_digest(self.con, now=NOW)
         assert message is not None
         self.assertIn("1 sessions", message.body)
@@ -470,15 +461,11 @@ class RollingWindowTest(NotifyCase):
     def test_rolling_totals_rank_providers_and_name_the_top_project(self):
         self.seed(
             [
-                make("claude", "c1", project="alpha", tin=5000,
-                     started=NOW - timedelta(hours=3)),
-                make("opencode", "o1", project="beta", tin=100,
-                     started=NOW - timedelta(hours=2)),
+                make("claude", "c1", project="alpha", tin=5000, started=NOW - timedelta(hours=3)),
+                make("opencode", "o1", project="beta", tin=100, started=NOW - timedelta(hours=2)),
             ]
         )
-        facts = notify.rolling_facts(
-            self.con, hours=24, period="last 24 hours", now=NOW
-        )
+        facts = notify.rolling_facts(self.con, hours=24, period="last 24 hours", now=NOW)
         self.assertEqual(facts["ranked"][0]["provider"], "claude")
         self.assertEqual(facts["top_project"]["project"], "alpha")
         self.assertEqual(facts["totals"]["sessions"], 2)
@@ -533,27 +520,21 @@ class TierExpiryTest(unittest.TestCase):
 
     def test_a_warm_note_expires_sooner_than_its_kind(self):
         self.assertEqual(
-            notify.expires_at_for(
-                notify.INFORMATIVE, self.CREATED, tier=notify.WARM
-            ),
+            notify.expires_at_for(notify.INFORMATIVE, self.CREATED, tier=notify.WARM),
             self.CREATED + 2 * 3600,
         )
 
     def test_the_sooner_of_kind_and_tier_wins(self):
         # Actionable is 6h by kind; a cold tier would allow 24h. Kind wins.
         self.assertEqual(
-            notify.expires_at_for(
-                notify.ACTIONABLE, self.CREATED, tier=notify.COLD
-            ),
+            notify.expires_at_for(notify.ACTIONABLE, self.CREATED, tier=notify.COLD),
             self.CREATED + 6 * 3600,
         )
 
     def test_the_tier_counts_from_when_the_facts_were_read(self):
         as_of = self.CREATED - 3600
         self.assertEqual(
-            notify.expires_at_for(
-                notify.INFORMATIVE, self.CREATED, tier=notify.WARM, as_of=as_of
-            ),
+            notify.expires_at_for(notify.INFORMATIVE, self.CREATED, tier=notify.WARM, as_of=as_of),
             as_of + 2 * 3600,
         )
 
@@ -577,9 +558,7 @@ class TierExpiryTest(unittest.TestCase):
         self.assertIsNotNone(notify.choose_billboard([stored], now=NOW))
 
     def test_the_payload_reports_tier_age_and_source(self):
-        meta = json.dumps(
-            {"tier": notify.COLD, "asOf": self.CREATED - 60, "source": "llm"}
-        )
+        meta = json.dumps({"tier": notify.COLD, "asOf": self.CREATED - 60, "source": "llm"})
         payload = notify.billboard_payload(
             {
                 "id": 1,
@@ -752,9 +731,7 @@ class InsightTest(InsightData):
         assert message is not None
         start, end = notify.day_range(notify.INSIGHT_WINDOW_DAYS, now=NOW)
         shape = ledger.session_shape(self.con, start_day=start, end_day=end)
-        self.assertEqual(
-            message.meta["tpl"]["p"]["pct"], round(100 * shape["work_hours_share"])
-        )
+        self.assertEqual(message.meta["tpl"]["p"]["pct"], round(100 * shape["work_hours_share"]))
 
     def test_an_insight_is_a_cold_template_note(self):
         self.seed_history()
@@ -810,8 +787,11 @@ class InsightRotationTest(InsightData):
     def test_an_insight_that_never_spoke_goes_before_one_that_did(self):
         self.seed_history()
         ledger.store_message(
-            self.con, kind=notify.INFORMATIVE, key="insight:cache:2026-10-05",
-            body="x", at=NOW,
+            self.con,
+            kind=notify.INFORMATIVE,
+            key="insight:cache:2026-10-05",
+            body="x",
+            at=NOW,
         )
         message = notify.next_insight(self.con, now=NOW)
         assert message is not None
@@ -830,8 +810,12 @@ class ColdNoteTest(InsightData):
         first = notify.cold_note(self.con, now=NOW)
         assert first is not None
         ledger.store_message(
-            self.con, kind=first.kind, key=first.key, body=first.body,
-            meta=first.meta, at=NOW,
+            self.con,
+            kind=first.kind,
+            key=first.key,
+            body=first.body,
+            meta=first.meta,
+            at=NOW,
         )
         self.assertIsNone(notify.cold_note(self.con, now=NOW + timedelta(hours=1)))
 
@@ -840,8 +824,12 @@ class ColdNoteTest(InsightData):
         first = notify.cold_note(self.con, now=NOW)
         assert first is not None
         mid = ledger.store_message(
-            self.con, kind=first.kind, key=first.key, body=first.body,
-            meta=first.meta, at=NOW,
+            self.con,
+            kind=first.kind,
+            key=first.key,
+            body=first.body,
+            meta=first.meta,
+            at=NOW,
         )
         ledger.mark_message_seen(self.con, mid)
         second = notify.cold_note(self.con, now=NOW + timedelta(hours=1))
@@ -853,8 +841,12 @@ class ColdNoteTest(InsightData):
         first = notify.cold_note(self.con, now=NOW)
         assert first is not None
         ledger.store_message(
-            self.con, kind=first.kind, key=first.key, body=first.body,
-            meta=first.meta, at=NOW,
+            self.con,
+            kind=first.kind,
+            key=first.key,
+            body=first.body,
+            meta=first.meta,
+            at=NOW,
         )
         later = NOW + timedelta(hours=30)
         self.assertIsNotNone(notify.cold_note(self.con, now=later))
@@ -865,13 +857,21 @@ class ColdNoteTest(InsightData):
         key_day2 = notify.insight_cache(self.con, now=NOW + timedelta(days=1))
         assert key_day1 and key_day2
         mid = ledger.store_message(
-            self.con, kind=key_day1.kind, key=key_day1.key, body="x",
-            meta=key_day1.meta, at=NOW,
+            self.con,
+            kind=key_day1.kind,
+            key=key_day1.key,
+            body="x",
+            meta=key_day1.meta,
+            at=NOW,
         )
         ledger.mark_message_seen(self.con, mid)
         ledger.store_message(
-            self.con, kind=key_day2.kind, key=key_day2.key, body="y",
-            meta=key_day2.meta, at=NOW + timedelta(days=1),
+            self.con,
+            kind=key_day2.kind,
+            key=key_day2.key,
+            body="y",
+            meta=key_day2.meta,
+            at=NOW + timedelta(days=1),
         )
         pending = ledger.pending_messages(self.con)
         self.assertEqual([r["key"] for r in pending], [key_day2.key])
@@ -881,8 +881,12 @@ class ColdNoteTest(InsightData):
         message = notify.cold_note(self.con, now=NOW)
         assert message is not None
         ledger.store_message(
-            self.con, kind=message.kind, key=message.key, body=message.body,
-            meta=message.meta, at=NOW,
+            self.con,
+            kind=message.kind,
+            key=message.key,
+            body=message.body,
+            meta=message.meta,
+            at=NOW,
         )
         shown = notify.choose_billboard(ledger.pending_messages(self.con), now=NOW)
         assert shown is not None
@@ -892,9 +896,27 @@ class ColdNoteTest(InsightData):
 
 class LedgerHelpersTest(NotifyCase):
     def test_last_generated_at_looks_across_days_by_prefix(self):
-        ledger.store_message(self.con, kind="informative", key="insight:cache:2026-10-01", body="a", at=NOW - timedelta(days=5))
-        ledger.store_message(self.con, kind="informative", key="insight:cache:2026-10-04", body="b", at=NOW - timedelta(days=2))
-        ledger.store_message(self.con, kind="informative", key="insight:week:2026-10-05", body="c", at=NOW - timedelta(days=1))
+        ledger.store_message(
+            self.con,
+            kind="informative",
+            key="insight:cache:2026-10-01",
+            body="a",
+            at=NOW - timedelta(days=5),
+        )
+        ledger.store_message(
+            self.con,
+            kind="informative",
+            key="insight:cache:2026-10-04",
+            body="b",
+            at=NOW - timedelta(days=2),
+        )
+        ledger.store_message(
+            self.con,
+            kind="informative",
+            key="insight:week:2026-10-05",
+            body="c",
+            at=NOW - timedelta(days=1),
+        )
         got = ledger.last_generated_at(self.con, kind="informative", key_prefix="insight:cache:")
         self.assertEqual(got, int((NOW - timedelta(days=2)).timestamp()))
         self.assertIsNone(
@@ -918,27 +940,17 @@ class LedgerHelpersTest(NotifyCase):
 
 class HotTierTest(unittest.TestCase):
     def test_a_recent_warm_note_makes_the_open_hot(self):
-        self.assertEqual(
-            notify.tier_for(1800, last_warm_age=60), notify.HOT
-        )
+        self.assertEqual(notify.tier_for(1800, last_warm_age=60), notify.HOT)
 
     def test_an_older_warm_note_does_not(self):
-        self.assertEqual(
-            notify.tier_for(1800, last_warm_age=11 * 60), notify.WARM
-        )
+        self.assertEqual(notify.tier_for(1800, last_warm_age=11 * 60), notify.WARM)
 
     def test_the_hot_window_is_configurable(self):
-        self.assertEqual(
-            notify.tier_for(1800, hot_minutes=30, last_warm_age=20 * 60), notify.HOT
-        )
-        self.assertEqual(
-            notify.tier_for(1800, hot_minutes=0, last_warm_age=0), notify.WARM
-        )
+        self.assertEqual(notify.tier_for(1800, hot_minutes=30, last_warm_age=20 * 60), notify.HOT)
+        self.assertEqual(notify.tier_for(1800, hot_minutes=0, last_warm_age=0), notify.WARM)
 
     def test_a_long_absence_is_cold_even_after_a_recent_warm_note(self):
-        self.assertEqual(
-            notify.tier_for(5 * 3600, last_warm_age=60), notify.COLD
-        )
+        self.assertEqual(notify.tier_for(5 * 3600, last_warm_age=60), notify.COLD)
 
     def test_no_warm_note_yet_is_just_warm(self):
         self.assertEqual(notify.tier_for(1800, last_warm_age=None), notify.WARM)
@@ -1039,9 +1051,7 @@ class WarmNoteTest(NotifyCase):
 
     def test_only_rolling_meters_count(self):
         self.assertIsNone(
-            notify.warm_note(
-                self.con, [meter_snap(kind="monthly", percent=99)], now=NOW
-            )
+            notify.warm_note(self.con, [meter_snap(kind="monthly", percent=99)], now=NOW)
         )
 
     def test_a_broken_or_borrowed_provider_is_ignored(self):
@@ -1061,7 +1071,8 @@ class WarmNoteTest(NotifyCase):
         message = notify.warm_note(self.con, [], now=NOW)
         assert message is not None
         total = ledger.rolling_totals(
-            self.con, since=int((NOW - timedelta(hours=2)).timestamp()),
+            self.con,
+            since=int((NOW - timedelta(hours=2)).timestamp()),
             until=int(NOW.timestamp()),
         )["tokens"]
         self.assertEqual(message.meta["tpl"]["p"]["tokens"], total)
@@ -1076,9 +1087,7 @@ class WarmNoteTest(NotifyCase):
 
     def test_the_same_picture_has_the_same_fingerprint(self):
         self.recent()
-        self.assertEqual(
-            self.fingerprint([meter_snap()]), self.fingerprint([meter_snap()])
-        )
+        self.assertEqual(self.fingerprint([meter_snap()]), self.fingerprint([meter_snap()]))
 
     def test_a_new_session_is_news(self):
         self.recent(tokens=50_000)
@@ -1086,8 +1095,10 @@ class WarmNoteTest(NotifyCase):
         self.seed(
             [
                 make(
-                    external_id="fresh", started=NOW - timedelta(minutes=5),
-                    duration_s=60, tin=100,
+                    external_id="fresh",
+                    started=NOW - timedelta(minutes=5),
+                    duration_s=60,
+                    tin=100,
                 )
             ]
         )
@@ -1095,7 +1106,9 @@ class WarmNoteTest(NotifyCase):
 
     def test_tokens_inside_one_bucket_do_not_change_it(self):
         facts = {
-            "sessions": 3, "tokens": 150_100, "project": "a",
+            "sessions": 3,
+            "tokens": 150_100,
+            "project": "a",
             "meter": {"providerId": "claude", "key": "k", "pct": 40},
         }
         same = dict(facts, tokens=159_900)
@@ -1116,8 +1129,10 @@ class WarmNoteTest(NotifyCase):
         self.seed(
             [
                 make(
-                    external_id=f"b{i}", project="beta",
-                    started=NOW - timedelta(minutes=10 + i), tin=900_000,
+                    external_id=f"b{i}",
+                    project="beta",
+                    started=NOW - timedelta(minutes=10 + i),
+                    tin=900_000,
                 )
                 for i in range(2)
             ]
@@ -1128,8 +1143,13 @@ class WarmNoteTest(NotifyCase):
 
     def store(self, message, at):
         return ledger.store_message(
-            self.con, kind=message.kind, key=message.key, body=message.body,
-            provider=message.provider, meta=message.meta, at=at,
+            self.con,
+            kind=message.kind,
+            key=message.key,
+            body=message.body,
+            provider=message.provider,
+            meta=message.meta,
+            at=at,
         )
 
     def test_an_unchanged_picture_is_not_stored_twice(self):
@@ -1158,8 +1178,11 @@ class WarmNoteTest(NotifyCase):
     def test_a_newer_warm_note_outranks_an_unread_insight(self):
         self.recent()
         old = ledger.store_message(
-            self.con, kind=notify.INFORMATIVE, key="insight:cache:2026-10-05",
-            body="old insight", meta={"tier": notify.COLD, "asOf": int(NOW.timestamp()) - 600},
+            self.con,
+            kind=notify.INFORMATIVE,
+            key="insight:cache:2026-10-05",
+            body="old insight",
+            meta={"tier": notify.COLD, "asOf": int(NOW.timestamp()) - 600},
             at=NOW - timedelta(minutes=10),
         )
         message = notify.warm_note(self.con, [meter_snap()], now=NOW)
@@ -1175,9 +1198,7 @@ class WarmNoteTest(NotifyCase):
         message = notify.warm_note(self.con, [meter_snap()], now=NOW)
         assert message is not None
         self.store(message, NOW)
-        self.assertFalse(
-            notify.has_pending_insight(ledger.pending_messages(self.con), now=NOW)
-        )
+        self.assertFalse(notify.has_pending_insight(ledger.pending_messages(self.con), now=NOW))
 
 
 def away_snap(provider_id="claude", name="Claude Code", *, percent=50.0, active=0, **kw):
@@ -1188,8 +1209,12 @@ def away_snap(provider_id="claude", name="Claude Code", *, percent=50.0, active=
         snap.instances = InstanceReport(
             active=[
                 Instance(
-                    provider_id=provider_id, pid=1, project="x", directory="/x",
-                    started_at=None, suspended=False,
+                    provider_id=provider_id,
+                    pid=1,
+                    project="x",
+                    directory="/x",
+                    started_at=None,
+                    suspended=False,
                 )
             ]
         )
@@ -1234,32 +1259,20 @@ class ElsewhereTest(NotifyCase):
         self.assertIsNone(self.find([away_snap(percent=5)], self.series(60)))
 
     def test_a_baseline_a_moment_old_is_not_a_baseline(self):
-        self.assertIsNone(
-            self.find([away_snap(percent=50)], self.series(30, minutes_ago=2))
-        )
+        self.assertIsNone(self.find([away_snap(percent=50)], self.series(30, minutes_ago=2)))
 
     def test_a_sample_older_than_the_window_is_ignored(self):
-        self.assertIsNone(
-            self.find([away_snap(percent=50)], self.series(30, minutes_ago=240))
-        )
+        self.assertIsNone(self.find([away_snap(percent=50)], self.series(30, minutes_ago=240)))
 
     def test_no_history_says_nothing(self):
         self.assertIsNone(self.find([away_snap(percent=50)], {}))
 
     def test_only_rolling_meters_are_considered(self):
-        self.assertIsNone(
-            self.find(
-                [away_snap(percent=50, kind="monthly")], self.series(30)
-            )
-        )
+        self.assertIsNone(self.find([away_snap(percent=50, kind="monthly")], self.series(30)))
 
     def test_a_borrowed_or_broken_provider_is_ignored(self):
-        self.assertIsNone(
-            self.find([away_snap(percent=50, borrowed="opencode")], self.series(30))
-        )
-        self.assertIsNone(
-            self.find([away_snap(percent=50, status="error")], self.series(30))
-        )
+        self.assertIsNone(self.find([away_snap(percent=50, borrowed="opencode")], self.series(30)))
+        self.assertIsNone(self.find([away_snap(percent=50, status="error")], self.series(30)))
 
     def test_the_biggest_climb_is_reported(self):
         samples = {

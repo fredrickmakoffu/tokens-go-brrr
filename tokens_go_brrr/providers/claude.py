@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -129,7 +129,7 @@ class ClaudeProvider:
             dashboard_url=DASHBOARD_URL,
             status="ok",
             error=None,
-            fetched_at=datetime.now(timezone.utc),
+            fetched_at=datetime.now(UTC),
         )
 
     def _auth_snapshot(self, message: str) -> ProviderSnapshot:
@@ -158,11 +158,7 @@ class ClaudeProvider:
             raise RuntimeError(f"Claude usage unreachable: {exc}") from exc
         except HttpJsonError as exc:
             if exc.status in {401, 403}:
-                raise PermissionError(
-                    "Claude login rejected — run claude to refresh"
-                ) from exc
-            raise RuntimeError(
-                f"HTTP {exc.status} from Claude usage: {exc.body[:200]}"
-            ) from exc
+                raise PermissionError("Claude login rejected — run claude to refresh") from exc
+            raise RuntimeError(f"HTTP {exc.status} from Claude usage: {exc.body[:200]}") from exc
         except RuntimeError as exc:
             raise RuntimeError("Claude usage returned invalid JSON") from exc

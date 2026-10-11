@@ -20,9 +20,9 @@ Requires:       gnome-shell
 
 %description
 A daemon that tracks usage limits for AI coding tools (Cursor, Claude Code,
-OpenCode) and a GNOME Shell extension that shows them as a status dot in the
-top bar. Log out and back in after installing so GNOME Shell loads the
-extension, then run `tokens-go-brrr setup`.
+OpenCode, Codex, Pi) and a GNOME Shell extension that shows them as a status
+dot in the top bar. Log out and back in after installing so GNOME Shell loads
+the extension, then run `tokens-go-brrr setup`.
 
 %prep
 %autosetup -n %{name}-%{version}

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -50,9 +50,9 @@ def _window_kind(seconds: Any) -> str:
         return "other"
     if seconds <= 0:
         return "other"
-    if seconds <= 86400:          # up to a day: the short window
+    if seconds <= 86400:  # up to a day: the short window
         return "rolling"
-    if seconds <= 10 * 86400:     # a week, however the provider rounds it
+    if seconds <= 10 * 86400:  # a week, however the provider rounds it
         return "weekly"
     return "monthly"
 
@@ -72,7 +72,7 @@ def _parse_epoch(value: Any) -> datetime | None:
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         return None
     try:
-        return datetime.fromtimestamp(value, tz=timezone.utc)
+        return datetime.fromtimestamp(value, tz=UTC)
     except (OverflowError, OSError, ValueError):
         return None
 
@@ -101,13 +101,12 @@ class CodexProvider:
 
     id = "codex"
     display_name = "Codex"
-    # pi-lens-ignore: python-mutable-class-attr
-    process_specs = [
+    process_specs = (
         ProcessSpec(
             names=frozenset({"codex", "codex.exe"}),
             label="session",
         ),
-    ]
+    )
 
     def _read_auth(self) -> dict[str, Any]:
         path = Path(os.environ.get("CODEX_CREDENTIALS_FILE", CREDENTIALS_FILE))
@@ -205,7 +204,7 @@ class CodexProvider:
             dashboard_url=DASHBOARD_URL,
             status="ok",
             error=None,
-            fetched_at=datetime.now(timezone.utc),
+            fetched_at=datetime.now(UTC),
         )
 
     def _auth_snapshot(self, message: str) -> ProviderSnapshot:
@@ -234,10 +233,6 @@ class CodexProvider:
                 # block, not a login problem — surface it as retryable, and only
                 # report a login failure for a real JSON rejection.
                 if _is_bot_challenge(exc.status, exc.body):
-                    raise RuntimeError(
-                        "chatgpt.com blocked the request — retrying later"
-                    ) from exc
+                    raise RuntimeError("chatgpt.com blocked the request — retrying later") from exc
                 raise PermissionError("Codex login rejected — run codex") from exc
-            raise RuntimeError(
-                f"HTTP {exc.status} from Codex usage: {exc.body[:200]}"
-            ) from exc
+            raise RuntimeError(f"HTTP {exc.status} from Codex usage: {exc.body[:200]}") from exc

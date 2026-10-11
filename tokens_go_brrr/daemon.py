@@ -7,7 +7,7 @@ import sys
 import threading
 import time
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from gi.repository import GLib  # type: ignore  # gi has no stubs
@@ -23,14 +23,15 @@ from . import (
     notify_engine,
 )
 from . import llm_composer as llm
+from .borrowing import apply_borrowing
 from .coerce import as_int as _as_int
-from .config import MonitorConfig, write_state
+from .config import MonitorConfig
 from .dbus_service import UsageService
 from .instances import InstanceReport, scan, signature
 from .notify import AlertManager, send
-from .providers import build_providers, pi_backend
+from .providers import build_providers
 from .providers.base import Provider, ProviderSnapshot
-from .state import build_payload
+from .state import build_payload, write_state
 
 # How often the notification clock is consulted. The schedule it serves is
 # hourly at most, so this only decides how late a digest can be, not how often
@@ -40,7 +41,7 @@ NOTIFY_CHECK_SECONDS = 300
 
 def _now_ts() -> int:
     try:
-        return int(datetime.now(timezone.utc).timestamp())
+        return int(datetime.now(UTC).timestamp())
     except (OSError, OverflowError, ValueError):
         return 0
 
@@ -78,9 +79,7 @@ class UsageDaemon:
         self.llm_log = llm_log.LlmLog(keep_days=config.llm_log_days)
         # Ceiling on calls made because the panel was opened, and the providers
         # that said 429 recently (monotonic deadline per provider id).
-        self.llm_budget = llm_budget.CallBudget(
-            config.live_llm_per_hour, config.live_llm_per_day
-        )
+        self.llm_budget = llm_budget.CallBudget(config.live_llm_per_hour, config.live_llm_per_day)
         self._llm_backoff: dict[str, float] = {}
         # Meter history for the warm note, read on the main loop (the history
         # store's connection belongs to it) and handed to the worker.
@@ -109,8 +108,7 @@ class UsageDaemon:
         self.last_fetch: datetime | None = None
         self._polling = False
         self._specs = {
-            provider.id: list(getattr(provider, "process_specs", []))
-            for provider in self.providers
+            provider.id: list(getattr(provider, "process_specs", [])) for provider in self.providers
         }
         self._instances: dict[str, InstanceReport] = {
             provider_id: InstanceReport() for provider_id in self._specs
@@ -136,14 +134,10 @@ class UsageDaemon:
         GLib.timeout_add_seconds(interval, self._tick)
         # Sessions come and go far faster than quota does, and a scan is local and
         # cheap, so it runs on its own much shorter timer.
-        GLib.timeout_add_seconds(
-            max(1, self.config.instance_poll_seconds), self._scan_instances
-        )
+        GLib.timeout_add_seconds(max(1, self.config.instance_poll_seconds), self._scan_instances)
         # The ledger fills itself, on its own slow clock: a harvest reads
         # databases and transcripts that quota polling has no business touching.
-        GLib.timeout_add_seconds(
-            max(60, self.config.harvest_deep_seconds), self._harvest_tick
-        )
+        GLib.timeout_add_seconds(max(60, self.config.harvest_deep_seconds), self._harvest_tick)
         if self.config.notify_enabled:
             GLib.timeout_add_seconds(NOTIFY_CHECK_SECONDS, self._notify_tick)
         # The first runs happen at idle, but each must fire exactly once.
@@ -224,9 +218,7 @@ class UsageDaemon:
         if not self._wanted(notify_engine.INFORMATIVE):
             return
         self._cold_running = True
-        threading.Thread(
-            target=self._cold_worker, name="tokens-go-brrr-cold", daemon=True
-        ).start()
+        threading.Thread(target=self._cold_worker, name="tokens-go-brrr-cold", daemon=True).start()
 
     def _cold_worker(self) -> None:
         stored = False
@@ -412,13 +404,11 @@ class UsageDaemon:
         if self._polling:
             return False
         if not force and self.last_fetch is not None:
-            age = (datetime.now(timezone.utc) - self.last_fetch).total_seconds()
+            age = (datetime.now(UTC) - self.last_fetch).total_seconds()
             if age < REFRESH_COOLDOWN_SECONDS:
                 return False
         self._polling = True
-        threading.Thread(
-            target=self._poll_worker, name="tokens-go-brrr-poll", daemon=True
-        ).start()
+        threading.Thread(target=self._poll_worker, name="tokens-go-brrr-poll", daemon=True).start()
         return False
 
     def _poll_worker(self) -> None:
@@ -480,58 +470,12 @@ class UsageDaemon:
         self._apply_borrowing()
 
     def _apply_borrowing(self) -> None:
-        """Give a harness the meters of the account its sessions are spending on.
-
-        A harness such as Pi holds no subscription. Its live sessions each name
-        the account they bill to, so the account most of them are on decides
-        which provider's meters the row shows. Nothing is fetched twice: the
-        meters are the ones that provider already polled this cycle.
-
-        Three outcomes, all of which the panel has to render:
-          - backend metered by an enabled provider that is signed in → borrowed
-            meters, marked so they are not counted twice in the status dot
-          - backend known but unmeterable (xAI, Cline) → named, no meters
-          - no sessions running → no backend, no meters
-        """
-        by_id = {snap.provider_id: snap for snap in self.snapshots}
-        for snap in self.snapshots:
-            if not self._is_harness(snap.provider_id):
-                continue
-
-            backends = [i.backend for i in snap.instances.all if i.backend is not None]
-            backend = pi_backend.dominant(backends)
-            snap.backend = backend
-            snap.borrowed_from = None
-            snap.metrics = []
-            snap.primary_key = ""
-            snap.plan = backend.model if backend else None
-
-            if backend is None:
-                snap.status = "ok"
-                snap.error = None
-                continue
-
-            source = by_id.get(backend.provider_id) if backend.metered else None
-            if source is None or source.status != "ok":
-                # Nothing to show a limit from. Say why rather than showing 0%.
-                snap.status = "ok"
-                snap.error = (
-                    f"{backend.name} reports no limits"
-                    if not backend.metered
-                    else f"Sign in to {backend.name} to show limits"
-                )
-                continue
-
-            snap.metrics = list(source.metrics)
-            snap.primary_key = source.primary_key
-            snap.borrowed_from = source.provider_id
-            snap.status = "ok"
-            snap.error = None
-            # Borrowing rewrites primary_key every cycle, so a chip swap the user
-            # made on the harness row has to be put back.
-            override = self.config.primary_overrides.get(snap.provider_id)
-            if override and override in {m.key for m in snap.metrics}:
-                snap.primary_key = override
+        """Give a harness the meters of the account its sessions are spending on."""
+        apply_borrowing(
+            self.snapshots,
+            is_harness=self._is_harness,
+            primary_overrides=self.config.primary_overrides,
+        )
 
     def _is_harness(self, provider_id: str) -> bool:
         """A provider whose meters come from whichever account its sessions use."""
@@ -553,13 +497,11 @@ class UsageDaemon:
                 # notify twice for one limit.
                 self.alerts.check(snap)
         self.snapshots = applied
-        self.last_fetch = datetime.now(timezone.utc)
+        self.last_fetch = datetime.now(UTC)
         self.history.record(applied, at=self.last_fetch)
         self._attach_forecasts()
         self.last_error = (
-            "; ".join(errors)
-            if errors and not any(s.status == "ok" for s in applied)
-            else None
+            "; ".join(errors) if errors and not any(s.status == "ok" for s in applied) else None
         )
         self._attach_instances()
         self._notify_events()
@@ -697,9 +639,7 @@ class UsageDaemon:
                     cooldown_seconds=notify_engine.DEFAULT_COOLDOWN_SECONDS,
                 )
         except sqlite3.Error as exc:
-            print(
-                f"Could not build the {slot} digest: {exc}", file=sys.stderr, flush=True
-            )
+            print(f"Could not build the {slot} digest: {exc}", file=sys.stderr, flush=True)
             # A failure must not burn the slot. The digest of 2026-10-07 18:03
             # died on a connection error, had already marked itself sent, and so
             # never tried again: one exception cost a whole day of digests, and
@@ -779,9 +719,7 @@ class UsageDaemon:
         """Log a call, and leave a provider alone for a while after a 429."""
         self.llm_log.record(entry)
         if entry.get("outcome") == llm_log.RATE_LIMITED and entry.get("provider"):
-            self._llm_backoff[str(entry["provider"])] = (
-                time.monotonic() + LLM_BACKOFF_SECONDS
-            )
+            self._llm_backoff[str(entry["provider"])] = time.monotonic() + LLM_BACKOFF_SECONDS
 
     def llm_log_payload(self, day: str = "") -> dict[str, Any]:
         """One day of the LLM log for the Settings screen; newest day if none."""
@@ -808,9 +746,7 @@ class UsageDaemon:
         meta = message.meta or {}
         facts: dict[str, Any] = {
             "period": str(meta.get("period") or "last 30 days"),
-            "ranked": ledger.period_totals(
-                con, start_day=start, end_day=end, group_by="provider"
-            ),
+            "ranked": ledger.period_totals(con, start_day=start, end_day=end, group_by="provider"),
         }
         if meta.get("period") == "warm":
             # The fresh figures behind a warm note, so a rewording can use them
@@ -829,9 +765,7 @@ class UsageDaemon:
             # Urgency comes from the recorded percentage rather than from
             # reading the sentence back, which would make prose load-bearing.
             percent = (message.meta or {}).get("percent")
-            spent = (
-                isinstance(percent, (int, float)) and percent >= notify_engine.SPENT_AT
-            )
+            spent = isinstance(percent, (int, float)) and percent >= notify_engine.SPENT_AT
             send("tokens-go-brrr", message.body, urgency="critical" if spent else "normal")
         con = self.ledger.connection
         if messages and con is not None:
@@ -950,20 +884,16 @@ class UsageDaemon:
             pending = [
                 row
                 for row in pending
-                if not row.get("created_at")
-                or now_ts - _as_int(row.get("created_at")) <= ceiling
+                if not row.get("created_at") or now_ts - _as_int(row.get("created_at")) <= ceiling
             ]
         self._billboard = notify_engine.choose_billboard(pending)
 
         latest = ledger.latest_message(con)
         # `latest_message` is deliberately unfiltered by acknowledgement or
         # freshness: "show me the most recent one" should work months later.
-        self._latest_message = (
-            notify_engine.billboard_payload(latest) if latest else None
-        )
+        self._latest_message = notify_engine.billboard_payload(latest) if latest else None
         self._recent_messages = [
-            notify_engine.billboard_payload(row)
-            for row in ledger.recent_messages(con)
+            notify_engine.billboard_payload(row) for row in ledger.recent_messages(con)
         ]
 
     def _attach_forecasts(self) -> None:
@@ -985,7 +915,7 @@ class UsageDaemon:
         eta = burn.eta_seconds(samples)
         if eta is None or meter.resets_at is None:
             return eta
-        until_reset = (meter.resets_at - datetime.now(timezone.utc)).total_seconds()
+        until_reset = (meter.resets_at - datetime.now(UTC)).total_seconds()
         if until_reset > 0 and eta > until_reset:
             # The window rolls over before the limit is reached, so there is no
             # exhaustion to warn about — saying "in 9h" under a 3h window reads
@@ -1028,9 +958,7 @@ class UsageDaemon:
         # version stays as it is. `billboard` is null far more often than not —
         # that is what keeps the landing page from appearing on every open.
         payload["billboard"] = dict(self._billboard) if self._billboard else None
-        payload["latestMessage"] = (
-            dict(self._latest_message) if self._latest_message else None
-        )
+        payload["latestMessage"] = dict(self._latest_message) if self._latest_message else None
         payload["recentMessages"] = [dict(m) for m in self._recent_messages]
         # Additive, like the fields above: true while a warm note is being made.
         payload["live"] = {"catchingUp": bool(self._catching_up)}

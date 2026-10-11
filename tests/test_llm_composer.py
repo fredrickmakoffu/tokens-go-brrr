@@ -98,22 +98,16 @@ class RoutingTest(unittest.TestCase):
         self.assertEqual(chosen.provider_id, "opencode")
 
     def test_a_borrowed_row_is_not_a_writer(self):
-        borrowed = snap(
-            "opencode", "OpenCode", [meter("rolling", 5, "rolling")], borrowed="claude"
-        )
+        borrowed = snap("opencode", "OpenCode", [meter("rolling", 5, "rolling")], borrowed="claude")
         self.assertIsNone(llm.choose([borrowed]))
 
     def test_a_broken_provider_is_not_a_writer(self):
-        broken = snap(
-            "opencode", "OpenCode", [meter("rolling", 5, "rolling")], status="error"
-        )
+        broken = snap("opencode", "OpenCode", [meter("rolling", 5, "rolling")], status="error")
         self.assertIsNone(llm.choose([broken]))
 
     def test_monthly_only_ranks_below_a_short_window(self):
         monthly_claude = snap("claude", "Claude Code", [meter("monthly", 1, "monthly")])
-        ranked = [
-            g.provider_id for g in llm.candidates([monthly_claude, OPENCODE_ROOMY])
-        ]
+        ranked = [g.provider_id for g in llm.candidates([monthly_claude, OPENCODE_ROOMY])]
         self.assertEqual(ranked, ["opencode", "claude"])
 
     def test_the_default_model_comes_from_the_provider(self):
@@ -353,14 +347,10 @@ class RewriteTest(unittest.TestCase):
 
     def rewrite(self, reply: str, facts: dict | None = None) -> Message | None:
         with mock.patch.object(llm, "generate", return_value=reply):
-            return llm.rewrite(
-                self.message(), generator=self.generator(), facts=facts or FACTS
-            )
+            return llm.rewrite(self.message(), generator=self.generator(), facts=facts or FACTS)
 
     def test_the_model_wording_replaces_the_template(self):
-        rewritten = self.rewrite(
-            "Claude is nearly spent. Move to OpenCode.\nFEATURED: opencode"
-        )
+        rewritten = self.rewrite("Claude is nearly spent. Move to OpenCode.\nFEATURED: opencode")
         assert rewritten is not None
         self.assertEqual(rewritten.body, "Claude is nearly spent. Move to OpenCode.")
         self.assertEqual(rewritten.kind, ACTIONABLE)
@@ -403,8 +393,11 @@ class RewriteTest(unittest.TestCase):
         assert rewritten is not None
         payload = ne.billboard_payload(
             {
-                "id": 1, "kind": rewritten.kind, "created_at": 1,
-                "body": rewritten.body, "meta": __import__("json").dumps(rewritten.meta),
+                "id": 1,
+                "kind": rewritten.kind,
+                "created_at": 1,
+                "body": rewritten.body,
+                "meta": __import__("json").dumps(rewritten.meta),
             }
         )
         self.assertIsNone(payload["template"])
@@ -416,17 +409,11 @@ class RewriteTest(unittest.TestCase):
 
     def test_a_refusal_keeps_the_template(self):
         with mock.patch.object(llm, "generate", side_effect=llm.LlmRateLimited("429")):
-            self.assertIsNone(
-                llm.rewrite(self.message(), generator=self.generator(), facts=FACTS)
-            )
+            self.assertIsNone(llm.rewrite(self.message(), generator=self.generator(), facts=FACTS))
 
     def test_the_template_s_share_survives_a_reply_without_one(self):
-        original = Message(
-            kind="shareable", key="share:1", body="body", share="SHARE: kept"
-        )
-        with mock.patch.object(
-            llm, "generate", return_value="New body.\nFEATURED: opencode"
-        ):
+        original = Message(kind="shareable", key="share:1", body="body", share="SHARE: kept")
+        with mock.patch.object(llm, "generate", return_value="New body.\nFEATURED: opencode"):
             rewritten = llm.rewrite(original, generator=self.generator(), facts=FACTS)
         assert rewritten is not None
         self.assertEqual(rewritten.share, "SHARE: kept")
@@ -544,9 +531,7 @@ class DaemonComposeTest(unittest.TestCase):
         from tokens_go_brrr.daemon import UsageDaemon
 
         with mock.patch.object(llm, "choose", return_value=None):
-            UsageDaemon._compose(
-                stub, self.con, [self.message()], origin="scheduled:weekly"
-            )
+            UsageDaemon._compose(stub, self.con, [self.message()], origin="scheduled:weekly")
         (entry,) = [c.args[0] for c in stub.llm_log.record.call_args_list]
         self.assertEqual(entry["outcome"], "skipped")
         self.assertEqual(entry["reason"], "no_generator")
@@ -561,9 +546,7 @@ class DaemonComposeTest(unittest.TestCase):
             mock.patch.object(llm, "choose", return_value=self.generator()),
             mock.patch.object(llm, "rewrite", return_value=None) as rewrite,
         ):
-            UsageDaemon._compose(
-                stub, self.con, [self.message()], origin="event:meter"
-            )
+            UsageDaemon._compose(stub, self.con, [self.message()], origin="event:meter")
         self.assertIs(rewrite.call_args.kwargs["recorder"], stub._record_llm)
         self.assertEqual(rewrite.call_args.kwargs["context"], {"trigger": "event:meter"})
 

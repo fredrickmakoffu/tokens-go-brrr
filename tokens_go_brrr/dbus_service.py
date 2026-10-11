@@ -87,9 +87,7 @@ class UsageService:
     def _name_lost(self, _connection, _name: str) -> None:
         self._on_name_lost()
 
-    def _method_call(
-        self, _conn, _sender, _path, _iface, method, params, invocation
-    ) -> None:
+    def _method_call(self, _conn, _sender, _path, _iface, method, params, invocation) -> None:
         if method == "GetState":
             payload = json.dumps(self._get_state())
             invocation.return_value(GLib.Variant("(s)", (payload,)))

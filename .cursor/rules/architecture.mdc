@@ -17,7 +17,7 @@ Extension (GJS)  ←D-Bus/state.json→  UsageDaemon
 ## Boundaries
 
 1. **Daemon owns policy; extension renders.** Billboard, ack, digests, which message interrupts — Python. Extension compares `billboard.id` and paints.
-2. **Providers** return `ProviderSnapshot` / `Meter`. HTTP and auth stay inside the provider (or a tiny shared helper). Do not grow `api.py` into a multi-vendor layer — it is Cursor-only; prefer `providers/cursor_*` for new Cursor HTTP.
+2. **Providers** return `ProviderSnapshot` / `Meter`. HTTP and auth stay inside the provider (or `http_json`). Cursor HTTP lives in `providers/cursor_api.py` (`api.py` is a shim).
 3. **Harvesters** are fail-soft: never raise out of `harvest`; never invent zeros; mark estimates. Write only via `ledger.upsert_*`.
 4. **Published state** (`state.build_payload` + schema) is the only contract for CLI and extension. Keep `write_state` / `read_state` in the same module family.
 5. **D-Bus** (`dbus_service.py`) is a thin adapter — no providers, ledger, or notify logic.

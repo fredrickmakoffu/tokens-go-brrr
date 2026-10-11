@@ -22,7 +22,13 @@ jobs:
       - run: pip3 install --user -q ruff
       - run: python3 scripts/bump_version.py --check
       - run: make lint
+      - run: make format-check
       - run: python3 -m unittest discover -s tests
+      - run: python3 scripts/check_contrast.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: python3 -m unittest tests.test_locales -v
 
   # Prove the packages still build on every PR into main, so a release never
   # is the first time they are tried. Linux only: cheap on the free plan.

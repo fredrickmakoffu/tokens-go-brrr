@@ -23,9 +23,7 @@ MIN_SPAN_SECONDS = 300
 MIN_R_SQUARED = 0.5
 
 
-def eta_seconds(
-    samples: list[tuple[float, float]], *, target: float = 100.0
-) -> float | None:
+def eta_seconds(samples: list[tuple[float, float]], *, target: float = 100.0) -> float | None:
     """Seconds until the meter reaches `target`, or None if it cannot be said.
 
     None means "not enough to go on": too few samples, too short a span, usage
@@ -84,9 +82,7 @@ def _least_squares(xs: list[float], ys: list[float]) -> tuple[float | None, floa
     return slope, mean_y - slope * mean_x
 
 
-def _r_squared(
-    xs: list[float], ys: list[float], slope: float, intercept: float
-) -> float:
+def _r_squared(xs: list[float], ys: list[float], slope: float, intercept: float) -> float:
     mean_y = sum(ys) / len(ys)
     ss_tot = sum((y - mean_y) ** 2 for y in ys)
     if ss_tot == 0:

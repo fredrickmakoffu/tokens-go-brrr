@@ -159,14 +159,16 @@ Chip swaps persist in `primary_overrides`.
 
 ```text
 GNOME Shell extension (status dot + popover)
-        ↑  io.github.fredrickmakoffu.TokensGoBrrr on the session bus
-   daemon (poll, alert, publish)
-        ↑
-  ProviderSnapshot[] ← providers/cursor (+ opencode, claude later)
+        ↑  D-Bus  io.github.fredrickmakoffu.TokensGoBrrr
+   UsageDaemon (poll, harvest, notify, publish)
+        ├─ providers/   Cursor · Claude · OpenCode · Codex · Pi
+        ├─ harvesters/  local stores → usage ledger
+        ├─ ledger       sessions, rollups, messages, billboard
+        └─ notify* + llm_*   digests, live notes, optional wording
 ```
 
 The extension holds no credentials and makes no network calls. It reads state from the
-daemon and sends back two commands: `Refresh` and `SetPrimary`.
+daemon and sends commands such as `Refresh`, `SetPrimary`, and `Acknowledge`.
 
 ## Commands
 

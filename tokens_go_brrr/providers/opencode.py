@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -133,7 +133,7 @@ class OpenCodeProvider:
             dashboard_url=DASHBOARD_URL,
             status="ok",
             error=None,
-            fetched_at=datetime.now(timezone.utc),
+            fetched_at=datetime.now(UTC),
         )
 
     def _auth_snapshot(self, message: str) -> ProviderSnapshot:
@@ -159,11 +159,7 @@ class OpenCodeProvider:
             raise RuntimeError(f"OpenCode usage unreachable: {exc}") from exc
         except HttpJsonError as exc:
             if exc.status in {401, 403}:
-                raise PermissionError(
-                    "OpenCode key rejected — sign in again"
-                ) from exc
-            raise RuntimeError(
-                f"HTTP {exc.status} from OpenCode usage: {exc.body[:200]}"
-            ) from exc
+                raise PermissionError("OpenCode key rejected — sign in again") from exc
+            raise RuntimeError(f"HTTP {exc.status} from OpenCode usage: {exc.body[:200]}") from exc
         except RuntimeError as exc:
             raise RuntimeError("OpenCode usage returned invalid JSON") from exc

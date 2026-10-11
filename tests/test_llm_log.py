@@ -41,9 +41,7 @@ class WritingTest(LogCase):
 
     def test_entries_stay_in_time_order_within_a_day(self):
         for minute in (5, 1, 9):
-            self.log.record(
-                {"n": minute}, at=AT.replace(hour=10, minute=minute)
-            )
+            self.log.record({"n": minute}, at=AT.replace(hour=10, minute=minute))
         # Append order is the order they happened in, not a sort by value.
         self.assertEqual([e["n"] for e in self.log.read("2026-10-10")], [5, 1, 9])
 
@@ -170,9 +168,7 @@ class ComposerRecordingTest(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
         try:
-            text = llm.generate(
-                generator(), "the prompt", recorder=seen.append, **kwargs
-            )
+            text = llm.generate(generator(), "the prompt", recorder=seen.append, **kwargs)
         except llm.LlmError:
             text = None
         return text, seen
@@ -307,7 +303,15 @@ class ReportTest(LogCase):
         path = self.log.write_report()
         text = path.read_text()
         self.assertEqual(path.parent, self.root.parent)
-        for needle in ("2026-10-10", "2026-10-09", "09:30:00  OK", "haiku", "1,500", "1,200 ms", "boom"):
+        for needle in (
+            "2026-10-10",
+            "2026-10-09",
+            "09:30:00  OK",
+            "haiku",
+            "1,500",
+            "1,200 ms",
+            "boom",
+        ):
             self.assertIn(needle, text)
         self.assertLess(text.index("2026-10-10"), text.index("2026-10-09"))
 

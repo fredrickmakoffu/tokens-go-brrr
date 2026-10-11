@@ -14,12 +14,12 @@ import sqlite3
 import tempfile
 import unittest
 from contextlib import redirect_stdout
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest import mock
 
-from tokens_go_brrr import __main__ as cli
 from tokens_go_brrr import ledger
+from tokens_go_brrr.cli import app as cli
 from tokens_go_brrr.harvesters import build
 from tokens_go_brrr.harvesters.opencode_db import OpenCodeHarvester
 
@@ -50,7 +50,7 @@ CREATE TABLE message (
 
 def ms(*parts: int) -> int:
     """Epoch milliseconds, which is what OpenCode stores."""
-    return int(datetime(*parts, tzinfo=timezone.utc).timestamp() * 1000)
+    return int(datetime(*parts, tzinfo=UTC).timestamp() * 1000)
 
 
 class OpenCodeCase(unittest.TestCase):
@@ -125,8 +125,7 @@ class OpenCodeCase(unittest.TestCase):
         )
         for index in range(messages):
             con.execute(
-                "INSERT OR REPLACE INTO message (id, session_id, time_created)"
-                " VALUES (?, ?, ?)",
+                "INSERT OR REPLACE INTO message (id, session_id, time_created) VALUES (?, ?, ?)",
                 (f"{session_id}-m{index}", session_id, end),
             )
         con.commit()
@@ -170,20 +169,14 @@ class ReaderTest(OpenCodeCase):
         self.assertEqual(meta["agent"], "build")
 
     def test_duration_comes_from_the_tool_timestamps(self):
-        self.add_session(
-            "s1", created=ms(2026, 10, 1, 10), updated=ms(2026, 10, 1, 10, 30)
-        )
+        self.add_session("s1", created=ms(2026, 10, 1, 10), updated=ms(2026, 10, 1, 10, 30))
         self.reader.harvest(self.con)
-        self.assertEqual(
-            self.con.execute("SELECT duration_s FROM sessions").fetchone()[0], 1800
-        )
+        self.assertEqual(self.con.execute("SELECT duration_s FROM sessions").fetchone()[0], 1800)
 
     def test_turns_are_counted_from_the_message_table(self):
         self.add_session("s1", messages=3)
         self.reader.harvest(self.con)
-        self.assertEqual(
-            self.con.execute("SELECT turns FROM sessions").fetchone()[0], 3
-        )
+        self.assertEqual(self.con.execute("SELECT turns FROM sessions").fetchone()[0], 3)
 
     def test_a_store_without_a_message_table_still_reads_sessions(self):
         self.add_session("s1")
@@ -198,15 +191,9 @@ class ReaderTest(OpenCodeCase):
     def test_rollups_are_rebuilt_from_what_was_read(self):
         self.add_session("s1")
         self.reader.harvest(self.con)
-        self.assertEqual(
-            self.con.execute("SELECT COUNT(*) FROM daily").fetchone()[0], 1
-        )
-        self.assertEqual(
-            self.con.execute("SELECT tokens FROM daily").fetchone()[0], 120
-        )
-        self.assertEqual(
-            self.con.execute("SELECT COUNT(*) FROM hourly").fetchone()[0], 1
-        )
+        self.assertEqual(self.con.execute("SELECT COUNT(*) FROM daily").fetchone()[0], 1)
+        self.assertEqual(self.con.execute("SELECT tokens FROM daily").fetchone()[0], 120)
+        self.assertEqual(self.con.execute("SELECT COUNT(*) FROM hourly").fetchone()[0], 1)
 
     def test_the_reader_format_is_recorded(self):
         self.reader.harvest(self.con)
@@ -224,9 +211,7 @@ class IdempotencyTest(OpenCodeCase):
         self.assertEqual(second.scanned, 0)
         self.assertEqual(second.sessions, 0)
         self.assertEqual(second.folded_days, 0)
-        self.assertEqual(
-            self.con.execute("SELECT COUNT(*) FROM sessions").fetchone()[0], 1
-        )
+        self.assertEqual(self.con.execute("SELECT COUNT(*) FROM sessions").fetchone()[0], 1)
 
     def test_only_sessions_newer_than_the_watermark_are_read(self):
         self.add_session("old", updated=ms(2026, 10, 1, 10))
@@ -236,9 +221,7 @@ class IdempotencyTest(OpenCodeCase):
         result = self.reader.harvest(self.con)
         self.assertEqual(result.scanned, 1)
         self.assertEqual(result.sessions, 1)
-        self.assertEqual(
-            self.con.execute("SELECT COUNT(*) FROM sessions").fetchone()[0], 2
-        )
+        self.assertEqual(self.con.execute("SELECT COUNT(*) FROM sessions").fetchone()[0], 2)
 
     def test_a_running_session_grows_in_place(self):
         start = ms(2026, 10, 1, 10)
@@ -248,12 +231,8 @@ class IdempotencyTest(OpenCodeCase):
 
         result = self.reader.harvest(self.con)
         self.assertEqual(result.sessions, 1)
-        self.assertEqual(
-            self.con.execute("SELECT COUNT(*) FROM sessions").fetchone()[0], 1
-        )
-        self.assertEqual(
-            self.con.execute("SELECT tokens_input FROM sessions").fetchone()[0], 900
-        )
+        self.assertEqual(self.con.execute("SELECT COUNT(*) FROM sessions").fetchone()[0], 1)
+        self.assertEqual(self.con.execute("SELECT tokens_input FROM sessions").fetchone()[0], 900)
 
     def test_full_ignores_the_watermark_but_still_writes_nothing_new(self):
         self.add_session("s1")
@@ -261,9 +240,7 @@ class IdempotencyTest(OpenCodeCase):
         result = self.reader.harvest(self.con, full=True)
         self.assertEqual(result.scanned, 1)
         self.assertEqual(result.sessions, 0)
-        self.assertEqual(
-            self.con.execute("SELECT COUNT(*) FROM sessions").fetchone()[0], 1
-        )
+        self.assertEqual(self.con.execute("SELECT COUNT(*) FROM sessions").fetchone()[0], 1)
 
 
 class FailureTest(OpenCodeCase):
@@ -322,9 +299,7 @@ class HarvestCliTest(OpenCodeCase):
             mock.patch.object(
                 ledger, "connect", side_effect=lambda: real_connect(self.ledger_path)
             ),
-            mock.patch(
-                "tokens_go_brrr.harvesters.build", return_value=[self.reader]
-            ),
+            mock.patch("tokens_go_brrr.harvesters.build", return_value=[self.reader]),
             redirect_stdout(out),
         ):
             code = cli.main(["harvest", *argv])
@@ -351,9 +326,7 @@ class HarvestCliTest(OpenCodeCase):
         self.assertIn("not installed", out)
 
     def test_a_too_new_ledger_exits_nonzero(self):
-        self.con.execute(
-            "UPDATE ledger_meta SET value = '99' WHERE key = 'format_version'"
-        )
+        self.con.execute("UPDATE ledger_meta SET value = '99' WHERE key = 'format_version'")
         self.con.commit()
         code, _out = self.run_harvest([])
         self.assertEqual(code, 1)
