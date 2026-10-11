@@ -175,6 +175,32 @@ class MonitorConfig:
         self.primary_overrides[provider_id] = metric_key
         self.save()
 
+    def set_provider_enabled(self, provider_id: str, enabled: bool) -> bool:
+        """Show or hide a known provider on the panel.
+
+        Returns True when the list changed and was written. Unknown ids are
+        ignored. Order follows ``DEFAULT_PROVIDERS`` so the panel stays stable
+        when someone is put back.
+        """
+        from .providers import DEFAULT_PROVIDERS, PROVIDERS
+
+        if provider_id not in PROVIDERS:
+            return False
+        current = list(self.enabled_providers)
+        if enabled:
+            if provider_id in current:
+                return False
+            current.append(provider_id)
+            rank = {pid: i for i, pid in enumerate(DEFAULT_PROVIDERS)}
+            current.sort(key=lambda pid: rank.get(pid, len(rank)))
+        else:
+            if provider_id not in current:
+                return False
+            current = [pid for pid in current if pid != provider_id]
+        self.enabled_providers = current
+        self.save()
+        return True
+
 
 def write_state(state: dict[str, Any]) -> None:
     """Compatibility wrapper — prefer ``state.write_state``."""

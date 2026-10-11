@@ -313,6 +313,16 @@ def state():
         "updated_at": "2026-09-13T15:00:00+00:00",
         "error": None,
         "tools": tools,
+        "catalog": [
+            {"id": pid, "name": name, "enabled": pid != "pi"}
+            for pid, name in (
+                ("cursor", "Cursor"),
+                ("claude", "Claude Code"),
+                ("opencode", "OpenCode"),
+                ("pi", "Pi"),
+                ("codex", "Codex"),
+            )
+        ],
         "billboard": BILLBOARDS[_shown] if _shown < len(BILLBOARDS) else None,
         "latestMessage": BILLBOARDS[-1],
         "recentMessages": list(reversed(BILLBOARDS)),

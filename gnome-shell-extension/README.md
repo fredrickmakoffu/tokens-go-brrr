@@ -17,6 +17,7 @@ digest policy stays in the daemon.
 | `GetState` | method | Current state as JSON |
 | `Refresh` | method | Poll providers now (also used when the popover opens) |
 | `SetPrimary(provider, metric)` | method | Persist a chip swap |
+| `SetProviderEnabled(provider, enabled)` | method | Show or hide a provider on the panel |
 | `Acknowledge(id)` | method | Dismiss the landing billboard |
 | `LlmLog(day)` | method | LLM call log for a day (JSON) |
 | `ClearLlmLog` | method | Wipe the LLM log |
@@ -34,6 +35,13 @@ State payload (abridged; camelCase for GJS):
   "error": null,
   "billboard": null,
   "latestMessage": null,
+  "catalog": [
+    {"id": "cursor", "name": "Cursor", "enabled": true},
+    {"id": "claude", "name": "Claude Code", "enabled": true},
+    {"id": "opencode", "name": "OpenCode", "enabled": true},
+    {"id": "pi", "name": "Pi", "enabled": true},
+    {"id": "codex", "name": "Codex", "enabled": false}
+  ],
   "tools": [
     {
       "id": "cursor", "name": "Cursor", "icon": "cursor",

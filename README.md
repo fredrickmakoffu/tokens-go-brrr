@@ -148,7 +148,7 @@ would have returned. The scheduled poll is not affected.
   "alert_cooldown_hours": 6,
   "history_days": 90,
   "primary_alerts": [75, 90, 100],
-  "enabled_providers": ["cursor"],
+  "enabled_providers": ["cursor", "claude", "opencode", "pi", "codex"],
   "primary_overrides": {}
 }
 ```

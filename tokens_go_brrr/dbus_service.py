@@ -23,6 +23,10 @@ INTERFACE_XML = """
       <arg type="s" direction="in" name="provider"/>
       <arg type="s" direction="in" name="metric"/>
     </method>
+    <method name="SetProviderEnabled">
+      <arg type="s" direction="in" name="provider"/>
+      <arg type="b" direction="in" name="enabled"/>
+    </method>
     <method name="Acknowledge">
       <arg type="u" direction="in" name="id"/>
     </method>
@@ -55,11 +59,13 @@ class UsageService:
         on_llm_log: Callable[[str], dict[str, Any]] | None = None,
         on_llm_log_clear: Callable[[], None] | None = None,
         on_llm_log_report: Callable[[], str] | None = None,
+        on_set_provider_enabled: Callable[[str, bool], None] | None = None,
     ) -> None:
         self._version = version
         self._get_state = get_state
         self._on_refresh = on_refresh
         self._on_set_primary = on_set_primary
+        self._on_set_provider_enabled = on_set_provider_enabled
         self._on_acknowledge = on_acknowledge
         self._on_quit = on_quit
         self._on_llm_log = on_llm_log
@@ -97,6 +103,11 @@ class UsageService:
         elif method == "SetPrimary":
             provider, metric = params.unpack()
             self._on_set_primary(str(provider), str(metric))
+            invocation.return_value(None)
+        elif method == "SetProviderEnabled":
+            provider, enabled = params.unpack()
+            if self._on_set_provider_enabled:
+                self._on_set_provider_enabled(str(provider), bool(enabled))
             invocation.return_value(None)
         elif method == "Acknowledge":
             # The panel has shown this message; the daemon records that so it

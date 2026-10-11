@@ -29,7 +29,7 @@ from .config import MonitorConfig
 from .dbus_service import UsageService
 from .instances import InstanceReport, scan, signature
 from .notify import AlertManager, send
-from .providers import build_providers
+from .providers import DEFAULT_PROVIDERS, PROVIDERS, build_providers
 from .providers.base import Provider, ProviderSnapshot
 from .state import build_payload, write_state
 
@@ -107,6 +107,10 @@ class UsageDaemon:
         self.last_error: str | None = None
         self.last_fetch: datetime | None = None
         self._polling = False
+        # Set when a provider is shown while a poll is already running, so the
+        # finishing worker's snapshot list (built without the newcomer) is not
+        # the last word — another force poll starts as soon as the lock clears.
+        self._poll_again = False
         self._specs = {
             provider.id: list(getattr(provider, "process_specs", [])) for provider in self.providers
         }
@@ -122,6 +126,7 @@ class UsageDaemon:
             get_state=self.state_payload,
             on_refresh=self.panel_opened,
             on_set_primary=self.set_primary,
+            on_set_provider_enabled=self.set_provider_enabled,
             on_acknowledge=self.acknowledge,
             on_llm_log=self.llm_log_payload,
             on_llm_log_clear=self.llm_log_clear,
@@ -496,6 +501,20 @@ class UsageDaemon:
                 # that provider alerts on them already. Alerting here too would
                 # notify twice for one limit.
                 self.alerts.check(snap)
+        # A worker that started before SetProviderEnabled finished would omit
+        # the newcomer. Keep prior rows for anyone still enabled but missing,
+        # and schedule another force poll so the gap is temporary.
+        want = {provider.id for provider in self.providers}
+        have = {snap.provider_id for snap in applied}
+        missing = want - have
+        if missing:
+            kept = [s for s in self.snapshots if s.provider_id in missing]
+            applied.extend(kept)
+            order = {pid: i for i, pid in enumerate(self.config.enabled_providers)}
+            applied.sort(key=lambda s: order.get(s.provider_id, len(order)))
+            self._poll_again = True
+        # Drop anyone who was hidden while this worker was still running.
+        applied = [s for s in applied if s.provider_id in want]
         self.snapshots = applied
         self.last_fetch = datetime.now(UTC)
         self.history.record(applied, at=self.last_fetch)
@@ -506,6 +525,9 @@ class UsageDaemon:
         self._attach_instances()
         self._notify_events()
         self._publish()
+        if self._poll_again:
+            self._poll_again = False
+            self.poll(force=True)
         return False
 
     # -- ledger --------------------------------------------------------------
@@ -944,6 +966,37 @@ class UsageDaemon:
         ]
         self._publish()
 
+    def set_provider_enabled(self, provider_id: str, enabled: bool) -> None:
+        """Show or hide a provider on the panel without restarting the daemon."""
+        if not self.config.set_provider_enabled(provider_id, enabled):
+            return
+        self._rebuild_providers()
+        if enabled:
+            # Fetch the newcomer immediately so Settings → Show does not leave
+            # an empty gap until the next timed poll. If a poll is already in
+            # flight, ask for another once it finishes — that worker's list was
+            # built without this provider.
+            if self._polling:
+                self._poll_again = True
+            else:
+                self.poll(force=True)
+            return
+        self.snapshots = [s for s in self.snapshots if s.provider_id != provider_id]
+        self._publish()
+
+    def _rebuild_providers(self) -> None:
+        self.providers = build_providers(self.config.enabled_providers)
+        self._specs = {
+            provider.id: list(getattr(provider, "process_specs", [])) for provider in self.providers
+        }
+        kept = {
+            pid: report for pid, report in self._instances.items() if pid in self._specs
+        }
+        for provider_id in self._specs:
+            kept.setdefault(provider_id, InstanceReport())
+        self._instances = kept
+        self._published_signature = signature(self._instances)
+
     # -- state ---------------------------------------------------------------
 
     def state_payload(self) -> dict[str, Any]:
@@ -962,6 +1015,18 @@ class UsageDaemon:
         payload["recentMessages"] = [dict(m) for m in self._recent_messages]
         # Additive, like the fields above: true while a warm note is being made.
         payload["live"] = {"catchingUp": bool(self._catching_up)}
+        # The five known providers, with who is currently on the panel. The
+        # Settings screen uses this to offer Show again for anyone hidden.
+        enabled = set(self.config.enabled_providers)
+        payload["catalog"] = [
+            {
+                "id": pid,
+                "name": PROVIDERS[pid].display_name,
+                "enabled": pid in enabled,
+            }
+            for pid in DEFAULT_PROVIDERS
+            if pid in PROVIDERS
+        ]
         return payload
 
     def _publish(self) -> None:
