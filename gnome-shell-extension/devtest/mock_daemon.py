@@ -402,6 +402,15 @@ def llm_log_clear():
     print("mock: ClearLlmLog", flush=True)
 
 
+def llm_log_report():
+    import tempfile
+
+    path = tempfile.gettempdir() + "/llm-activity-mock.txt"
+    with open(path, "w") as handle:
+        handle.write("LLM ACTIVITY LOG (mock)\n")
+    return path
+
+
 svc = UsageService(
     version="0.4.0-mock",
     get_state=state,
@@ -410,6 +419,7 @@ svc = UsageService(
     on_acknowledge=acknowledge,
     on_llm_log=llm_log,
     on_llm_log_clear=llm_log_clear,
+    on_llm_log_report=llm_log_report,
     on_quit=loop.quit,
     on_name_lost=loop.quit,
 )

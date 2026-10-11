@@ -37,6 +37,7 @@ INTERFACE_XML = """
       <arg type="s" direction="out" name="json"/>
     </method>
     <method name="ClearLlmLog"/>
+    <method name="LlmLogReport"><arg type="s" direction="out" name="path"/></method>
     <method name="Quit"/>
     <signal name="StateChanged"><arg type="s" name="json"/></signal>
   </interface>
@@ -59,6 +60,7 @@ class UsageService:
         on_name_lost: Callable[[], None],
         on_llm_log: Callable[[str], dict[str, Any]] | None = None,
         on_llm_log_clear: Callable[[], None] | None = None,
+        on_llm_log_report: Callable[[], str] | None = None,
     ) -> None:
         self._version = version
         self._get_state = get_state
@@ -68,6 +70,7 @@ class UsageService:
         self._on_quit = on_quit
         self._on_llm_log = on_llm_log
         self._on_llm_log_clear = on_llm_log_clear
+        self._on_llm_log_report = on_llm_log_report
         self._on_name_lost = on_name_lost
         self._connection: Gio.DBusConnection | None = None
         self._registration = 0
@@ -118,6 +121,10 @@ class UsageService:
             if self._on_llm_log_clear:
                 self._on_llm_log_clear()
             invocation.return_value(None)
+        elif method == "LlmLogReport":
+            # The report is written by the daemon; the extension only opens it.
+            path = self._on_llm_log_report() if self._on_llm_log_report else ""
+            invocation.return_value(GLib.Variant("(s)", (path,)))
         elif method == "Quit":
             invocation.return_value(None)
             GLib.idle_add(self._on_quit)
