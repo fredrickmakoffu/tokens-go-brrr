@@ -5,7 +5,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
-UUID="ai-usage@fredrickmakoffu.github.io"
+UUID="tokens-go-brrr@fredrickmakoffu.github.io"
 RUNTIME="${AI_USAGE_NESTED_DIR:-$(mktemp -d)}"
 DURATION="${1:-60}"
 
@@ -13,9 +13,9 @@ mkdir -p "$RUNTIME"/{config/glib-2.0/settings,data/gnome-shell/extensions,cache,
 ln -sfn "$REPO/gnome-shell-extension/$UUID" "$RUNTIME/data/gnome-shell/extensions/$UUID"
 # The shell resolves Barlow through fontconfig, which reads $XDG_DATA_HOME/fonts.
 ln -sfn "$REPO/gnome-shell-extension/$UUID/fonts" "$RUNTIME/data/fonts"
-mkdir -p "$RUNTIME/config/cursor-spend-monitor"
-cp "$HOME/.config/cursor-spend-monitor/config.json" \
-   "$RUNTIME/config/cursor-spend-monitor/" 2>/dev/null || true
+mkdir -p "$RUNTIME/config/tokens-go-brrr"
+cp "$HOME/.config/tokens-go-brrr/config.json" \
+   "$RUNTIME/config/tokens-go-brrr/" 2>/dev/null || true
 
 cat > "$RUNTIME/config/glib-2.0/settings/keyfile" <<EOF
 [org/gnome/shell]
@@ -36,7 +36,7 @@ export XDG_CONFIG_HOME="$RUNTIME/config" XDG_DATA_HOME="$RUNTIME/data" \
 # must keep the real one so it still sees the OpenCode and Claude logins. The
 # config is a copy, so chip swaps made in here do not touch your real settings.
 dbus-run-session -- bash -c "
-  cd '$REPO' && XDG_DATA_HOME='$HOME/.local/share' python3 -u -m cursor_spend_monitor run &
+  cd '$REPO' && XDG_DATA_HOME='$HOME/.local/share' python3 -u -m tokens_go_brrr run &
   sleep 2
   timeout $DURATION gnome-shell --headless --virtual-monitor 1280x720 --no-x11
   kill %1 2>/dev/null || true

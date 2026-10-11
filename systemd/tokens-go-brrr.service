@@ -5,7 +5,7 @@ PartOf=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=%h/.local/bin/cursor-spend-monitor run
+ExecStart=%h/.local/bin/tokens-go-brrr run
 Restart=on-failure
 RestartSec=30
 

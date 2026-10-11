@@ -7,8 +7,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from cursor_spend_monitor.instances import ProcessSpec, scan, signature
-from cursor_spend_monitor.providers.cursor import CursorProvider
+from tokens_go_brrr.instances import ProcessSpec, scan, signature
+from tokens_go_brrr.providers.cursor import CursorProvider
 
 # tty_nr encoding used by the kernel: (major << 8) | minor for pts.
 PTS = {n: (136 << 8) | n for n in range(16)}

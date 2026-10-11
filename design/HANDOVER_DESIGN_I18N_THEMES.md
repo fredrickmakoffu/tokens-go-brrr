@@ -58,7 +58,7 @@ amber, red and the primary button were under 4.5:1 and were darkened.
 
 ### Extension theme
 St's CSS has no `var()`, so the dark rules stay literal and the light values are a
-**generated block** at the end of `stylesheet.css`, scoped under `.ai-usage-light`.
+**generated block** at the end of `stylesheet.css`, scoped under `.tokens-go-brrr-light`.
 Edit a dark rule, then `python3 scripts/gen_light_css.py` (idempotent). Colours set
 from JS live in `PALETTES` in `extension.js`. The popover is light **only** when
 `org.gnome.desktop.interface color-scheme` is `prefer-light`; `default` counts as
@@ -124,9 +124,9 @@ English label. Dates come from GLib's `LC_TIME`, so they follow the session, not
 `SHARE:` marker when it renders from the template.
 
 **Rename.** Display strings only. Deliberately unchanged: the extension UUID
-`ai-usage@fredrickmakoffu.github.io`, D-Bus names (`...AIUsage`), `ai-usage-*` CSS
-classes, `[ai-usage]` log prefixes, the config dir and package names
-(`cursor-spend-monitor`) — changing them breaks installs and upgrades. The "AI Usage
+`tokens-go-brrr@fredrickmakoffu.github.io`, D-Bus names (`...TokensGoBrrr`), `tokens-go-brrr-*` CSS
+classes, `[tokens-go-brrr]` log prefixes, the config dir and package names
+(`tokens-go-brrr`) — changing them breaks installs and upgrades. The "AI Usage
 design system" keeps its name. The popover kicker keeps the brand's own case instead of
 uppercasing it.
 

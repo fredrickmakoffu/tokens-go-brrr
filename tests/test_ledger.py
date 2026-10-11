@@ -19,8 +19,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
-from cursor_spend_monitor import __main__ as cli
-from cursor_spend_monitor import ledger
+from tokens_go_brrr import __main__ as cli
+from tokens_go_brrr import ledger
 
 NOW = datetime(2026, 10, 6, 12, 0, tzinfo=timezone.utc)
 
@@ -675,7 +675,7 @@ class RecorderTest(LedgerCase):
             except Exception as exc:  # noqa: BLE001 - reported by the assertion
                 result.append(exc)
 
-        thread = threading.Thread(target=work, name="ai-usage-test")
+        thread = threading.Thread(target=work, name="tokens-go-brrr-test")
         thread.start()
         thread.join()
         self.assertEqual(result, [0])
@@ -691,7 +691,7 @@ class RecorderTest(LedgerCase):
                 if con is not None:
                     ledger.upsert_sessions(con, [make()])
 
-        thread = threading.Thread(target=work, name="ai-usage-test")
+        thread = threading.Thread(target=work, name="tokens-go-brrr-test")
         thread.start()
         thread.join()
         self.assertEqual(self.count("sessions"), 1)

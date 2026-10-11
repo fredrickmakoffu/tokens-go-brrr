@@ -14,9 +14,9 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import cursor_spend_monitor.notify_engine as notify
-from cursor_spend_monitor import ledger
-from cursor_spend_monitor.providers.base import Meter, ProviderSnapshot
+import tokens_go_brrr.notify_engine as notify
+from tokens_go_brrr import ledger
+from tokens_go_brrr.providers.base import Meter, ProviderSnapshot
 
 NOW = datetime(2026, 10, 6, 12, 0, tzinfo=timezone.utc)
 
@@ -1181,7 +1181,7 @@ class WarmNoteTest(NotifyCase):
 
 
 def away_snap(provider_id="claude", name="Claude Code", *, percent=50.0, active=0, **kw):
-    from cursor_spend_monitor.instances import Instance, InstanceReport
+    from tokens_go_brrr.instances import Instance, InstanceReport
 
     snap = meter_snap(provider_id, name, percent=percent, **kw)
     if active:

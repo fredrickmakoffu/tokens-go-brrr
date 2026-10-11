@@ -11,8 +11,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
 
-from cursor_spend_monitor.providers import codex
-from cursor_spend_monitor.providers.codex import CodexProvider
+from tokens_go_brrr.providers import codex
+from tokens_go_brrr.providers.codex import CodexProvider
 
 
 def _jwt(exp: int) -> str:

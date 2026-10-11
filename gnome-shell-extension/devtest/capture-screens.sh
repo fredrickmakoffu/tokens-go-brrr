@@ -3,7 +3,7 @@
 # SCHEME=prefer-light ./capture-screens.sh <out-dir> captures the light theme.
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; REPO="$(cd "$HERE/../.." && pwd)"
-UUID="ai-usage@fredrickmakoffu.github.io"
+UUID="tokens-go-brrr@fredrickmakoffu.github.io"
 OUT="$(realpath -m "${1:-$REPO/design/screens/shots}")"; RUNTIME="$(mktemp -d)"
 mkdir -p "$OUT" "$RUNTIME"/config/glib-2.0/settings "$RUNTIME"/data/gnome-shell/extensions "$RUNTIME"/cache
 ln -sfn "$REPO/gnome-shell-extension/$UUID" "$RUNTIME/data/gnome-shell/extensions/$UUID"
@@ -21,7 +21,7 @@ KF
 export XDG_CONFIG_HOME="$RUNTIME/config" XDG_DATA_HOME="$RUNTIME/data" XDG_CACHE_HOME="$RUNTIME/cache" GSETTINGS_BACKEND=keyfile OUT
 cat > "$RUNTIME/inner.sh" <<'INNER'
 ev() { gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell --method org.gnome.Shell.Eval "$1" >/dev/null 2>&1; }
-I="const i = Main.panel.statusArea['ai-usage@fredrickmakoffu.github.io'];"
+I="const i = Main.panel.statusArea['tokens-go-brrr@fredrickmakoffu.github.io'];"
 shot() {
   sleep 0.8
   ev "$I const a = i.menu.actor; const [x,y] = a.get_transformed_position(); const [w,h] = a.get_transformed_size(); log('[cap] $1 ' + [x,y,w,h].map(Math.round).join(' '));"
@@ -50,7 +50,7 @@ dbus-run-session -- bash -c "
   kill \$SP; kill %1
 " 2>/dev/null
 grep '\[cap\]' "$RUNTIME/shell.log" | sed 's/.*\[cap\] //' > "$OUT/bounds.txt"
-grep -iE 'error|exception' "$RUNTIME/shell.log" | grep -i ai-usage | head -5
+grep -iE 'error|exception' "$RUNTIME/shell.log" | grep -i tokens-go-brrr | head -5
 cat "$OUT/bounds.txt"; ls "$OUT"
 # Crop each full-screen shot down to the popover.
 cd "$OUT" && python3 -I - <<'PY'

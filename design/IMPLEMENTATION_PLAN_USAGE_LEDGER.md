@@ -27,7 +27,7 @@ live store wins and this plan follows it.
 | `~/.codex/state_5.sqlite` | `threads` **empty** (`backfill_state`=1, `thread_sections`=1). `logs_2.sqlite` has 3 693 log rows, **no token fields**. | Codex harvester is a fail-soft no-op today; must not crash and must not invent rows. |
 | `~/.cursor/ai-tracking/ai-code-tracking.db` (81 MB) | `ai_code_hashes` **183 444 rows** (`source`, `fileExtension`, `fileName`, `requestId`, `conversationId`, `timestamp`, `model`, `createdAt`); `scored_commits` 7 rows. | v2 harvester; not on the critical path for tokens. |
 | `~/.local/share/opencode/auth.json` | key `opencode-go` present. | OpenCode Zen generator auth is available. |
-| `~/.local/share/cursor-spend-monitor/history.db` | Percent-sample store already lives here. | Put `usage.db` **beside** it, not merged: different lifetime, different retention (90 d samples vs 90 d sessions + long-lived rollups). |
+| `~/.local/share/tokens-go-brrr/history.db` | Percent-sample store already lives here. | Put `usage.db` **beside** it, not merged: different lifetime, different retention (90 d samples vs 90 d sessions + long-lived rollups). |
 
 ### Corrections to the design's schema (§5.1) that this plan applies
 
@@ -83,8 +83,8 @@ live store wins and this plan follows it.
 
 ## Phase 1 — Ledger core (`ledger.py`)
 
-**Status:** ✅ **done.** `cursor_spend_monitor/ledger.py`, `report` CLI in
-`cursor_spend_monitor/__main__.py`, and `tests/test_ledger.py` (64 tests).
+**Status:** ✅ **done.** `tokens_go_brrr/ledger.py`, `report` CLI in
+`tokens_go_brrr/__main__.py`, and `tests/test_ledger.py` (64 tests).
 Full suite 216 green; pi-lens clean apart from two duplicate-code warnings.
 Verified end to end: a second harvest of an unchanged store reports **0 rows
 changed**, and `report` prints provider/project/model/day totals plus an
@@ -95,9 +95,9 @@ questions — before any notification uses it.
 
 ### Step 1.1 — Schema and connection
 
-New `cursor_spend_monitor/ledger.py`:
+New `tokens_go_brrr/ledger.py`:
 
-- `default_path()` → `~/.local/share/cursor-spend-monitor/usage.db` (respect
+- `default_path()` → `~/.local/share/tokens-go-brrr/usage.db` (respect
   `XDG_DATA_HOME`, same helper shape as `history.default_path`).
 - `SCHEMA` with, from the design plus the corrections above:
   - `sessions` (`UNIQUE(provider, external_id)`, the full token-kind columns,
@@ -137,12 +137,12 @@ New `cursor_spend_monitor/ledger.py`:
 
 ### Step 1.4 — CLI surface
 
-- `cursor-spend-monitor harvest [--full] [--provider ID]…` — run harvesters,
+- `tokens-go-brrr harvest [--full] [--provider ID]…` — run harvesters,
   fold, prune; print one line per harvester (`opencode: +12 sessions`,
   `codex: no local data (probe only)`). **Deferred to Phase 2**, where it has
   harvesters to run; shipping a command that can only say "nothing registered"
   would be worse than not shipping it yet.
-- ✅ `cursor-spend-monitor report [--days N | --week | --month | --since
+- ✅ `tokens-go-brrr report [--days N | --week | --month | --since
   --until | --checks] [--by GROUP] [--provider ID] [--limit N] [--json]` —
   shipped. Answers the historical questions from the ledger alone, with no
   credentials and no network.
@@ -231,7 +231,7 @@ correctly, because Pi persists none.
   corrupt or hand-edited config file, taking down the daemon and every CLI
   command with it. It now falls back to defaults and says so once.
 
-New package `cursor_spend_monitor/harvesters/` with a shared contract:
+New package `tokens_go_brrr/harvesters/` with a shared contract:
 
 ```python
 class Harvester(Protocol):
@@ -382,7 +382,7 @@ exception when `opencode.db` is locked concurrently.
 LLM, so the LLM is an upgrade, not a dependency.
 
 **Status:** ✅ **done, templates only.** Shipped as **one module**,
-`cursor_spend_monitor/notify_engine.py`, rather than a package: the pieces share
+`tokens_go_brrr/notify_engine.py`, rather than a package: the pieces share
 one small vocabulary (`Message`, the cooldown, the ranges) and a single file is
 easier to hold in the head than six that import each other. It covers the
 trigger set, the mixer (daily = digest + fun fact, weekly = digest, monthly =
@@ -436,7 +436,7 @@ turning the LLM on changes wording only.
 
 ### Step 4.6 — Delivery + config
 
-- Desktop `notify.send`, `cursor-spend-monitor quote [--tweet]` printing the
+- Desktop `notify.send`, `tokens-go-brrr quote [--tweet]` printing the
   latest message (clipboard for `--tweet`; no auto-post),
   `messages` cache in `usage.db`.
 - Config additions from §10: `wind_down_hours`, the whole `notify` block,
@@ -538,7 +538,7 @@ What shipped: `messages.seen_at` plus the ledger's first additive migration;
 `notify_engine` priority/freshness/`featured_provider`/`choose_billboard`;
 `billboard` and `latestMessage` in state; `Acknowledge` on D-Bus; the `landing`
 screen with Continue, Copy and a Latest header button; a `has-update` ring on the
-dot; the `ai-usage-landing-*` styles; and fixtures in both devtest daemons.
+dot; the `tokens-go-brrr-landing-*` styles; and fixtures in both devtest daemons.
 `tests/test_billboard.py` adds 26 tests, and the suite is at 349.
 
 The featured AI is **derived from the ledger** rather than mapped, per §4b: the
@@ -588,7 +588,7 @@ and no memory of being dismissed. That is why it would have shown on every open.
 
 ### Step 6.4 — Styles and devtest
 
-- `ai-usage-landing-*` classes in `stylesheet.css`. There is no quote styling to
+- `tokens-go-brrr-landing-*` classes in `stylesheet.css`. There is no quote styling to
   reuse today; this is new CSS.
 - `devtest/mock_daemon.py` gains a `billboard` and a way to cycle to the next
   message; `stress_daemon.py` gains a maximum-length quote to prove wrapping.

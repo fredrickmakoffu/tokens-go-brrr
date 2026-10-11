@@ -13,8 +13,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from cursor_spend_monitor import config as config_module
-from cursor_spend_monitor.config import MonitorConfig
+from tokens_go_brrr import config as config_module
+from tokens_go_brrr.config import MonitorConfig
 
 
 class ConfigLoadTest(unittest.TestCase):

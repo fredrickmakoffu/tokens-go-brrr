@@ -2,12 +2,12 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-UUID="ai-usage@fredrickmakoffu.github.io"
+UUID="tokens-go-brrr@fredrickmakoffu.github.io"
 EXT_SRC="$ROOT/gnome-shell-extension/$UUID"
 EXT_HOME="$HOME/.local/share/gnome-shell/extensions"
 EXT_DST="$EXT_HOME/$UUID"
-SERVICE_SRC="$ROOT/systemd/cursor-spend-monitor.service"
-SERVICE_DST="$HOME/.config/systemd/user/cursor-spend-monitor.service"
+SERVICE_SRC="$ROOT/systemd/tokens-go-brrr.service"
+SERVICE_DST="$HOME/.config/systemd/user/tokens-go-brrr.service"
 
 echo "==> Installing system packages (may prompt for sudo)..."
 sudo dnf install -y python3-gobject libnotify
@@ -39,14 +39,14 @@ import ast, re, subprocess
 enabled = ast.literal_eval(subprocess.run(
     ['gsettings', 'get', 'org.gnome.shell', 'enabled-extensions'],
     capture_output=True, text=True, check=True).stdout.strip())
-kept = [u for u in enabled if not re.match(r'ai-usage-r\d+@', u)]
+kept = [u for u in enabled if not re.match(r'tokens-go-brrr-r\d+@', u)]
 if kept != enabled:
     subprocess.run(
         ['gsettings', 'set', 'org.gnome.shell', 'enabled-extensions', repr(kept)],
         check=True)
     print('  enabled-extensions ->', kept)
 PY
-for dir in "$EXT_HOME"/ai-usage-r*@*; do
+for dir in "$EXT_HOME"/tokens-go-brrr-r*@*; do
   [ -e "$dir" ] || continue
   rm -rf "$dir"
   echo "  removed $(basename "$dir")"
@@ -60,10 +60,10 @@ echo
 echo "Done."
 echo
 echo "Next steps:"
-echo "  1. cursor-spend-monitor setup"
-echo "  2. systemctl --user enable --now cursor-spend-monitor.service"
+echo "  1. tokens-go-brrr setup"
+echo "  2. systemctl --user enable --now tokens-go-brrr.service"
 echo "  3. Log out and back in so GNOME Shell loads the extension"
 echo "     (X11 only: Alt+F2, type r, Enter)"
 echo
 echo "Then click the status dot in the top bar."
-echo "Config: $HOME/.config/cursor-spend-monitor/config.json"
+echo "Config: $HOME/.config/tokens-go-brrr/config.json"

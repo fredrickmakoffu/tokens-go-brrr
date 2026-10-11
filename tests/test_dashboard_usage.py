@@ -17,9 +17,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from cursor_spend_monitor import ledger
-from cursor_spend_monitor.api import AGGREGATED_PATH, POLICY_PATH, USAGE_PATH
-from cursor_spend_monitor.harvesters.dashboard_usage import CursorApiHarvester
+from tokens_go_brrr import ledger
+from tokens_go_brrr.api import AGGREGATED_PATH, POLICY_PATH, USAGE_PATH
+from tokens_go_brrr.harvesters.dashboard_usage import CursorApiHarvester
 
 CYCLE_END_MS = int(datetime(2026, 11, 1, tzinfo=timezone.utc).timestamp() * 1000)
 CYCLE_START_MS = int(datetime(2026, 10, 1, tzinfo=timezone.utc).timestamp() * 1000)
@@ -141,13 +141,13 @@ class CursorCase(unittest.TestCase):
         self.con = ledger.connect(Path(self._dir.name) / "usage.db")
         self.addCleanup(self.con.close)
         self.auth = mock.patch(
-            "cursor_spend_monitor.harvesters.dashboard_usage.read_local_auth",
+            "tokens_go_brrr.harvesters.dashboard_usage.read_local_auth",
             return_value=SimpleNamespace(access_token=SESSION_VALUE),
         )
         self.auth.start()
         self.addCleanup(self.auth.stop)
         token = mock.patch(
-            "cursor_spend_monitor.local_auth.resolve_access_token",
+            "tokens_go_brrr.local_auth.resolve_access_token",
             return_value=SimpleNamespace(access_token=SESSION_VALUE),
         )
         token.start()
@@ -318,7 +318,7 @@ class CrossCheckTest(CursorCase):
 class FailureTest(CursorCase):
     def test_not_being_signed_in_is_a_note(self):
         with mock.patch(
-            "cursor_spend_monitor.harvesters.dashboard_usage.read_local_auth",
+            "tokens_go_brrr.harvesters.dashboard_usage.read_local_auth",
             return_value=None,
         ):
             result = CursorApiHarvester(client=FakeClient()).harvest(self.con)
