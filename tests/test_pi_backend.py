@@ -5,13 +5,13 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest import mock
 
-from cursor_spend_monitor.providers import pi_backend
-from cursor_spend_monitor.providers.base import Meter, ProviderSnapshot
-from cursor_spend_monitor.providers.pi_backend import Backend, BackendResolver, dominant
+from tokens_go_brrr.providers import pi_backend
+from tokens_go_brrr.providers.base import Meter, ProviderSnapshot
+from tokens_go_brrr.providers.pi_backend import Backend, BackendResolver, dominant
 
 
 class SlugTest(unittest.TestCase):
@@ -34,9 +34,7 @@ class ResolverTest(unittest.TestCase):
         self._patches = [
             mock.patch.object(pi_backend, "AGENT_DIR", self.agent),
             mock.patch.object(pi_backend, "SESSIONS_DIR", self.sessions),
-            mock.patch.object(
-                pi_backend, "SETTINGS_FILE", self.agent / "settings.json"
-            ),
+            mock.patch.object(pi_backend, "SETTINGS_FILE", self.agent / "settings.json"),
             mock.patch.object(pi_backend, "AUTH_FILE", self.agent / "auth.json"),
         ]
         for patch in self._patches:
@@ -135,9 +133,7 @@ class ResolverTest(unittest.TestCase):
         filler = {"type": "message", "message": "x" * 4096}
         lines = [{"type": "model_change", "provider": "xai", "modelId": "grok-4.5"}]
         lines += [filler] * 200
-        lines += [
-            {"type": "model_change", "provider": "opencode-go", "modelId": "glm-5.3"}
-        ]
+        lines += [{"type": "model_change", "provider": "opencode-go", "modelId": "glm-5.3"}]
         self._log("/w/app", lines)
         backend = BackendResolver().resolve("/w/app")
         assert backend is not None
@@ -233,8 +229,8 @@ class BorrowingTest(unittest.TestCase):
     """The daemon step that copies a backend provider's meters onto a harness."""
 
     def setUp(self):
-        from cursor_spend_monitor.daemon import UsageDaemon
-        from cursor_spend_monitor.instances import Instance, InstanceReport, ProcessSpec
+        from tokens_go_brrr.daemon import UsageDaemon
+        from tokens_go_brrr.instances import Instance, InstanceReport, ProcessSpec
 
         self.Instance = Instance
         self.InstanceReport = InstanceReport
@@ -247,11 +243,7 @@ class BorrowingTest(unittest.TestCase):
                 self.snapshots = snapshots
                 self._specs = {
                     "opencode": [ProcessSpec(names=frozenset({"opencode"}))],
-                    "pi": [
-                        ProcessSpec(
-                            names=frozenset({"pi"}), resolve_backend=lambda d: None
-                        )
-                    ],
+                    "pi": [ProcessSpec(names=frozenset({"pi"}), resolve_backend=lambda d: None)],
                 }
                 self.config = mock.Mock(primary_overrides=overrides or {})
 
@@ -269,7 +261,7 @@ class BorrowingTest(unittest.TestCase):
             ],
             primary_key="rolling",
             status=status,
-            fetched_at=datetime.now(timezone.utc),
+            fetched_at=datetime.now(UTC),
         )
 
     def _pi(self, backends):
@@ -281,13 +273,11 @@ class BorrowingTest(unittest.TestCase):
             metrics=[],
             primary_key="",
             status="ok",
-            fetched_at=datetime.now(timezone.utc),
+            fetched_at=datetime.now(UTC),
         )
         snap.instances = self.InstanceReport(
             active=[
-                self.Instance(
-                    "pi", 100 + n, "app", "/w/app", None, False, backend=backend
-                )
+                self.Instance("pi", 100 + n, "app", "/w/app", None, False, backend=backend)
                 for n, backend in enumerate(backends)
             ]
         )

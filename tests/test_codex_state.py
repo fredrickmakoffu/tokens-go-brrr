@@ -10,11 +10,11 @@ from __future__ import annotations
 import sqlite3
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
-from cursor_spend_monitor import ledger
-from cursor_spend_monitor.harvesters.codex_state import CodexStateHarvester
+from tokens_go_brrr import ledger
+from tokens_go_brrr.harvesters.codex_state import CodexStateHarvester
 
 RICH_SCHEMA = """
 CREATE TABLE threads (
@@ -30,7 +30,7 @@ CREATE TABLE threads (
 
 EMPTY_SCHEMA = "CREATE TABLE threads (id TEXT PRIMARY KEY, title TEXT);"
 
-SECONDS = int(datetime(2026, 10, 1, 10, tzinfo=timezone.utc).timestamp())
+SECONDS = int(datetime(2026, 10, 1, 10, tzinfo=UTC).timestamp())
 
 
 class CodexCase(unittest.TestCase):
@@ -150,9 +150,7 @@ class ReadingTest(CodexCase):
         self.assertEqual(reader.harvest(self.con).sessions, 0)
 
     def test_a_missing_id_column_still_yields_a_row(self):
-        reader = self.make(
-            "CREATE TABLE threads (tokens_used INTEGER, created_at INTEGER);"
-        )
+        reader = self.make("CREATE TABLE threads (tokens_used INTEGER, created_at INTEGER);")
         con = sqlite3.connect(self.db)
         con.execute(
             "INSERT INTO threads (tokens_used, created_at) VALUES (?, ?)",

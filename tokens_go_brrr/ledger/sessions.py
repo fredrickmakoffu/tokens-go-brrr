@@ -1,0 +1,51 @@
+"""Facade — implementation lives in ``ledger.core`` until further extract."""
+
+from __future__ import annotations
+
+from .core import (
+    CheckRow,
+    PerModelRow,
+    SessionRow,
+    TranscriptMessage,
+    _local_days_for,
+    _per_model_values,
+    _session_values,
+    affected_days,
+    fold_all,
+    fold_days,
+    ingest_transcript_messages,
+    model_family_of,
+    project_of,
+    prune,
+    recompute_transcript_sessions,
+    record_check,
+    set_watermark,
+    upsert_per_model,
+    upsert_sessions,
+    utc_day_of,
+    watermark,
+)
+
+__all__ = [
+    "CheckRow",
+    "PerModelRow",
+    "SessionRow",
+    "TranscriptMessage",
+    "_local_days_for",
+    "_per_model_values",
+    "_session_values",
+    "affected_days",
+    "fold_all",
+    "fold_days",
+    "ingest_transcript_messages",
+    "model_family_of",
+    "project_of",
+    "prune",
+    "recompute_transcript_sessions",
+    "record_check",
+    "set_watermark",
+    "upsert_per_model",
+    "upsert_sessions",
+    "utc_day_of",
+    "watermark",
+]

@@ -1,36 +1,58 @@
 # tokens-go-brrr — GNOME Shell extension
 
-UUID: `ai-usage@fredrickmakoffu.github.io`
+UUID: `tokens-go-brrr@fredrickmakoffu.github.io`
 
-A status dot in the top bar and a popover that mirrors `design/menu-bar-concept.html`
-one to one. The extension is presentation only: all data arrives from the
-`cursor-spend-monitor` daemon over the session bus.
+A status dot in the top bar and a popover following the AI Usage design system
+(see `design/VISUAL_TRUTH.md`). The extension is presentation only: all data
+arrives from the `tokens-go-brrr` daemon over the session bus. Billboard /
+digest policy stays in the daemon.
 
 ## Interface
 
-`io.github.fredrickmakoffu.AIUsage` at `/io/github/fredrickmakoffu/AIUsage`:
+`io.github.fredrickmakoffu.TokensGoBrrr` at `/io/github/fredrickmakoffu/TokensGoBrrr`:
 
 | Member | Kind | Meaning |
 |--------|------|---------|
 | `Version` | property | Daemon version string |
 | `GetState` | method | Current state as JSON |
-| `Refresh` | method | Poll providers now |
+| `Refresh` | method | Poll providers now (also used when the popover opens) |
 | `SetPrimary(provider, metric)` | method | Persist a chip swap |
+| `SetProviderEnabled(provider, enabled)` | method | Show or hide a provider on the panel |
+| `Acknowledge(id)` | method | Dismiss the landing billboard |
+| `LlmLog(day)` | method | LLM call log for a day (JSON) |
+| `ClearLlmLog` | method | Wipe the LLM log |
+| `LlmLogReport` | method | Write the log to a temp file; return its path |
+| `Quit` | method | Stop the daemon |
 | `StateChanged(json)` | signal | Emitted after every poll |
 
-State payload:
+State payload (abridged; camelCase for GJS):
 
 ```json
 {
-  "version": "0.4.0",
-  "updated_at": "2026-09-13T15:00:00+00:00",
+  "schema": 1,
+  "version": "0.7.0",
+  "updated_at": "2026-10-11T12:00:00+00:00",
   "error": null,
+  "billboard": null,
+  "latestMessage": null,
+  "catalog": [
+    {"id": "cursor", "name": "Cursor", "enabled": true},
+    {"id": "claude", "name": "Claude Code", "enabled": true},
+    {"id": "opencode", "name": "OpenCode", "enabled": true},
+    {"id": "pi", "name": "Pi", "enabled": true},
+    {"id": "codex", "name": "Codex", "enabled": false}
+  ],
   "tools": [
     {
       "id": "cursor", "name": "Cursor", "icon": "cursor",
-      "primary": "monthly", "status": "ok", "dashboardUrl": "https://cursor.com/dashboard",
+      "primary": "monthly", "status": "ok",
+      "dashboardUrl": "https://cursor.com/dashboard/spending",
       "metrics": [
-        {"key": "monthly", "label": "Monthly limit", "value": 74, "resets": "Resets in 12 days"}
+        {
+          "key": "monthly", "label": "Monthly limit", "value": 74,
+          "resets": "Resets in 12 days", "resetsSeconds": 1036800,
+          "kind": "monthly", "etaSeconds": null, "elapsed": 40
+        }
       ]
     }
   ]
@@ -43,8 +65,8 @@ telling you to start the service.
 ## Install
 
 ```bash
-cp -r ai-usage@fredrickmakoffu.github.io ~/.local/share/gnome-shell/extensions/
-gnome-extensions enable ai-usage@fredrickmakoffu.github.io
+cp -r tokens-go-brrr@fredrickmakoffu.github.io ~/.local/share/gnome-shell/extensions/
+gnome-extensions enable tokens-go-brrr@fredrickmakoffu.github.io
 ```
 
 Log out and back in (Wayland) or restart the shell with Alt+F2 r (X11).
@@ -201,7 +223,8 @@ the usual case: the list is already up from last time.
 
 The popover speaks English, French and Brazilian Portuguese, picked from the
 session's locale (`LANGUAGE`, `LC_ALL`, `LC_MESSAGES`, `LANG`, in GLib's order);
-anything else is English. `AI_USAGE_LANG=fr` forces one, for screenshots.
+anything else is English. `TOKENS_GO_BRRR_LANG=fr` forces one, for screenshots
+(`AI_USAGE_LANG` still works as a legacy alias).
 
 Strings live in `locales.js` and are looked up by `tr("key", {vars})` from
 `i18n.js`. It is a plain JS catalog rather than gettext, so the rpm and deb need
@@ -220,7 +243,8 @@ falls back to its English labels.
 
 Dates ("Tue 6 Oct") come from GLib and follow the session's `LC_TIME`.
 
-Run the layout walk in another language with `AI_USAGE_LANG=fr .../layout-smoke.sh`.
+Run the layout walk in another language with
+`TOKENS_GO_BRRR_LANG=fr .../layout-smoke.sh`.
 
 ## Light and dark
 
@@ -231,7 +255,7 @@ no preference, and GNOME's own panel and popups stay dark in either mode.
 
 St's CSS has no `var()`, so the dark values stay as written and the light ones
 are a generated block at the end of `stylesheet.css`, scoped under
-`.ai-usage-light`. Edit a dark rule, then run `python3 scripts/gen_light_css.py`
+`.tokens-go-brrr-light`. Edit a dark rule, then run `python3 scripts/gen_light_css.py`
 to bring the light block into step. Colours set from JS (status colours, number
 colour) live in `PALETTES` in `extension.js`. The top bar chips always use the
 dark palette because the panel is always dark.
@@ -241,14 +265,13 @@ and run the layout walk in either with `SCHEME=prefer-light .../layout-smoke.sh`
 
 ## Surface and font
 
-> **Superseded by the AI Usage design system.** The popover now follows the
-> blueprint look: square corners, 1px hairlines (`#4b4b4e`), graphite surface
-> `#2b2b2d`, snow text `#f5f5f8`, a single steel accent `#94bce3`, a 4px meter
-> track, and the design's signal hues for status (amber `#f0ba59`, red `#fd7562`).
-> Width is 380px. The gunmetal reasoning below is kept as history; the palette
-> values in it no longer apply.
+The live popover follows the AI Usage design system: square corners, 1px
+hairlines (`#4b4b4e`), graphite `#2b2b2d`, snow `#f5f5f8`, steel `#94bce3`,
+amber `#f0ba59`, red `#fd7562`, ~380px width. See `design/VISUAL_TRUTH.md`.
 
-The popover is gunmetal — `#24282f` with `#474a50` edges — rather than the
+### Historical — gunmetal reasoning (superseded)
+
+The popover was once gunmetal — `#24282f` with `#474a50` edges — rather than the
 mockup's near-black. Two things about it, and the second is why it is not slate.
 
 A surface wants a temperature. `#1c1c1e` has only a level, and reads as a hole
@@ -274,7 +297,7 @@ The popover is set in **Barlow**, with **Barlow Condensed** for titles, kickers,
 tags, figures and buttons, as the AI Usage design system specifies. Neither ships
 with Fedora or Ubuntu, so the extension bundles the TTFs in `fonts/` (SIL Open
 Font License, `fonts/OFL.txt`) and `install.sh` (or `install-fonts.sh` on its own) copies them to
-`~/.local/share/fonts/ai-usage/` and refreshes the font cache. A shell extension
+`~/.local/share/fonts/tokens-go-brrr/` and refreshes the font cache. A shell extension
 cannot register fonts itself — St resolves `font-family` through fontconfig — so
 installing the extension by hand means copying `fonts/*.ttf` there too. Without
 them fontconfig falls back to the shell's sans and nothing breaks; the popover
@@ -307,7 +330,7 @@ Two consequences worth keeping. Secondary text is `#9a9ba0`, not the mockup's
 was carrying the reset copy — the line most worth reading. And the meter bar is
 an 8px slab rather than a 3px hairline, because the fill answers the question the
 menu exists to answer and should not be something you look for. The slab geometry
-is borrowed from `ai-usagebar`; the colour is not. That extension fills with
+is borrowed from `tokens-go-brrrbar`; the colour is not. That extension fills with
 `-st-accent-color`, which would say the same thing at 20% as at 95%, and the
 green / amber / red distinction is what the status dot, the Guide screen and the
 alert thresholds are all built on.

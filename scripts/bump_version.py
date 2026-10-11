@@ -20,9 +20,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = ROOT / "pyproject.toml"
-INIT = ROOT / "cursor_spend_monitor" / "__init__.py"
+INIT = ROOT / "tokens_go_brrr" / "__init__.py"
 METADATA = (
-    ROOT / "gnome-shell-extension" / "ai-usage@fredrickmakoffu.github.io" / "metadata.json"
+    ROOT / "gnome-shell-extension" / "tokens-go-brrr@fredrickmakoffu.github.io" / "metadata.json"
 )
 
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
@@ -46,15 +46,21 @@ def set_version(version: str) -> None:
     if '"version-name"' in text:
         text = re.sub(r'("version-name"\s*:\s*)"[^"]*"', rf'\g<1>"{version}"', text)
     else:
-        text = re.sub(r'(\n\s*)("version"\s*:\s*\d+)', rf'\g<1>\g<2>,\g<1>"version-name": "{version}"', text)
+        text = re.sub(
+            r'(\n\s*)("version"\s*:\s*\d+)', rf'\g<1>\g<2>,\g<1>"version-name": "{version}"', text
+        )
     METADATA.write_text(text)
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawTextHelpFormatter
+    )
     parser.add_argument("version", nargs="?", help="new version, X.Y.Z")
     parser.add_argument("--check", action="store_true", help="fail if the copies disagree")
-    parser.add_argument("--print", action="store_true", dest="show", help="print the current version")
+    parser.add_argument(
+        "--print", action="store_true", dest="show", help="print the current version"
+    )
     args = parser.parse_args()
 
     if args.show:

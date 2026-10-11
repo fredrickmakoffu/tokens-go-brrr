@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 import base64
-import email.message
 import json
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest import mock
 
-from cursor_spend_monitor.providers import codex
-from cursor_spend_monitor.providers.codex import CodexProvider
+from tokens_go_brrr.http_json import HttpJsonError
+from tokens_go_brrr.providers import codex
+from tokens_go_brrr.providers.codex import CodexProvider
 
 
 def _jwt(exp: int) -> str:
@@ -24,20 +24,6 @@ def _jwt(exp: int) -> str:
         .decode()
     )
     return f"{header}.{payload}.sig"
-
-
-class FakeResponse:
-    def __init__(self, payload: dict) -> None:
-        self._body = json.dumps(payload).encode()
-
-    def __enter__(self) -> FakeResponse:
-        return self
-
-    def __exit__(self, *args) -> None:
-        return None
-
-    def read(self) -> bytes:
-        return self._body
 
 
 def usage_payload(**overrides) -> dict:
@@ -94,12 +80,21 @@ class ProviderTest(unittest.TestCase):
         )
 
     def _stub_usage(self, payload: dict):
-        patcher = mock.patch.object(
-            codex.urllib.request, "urlopen", return_value=FakeResponse(payload)
-        )
+        patcher = mock.patch.object(codex, "request_json_url", return_value=payload)
         patcher.start()
         self.addCleanup(patcher.stop)
         return patcher
+
+    def _stub_http_error(self, status: int, body: str = "") -> None:
+        patcher = mock.patch.object(
+            codex,
+            "request_json_url",
+            side_effect=HttpJsonError(
+                status, body, host="chatgpt.com", path="/backend-api/codex/usage"
+            ),
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     # --- auth gate ---------------------------------------------------------
 
@@ -118,9 +113,9 @@ class ProviderTest(unittest.TestCase):
 
     def test_expired_token_surfaces_auth_needed_without_a_call(self) -> None:
         self._write_auth(auth_mode="chatgpt", token=_jwt(1_000))
-        with mock.patch.object(codex.urllib.request, "urlopen") as urlopen:
+        with mock.patch.object(codex, "request_json_url") as request:
             snapshot = CodexProvider().fetch()
-        urlopen.assert_not_called()
+        request.assert_not_called()
         self.assertEqual(snapshot.status, "auth_needed")
         assert snapshot.error is not None
         self.assertIn("expired", snapshot.error)
@@ -138,15 +133,13 @@ class ProviderTest(unittest.TestCase):
         self.assertEqual(snapshot.status, "ok")
         self.assertEqual(snapshot.plan, "ChatGPT Plus")
         self.assertEqual([m.key for m in snapshot.metrics], ["monthly", "window"])
-        self.assertEqual(
-            [m.label for m in snapshot.metrics], ["Monthly limit", "5-hour limit"]
-        )
+        self.assertEqual([m.label for m in snapshot.metrics], ["Monthly limit", "5-hour limit"])
         self.assertEqual([m.percent for m in snapshot.metrics], [42.0, 12.0])
         self.assertEqual(snapshot.primary_key, "monthly")
         self.assertEqual(snapshot.primary.percent, 42.0)
         resets = snapshot.primary.resets_at
         self.assertIsNotNone(resets)
-        self.assertEqual(resets, datetime.fromtimestamp(1792226711, tz=timezone.utc))
+        self.assertEqual(resets, datetime.fromtimestamp(1792226711, tz=UTC))
 
     def test_secondary_window_absent_still_yields_primary(self) -> None:
         payload = usage_payload()
@@ -174,60 +167,20 @@ class ProviderTest(unittest.TestCase):
         self.assertIn("blocked", snapshot.error)
 
     def test_http_401_is_auth_needed(self) -> None:
-        import urllib.error
-
-        patcher = mock.patch.object(
-            codex.urllib.request,
-            "urlopen",
-            side_effect=urllib.error.HTTPError(
-                "url", 401, "Unauthorized", email.message.Message(), None
-            ),
-        )
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        self._stub_http_error(401)
         snapshot = CodexProvider().fetch()
         self.assertEqual(snapshot.status, "auth_needed")
         assert snapshot.error is not None
         self.assertIn("rejected", snapshot.error)
 
     def test_http_403_html_challenge_is_retryable_not_a_login_failure(self) -> None:
-        import io
-        import urllib.error
-
-        patcher = mock.patch.object(
-            codex.urllib.request,
-            "urlopen",
-            side_effect=urllib.error.HTTPError(
-                "url",
-                403,
-                "Forbidden",
-                email.message.Message(),
-                io.BytesIO(b"<html><body>challenge</body></html>"),
-            ),
-        )
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        self._stub_http_error(403, "<html><body>challenge</body></html>")
         with self.assertRaises(RuntimeError) as ctx:
             CodexProvider().fetch()
         self.assertIn("blocked", str(ctx.exception))
 
     def test_http_403_json_rejection_is_auth_needed(self) -> None:
-        import io
-        import urllib.error
-
-        patcher = mock.patch.object(
-            codex.urllib.request,
-            "urlopen",
-            side_effect=urllib.error.HTTPError(
-                "url",
-                403,
-                "Forbidden",
-                email.message.Message(),
-                io.BytesIO(b'{"error": "nope"}'),
-            ),
-        )
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        self._stub_http_error(403, '{"error": "nope"}')
         snapshot = CodexProvider().fetch()
         self.assertEqual(snapshot.status, "auth_needed")
         assert snapshot.error is not None
@@ -302,4 +255,3 @@ class WindowKindTest(unittest.TestCase):
     def test_a_missing_or_absurd_duration_is_not_a_window(self):
         for value in (None, "soon", 0, -1, True):
             self.assertEqual(codex._window_kind(value), "other")
-

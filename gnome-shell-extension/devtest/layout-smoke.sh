@@ -25,7 +25,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
-UUID="ai-usage@fredrickmakoffu.github.io"
+UUID="tokens-go-brrr@fredrickmakoffu.github.io"
 BOOT="${1:-12}"
 RUNTIME="$(mktemp -d)"
 LOG="$RUNTIME/shell.log"
@@ -48,7 +48,7 @@ color-scheme='${SCHEME:-default}'
 EOF
 
 read -r -d '' DRIVER <<'JS'
-const i = Main.panel.statusArea['ai-usage@fredrickmakoffu.github.io'];
+const i = Main.panel.statusArea['tokens-go-brrr@fredrickmakoffu.github.io'];
 if (!i) {
     log('[layout-smoke] extension not loaded');
 } else {
@@ -83,11 +83,11 @@ if (!i) {
             const root = i.menu.box;
             // The insight is a headline and an optional body, not a quote
             // between marks, and Latest is not offered from the page it opens.
-            if (collect(root, 'ai-usage-title').length !== 1)
+            if (collect(root, 'tokens-go-brrr-title').length !== 1)
                 log('[layout-smoke] the landing page needs exactly one headline');
             if (texts(root).includes('__LATEST__'))
                 log('[layout-smoke] the landing page offers Latest, which is itself');
-            const cont = collect(root, 'ai-usage-primary-btn')[0];
+            const cont = collect(root, 'tokens-go-brrr-primary-btn')[0];
             if (!cont) log('[layout-smoke] no Continue button on the landing page');
             else if (!cont.x_expand) log('[layout-smoke] Continue should fill the row');
         } catch (e) {
@@ -142,9 +142,12 @@ if (!i) {
 'started'
 JS
 
-# The one assertion that names a button by its label. AI_USAGE_LANG runs the walk
-# in another language, which is the point: French is the longest of the three.
-case "${AI_USAGE_LANG:-en}" in
+# The one assertion that names a button by its label. TOKENS_GO_BRRR_LANG (or
+# legacy AI_USAGE_LANG) runs the walk in another language — French is the
+# longest of the three catalogs.
+FORCE_LANG="${TOKENS_GO_BRRR_LANG:-${AI_USAGE_LANG:-en}}"
+export TOKENS_GO_BRRR_LANG="$FORCE_LANG"
+case "$FORCE_LANG" in
   fr) LATEST='Dernière' ;;
   pt*) LATEST='Último' ;;
   *) LATEST='Latest' ;;

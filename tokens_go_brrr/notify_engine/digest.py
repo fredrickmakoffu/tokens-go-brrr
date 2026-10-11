@@ -1,0 +1,51 @@
+"""Facade — implementation lives in ``notify_engine.core`` until further extract."""
+
+from __future__ import annotations
+
+from .core import (
+    _estimate_note,
+    _provider_share,
+    _ranked_providers,
+    _top,
+    daily_digest,
+    digest_facts,
+    digest_fingerprint,
+    digest_params,
+    featured_provider,
+    fun_fact,
+    fun_params,
+    monthly_digest,
+    render_actionable,
+    render_digest,
+    render_fun,
+    render_share,
+    rolling_facts,
+    scheduled_messages,
+    share_line,
+    tier_for,
+    weekly_digest,
+)
+
+__all__ = [
+    "_estimate_note",
+    "_provider_share",
+    "_ranked_providers",
+    "_top",
+    "daily_digest",
+    "digest_facts",
+    "digest_fingerprint",
+    "digest_params",
+    "featured_provider",
+    "fun_fact",
+    "fun_params",
+    "monthly_digest",
+    "render_actionable",
+    "render_digest",
+    "render_fun",
+    "render_share",
+    "rolling_facts",
+    "scheduled_messages",
+    "share_line",
+    "tier_for",
+    "weekly_digest",
+]

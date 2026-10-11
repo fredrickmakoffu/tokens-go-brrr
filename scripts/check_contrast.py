@@ -7,6 +7,7 @@ pass does not.
 
     python3 scripts/check_contrast.py
 """
+
 import math
 import sys
 

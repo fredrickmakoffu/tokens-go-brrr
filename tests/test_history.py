@@ -5,14 +5,14 @@ from __future__ import annotations
 import sqlite3
 import tempfile
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
-from cursor_spend_monitor import burn, history
-from cursor_spend_monitor.providers.base import Meter, ProviderSnapshot
+from tokens_go_brrr import burn, history
+from tokens_go_brrr.providers.base import Meter, ProviderSnapshot
 
-NOW = datetime(2026, 9, 17, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 9, 17, 12, 0, tzinfo=UTC)
 RESET = NOW + timedelta(hours=3)
 
 
@@ -123,8 +123,8 @@ class SampleStoreTest(unittest.TestCase):
         self.assertEqual(len(self.samples()), 3)
 
     def test_prune_drops_only_what_is_past_retention(self):
-        history.record(self.con, [snapshot()], at=datetime.now(timezone.utc))
-        old = datetime.now(timezone.utc) - timedelta(days=120)
+        history.record(self.con, [snapshot()], at=datetime.now(UTC))
+        old = datetime.now(UTC) - timedelta(days=120)
         history.record(self.con, [snapshot()], at=old)
         self.assertEqual(history.prune(self.con, keep_days=90), 2)
         self.assertEqual(len(self.rows()), 2)
@@ -217,11 +217,11 @@ class DaemonForecastTest(unittest.TestCase):
     """The daemon attaches ETAs, and withholds ones the window makes moot."""
 
     def _daemon(self, samples, *, now=NOW):
-        from cursor_spend_monitor.daemon import UsageDaemon
+        from tokens_go_brrr.daemon import UsageDaemon
 
         stub = mock.Mock()
         stub.history.window_samples.return_value = samples
-        with mock.patch("cursor_spend_monitor.daemon.datetime") as clock:
+        with mock.patch("tokens_go_brrr.daemon.datetime") as clock:
             clock.now.return_value = now
             meter = Meter("five_hour", "5-hour limit", 40.0, resets_at=RESET)
             return UsageDaemon._forecast(stub, "claude", meter)
@@ -238,12 +238,10 @@ class DaemonForecastTest(unittest.TestCase):
         self.assertIsNone(self._daemon(samples))
 
     def test_a_meter_with_no_reset_still_gets_an_eta(self):
-        from cursor_spend_monitor.daemon import UsageDaemon
+        from tokens_go_brrr.daemon import UsageDaemon
 
         stub = mock.Mock()
-        stub.history.window_samples.return_value = series(
-            [(0, 10), (10, 20), (20, 30), (30, 40)]
-        )
+        stub.history.window_samples.return_value = series([(0, 10), (10, 20), (20, 30), (30, 40)])
         meter = Meter("rolling", "Rolling limit", 40.0, resets_at=None)
         self.assertAlmostEqual(UsageDaemon._forecast(stub, "opencode", meter), 3600, delta=1)
 

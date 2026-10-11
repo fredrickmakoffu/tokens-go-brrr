@@ -25,7 +25,9 @@ def main() -> int:
     out = Path(sys.argv[1] if len(sys.argv) > 1 else "dist")
     version = Path(__file__).resolve().parent.parent.joinpath("pyproject.toml")
     ver = next(
-        line.split('"')[1] for line in version.read_text().splitlines() if line.startswith("version")
+        line.split('"')[1]
+        for line in version.read_text().splitlines()
+        if line.startswith("version")
     )
     files = sorted(p for p in out.iterdir() if p.suffix in PLATFORMS)
     if not files:
@@ -37,16 +39,24 @@ def main() -> int:
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
         os_name, key, label = PLATFORMS[path.suffix]
         entries.append(
-            {"platform": key, "os": os_name, "label": label, "file": path.name,
-             "size": path.stat().st_size, "sha256": digest}
+            {
+                "platform": key,
+                "os": os_name,
+                "label": label,
+                "file": path.name,
+                "size": path.stat().st_size,
+                "sha256": digest,
+            }
         )
         sums.append(f"{digest}  {path.name}")
 
     (out / "SHA256SUMS").write_text("\n".join(sums) + "\n")
     (out / "manifest.json").write_text(
         json.dumps(
-            {"version": ver, "released": dt.date.today().isoformat(), "artifacts": entries}, indent=2
-        ) + "\n"
+            {"version": ver, "released": dt.date.today().isoformat(), "artifacts": entries},
+            indent=2,
+        )
+        + "\n"
     )
     print(f"wrote SHA256SUMS and manifest.json ({len(entries)} artifacts, v{ver})")
     return 0

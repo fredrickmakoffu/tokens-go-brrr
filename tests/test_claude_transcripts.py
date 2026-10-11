@@ -14,8 +14,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from cursor_spend_monitor import ledger
-from cursor_spend_monitor.harvesters.claude_transcripts import ClaudeTranscriptHarvester
+from tokens_go_brrr import ledger
+from tokens_go_brrr.harvesters.claude_transcripts import ClaudeTranscriptHarvester
 
 ROOT_SLUG = "-home-u-alpha"
 
@@ -78,9 +78,7 @@ class TranscriptCase(unittest.TestCase):
         return path
 
     @staticmethod
-    def write(
-        path: Path, records: list[dict], *, trailing_newline: bool = True
-    ) -> None:
+    def write(path: Path, records: list[dict], *, trailing_newline: bool = True) -> None:
         text = "\n".join(json.dumps(r) for r in records)
         if trailing_newline and records:
             text += "\n"
@@ -98,9 +96,7 @@ class TranscriptCase(unittest.TestCase):
         if table == "sessions":
             row = self.con.execute("SELECT COUNT(*) FROM sessions").fetchone()
         elif table == "transcript_messages":
-            row = self.con.execute(
-                "SELECT COUNT(*) FROM transcript_messages"
-            ).fetchone()
+            row = self.con.execute("SELECT COUNT(*) FROM transcript_messages").fetchone()
         elif table == "daily":
             row = self.con.execute("SELECT COUNT(*) FROM daily").fetchone()
         else:
@@ -145,9 +141,7 @@ class ReadingTest(TranscriptCase):
 
     def test_model_project_and_entrypoint_come_from_the_transcript(self):
         path = self.transcript()
-        self.write(
-            path, [record("msg_1", model="claude-opus-5-5", cwd="/home/u/alpha")]
-        )
+        self.write(path, [record("msg_1", model="claude-opus-5-5", cwd="/home/u/alpha")])
         self.reader.harvest(self.con)
         row = self.session_row()
         self.assertEqual(row["model"], "claude-opus-5-5")

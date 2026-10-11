@@ -1,10 +1,9 @@
 """The two usage fetches: what a reply becomes, and what a failure becomes.
 
-Both reach their endpoint over `http.client.HTTPSConnection`, so the socket is
-mocked rather than a URL opener. That keeps these honest about what changed when
-they stopped using `urlopen`: the status-to-exception mapping, and the JSON
-decoding around it. The tokens here are throwaway strings -- nothing in this file
-touches a credential.
+Both reach their endpoint through `tokens_go_brrr.http_json` (HTTPSConnection),
+so the socket is mocked rather than a URL opener. That keeps these honest about
+the status-to-exception mapping and JSON decoding. The tokens here are throwaway
+strings -- nothing in this file touches a credential.
 
 Both providers are driven through the same tests, because the contract is the
 same: read one JSON endpoint, map its failures onto ours, never invent a number.
@@ -14,10 +13,13 @@ from __future__ import annotations
 
 import unittest
 from dataclasses import dataclass
+from datetime import UTC
 from typing import Any
 from unittest import mock
 
-from cursor_spend_monitor.providers import claude, opencode
+from tokens_go_brrr.api import UsageSummary
+from tokens_go_brrr.providers import claude, opencode
+from tokens_go_brrr.providers.cursor import CursorProvider
 
 
 @dataclass(frozen=True)
@@ -132,6 +134,15 @@ class UsageFetchTest(unittest.TestCase):
                 self.sockets[-1].close.assert_called_once()
 
 
+class ProcessSpecsContractTest(unittest.TestCase):
+    def test_every_provider_declares_process_specs_as_a_tuple(self):
+        from tokens_go_brrr.providers import PROVIDERS
+
+        for provider_id, cls in PROVIDERS.items():
+            with self.subTest(provider=provider_id):
+                self.assertIsInstance(cls.process_specs, tuple)
+
+
 class MeterReadingTest(unittest.TestCase):
     def test_a_reading_that_will_not_parse_is_dropped(self):
         # A meter states how much of a limit is used. Defaulting an unreadable
@@ -142,41 +153,64 @@ class MeterReadingTest(unittest.TestCase):
         self.assertEqual(opencode._as_float(7), 7.0)
         self.assertIsNone(opencode._as_float({"percent": 1}))
 
+    def test_cursor_drops_unparsable_utilization(self):
+        summary = UsageSummary.from_dashboard(
+            {
+                "planUsage": {
+                    "autoPercentUsed": "n/a",
+                    "apiPercentUsed": 12,
+                    "includedSpend": 0,
+                    "limit": 100,
+                }
+            }
+        )
+        self.assertIsNone(summary.auto_percent)
+        self.assertEqual(summary.api_percent, 12.0)
+
+        provider = CursorProvider()
+        with (
+            mock.patch.object(provider, "available", return_value=True),
+            mock.patch.object(provider._client, "fetch", return_value=summary),
+        ):
+            snap = provider.fetch()
+        self.assertEqual([m.key for m in snap.metrics], ["other"])
+        self.assertEqual(snap.metrics[0].percent, 12.0)
+
 
 class MeterResetsInTest(unittest.TestCase):
     def test_seconds_until_reset_are_reported(self):
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
-        from cursor_spend_monitor.providers.base import Meter
+        from tokens_go_brrr.providers.base import Meter
 
-        meter = Meter("k", "K", 10, datetime.now(timezone.utc) + timedelta(hours=2), kind="rolling")
+        meter = Meter("k", "K", 10, datetime.now(UTC) + timedelta(hours=2), kind="rolling")
         self.assertAlmostEqual(meter.resets_in_seconds(), 7200, delta=2)
 
     def test_a_reset_in_the_past_is_zero_not_negative(self):
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
-        from cursor_spend_monitor.providers.base import Meter
+        from tokens_go_brrr.providers.base import Meter
 
-        meter = Meter("k", "K", 10, datetime.now(timezone.utc) - timedelta(hours=1), kind="rolling")
+        meter = Meter("k", "K", 10, datetime.now(UTC) - timedelta(hours=1), kind="rolling")
         self.assertEqual(meter.resets_in_seconds(), 0)
 
     def test_an_unknown_reset_is_none(self):
-        from cursor_spend_monitor.providers.base import Meter
+        from tokens_go_brrr.providers.base import Meter
 
         self.assertIsNone(Meter("k", "K", 10, None, kind="weekly").resets_in_seconds())
 
 
 class MeterElapsedTest(unittest.TestCase):
     def _meter(self, kind, hours_left):
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
-        from cursor_spend_monitor.providers.base import Meter
+        from tokens_go_brrr.providers.base import Meter
 
         return Meter(
             "k",
             "K",
             10,
-            datetime.now(timezone.utc) + timedelta(hours=hours_left),
+            datetime.now(UTC) + timedelta(hours=hours_left),
             kind=kind,
         )
 
@@ -187,7 +221,7 @@ class MeterElapsedTest(unittest.TestCase):
         self.assertIsNone(self._meter("other", 2).elapsed_percent())
 
     def test_a_meter_without_a_reset_time_has_no_pace(self):
-        from cursor_spend_monitor.providers.base import Meter
+        from tokens_go_brrr.providers.base import Meter
 
         self.assertIsNone(Meter("k", "K", 10, None, kind="weekly").elapsed_percent())
 
