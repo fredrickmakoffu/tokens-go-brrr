@@ -7,8 +7,8 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from unittest import mock
 
-from cursor_spend_monitor import __main__ as cli
-from cursor_spend_monitor.config import MonitorConfig
+from tokens_go_brrr import __main__ as cli
+from tokens_go_brrr.config import MonitorConfig
 from tests.test_state import payload_dict, tool_dict
 
 

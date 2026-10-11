@@ -18,11 +18,11 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
-from cursor_spend_monitor import ledger
-from cursor_spend_monitor import notify_engine as notify
-from cursor_spend_monitor.config import MonitorConfig
-from cursor_spend_monitor.llm_budget import CallBudget
-from cursor_spend_monitor.providers.base import Meter, ProviderSnapshot
+from tokens_go_brrr import ledger
+from tokens_go_brrr import notify_engine as notify
+from tokens_go_brrr.config import MonitorConfig
+from tokens_go_brrr.llm_budget import CallBudget
+from tokens_go_brrr.providers.base import Meter, ProviderSnapshot
 
 NOW = datetime(2026, 10, 6, 12, 0, tzinfo=timezone.utc)
 NOW_TS = int(NOW.timestamp())
@@ -332,7 +332,7 @@ class DaemonBillboardTest(unittest.TestCase):
         self.addCleanup(self.con.close)
 
     def daemon(self, **config_values):
-        from cursor_spend_monitor.daemon import UsageDaemon
+        from tokens_go_brrr.daemon import UsageDaemon
 
         stub = mock.Mock()
         stub.config = MonitorConfig(**config_values)
@@ -357,7 +357,7 @@ class DaemonBillboardTest(unittest.TestCase):
         self.assertIsNotNone(stub._latest_message)
 
     def test_an_acknowledged_message_is_no_longer_the_billboard(self):
-        from cursor_spend_monitor.daemon import UsageDaemon
+        from tokens_go_brrr.daemon import UsageDaemon
 
         mid = ledger.store_message(self.con, kind="fun", key="k", body="body")
         stub = self.daemon()
@@ -380,7 +380,7 @@ class DaemonBillboardTest(unittest.TestCase):
         # The digest of 2026-10-07 18:03 died on a worker-thread connection
         # error, having already marked itself sent, so it never tried again: one
         # exception cost a whole day of digests and left a single journal line.
-        from cursor_spend_monitor.daemon import UsageDaemon
+        from tokens_go_brrr.daemon import UsageDaemon
 
         stub = self.daemon()
         stub._last_slot = {"daily": "2026-10-08"}
@@ -390,7 +390,7 @@ class DaemonBillboardTest(unittest.TestCase):
         self.assertNotIn("daily", stub._last_slot)
 
     def test_an_inactive_ledger_does_not_burn_the_slot(self):
-        from cursor_spend_monitor.daemon import UsageDaemon
+        from tokens_go_brrr.daemon import UsageDaemon
 
         stub = self.daemon()
         stub._last_slot = {"daily": "2026-10-08"}
@@ -424,7 +424,7 @@ class DaemonBillboardTest(unittest.TestCase):
         self.assertEqual(stub._publish.call_count, 1)
 
     def test_acknowledging_republishes_with_the_next_message(self):
-        from cursor_spend_monitor.daemon import UsageDaemon
+        from tokens_go_brrr.daemon import UsageDaemon
 
         first = ledger.store_message(self.con, kind="fun", key="a", body="a")
         ledger.store_message(self.con, kind="fun", key="b", body="b")
@@ -440,7 +440,7 @@ class DaemonBillboardTest(unittest.TestCase):
         self.assertEqual(stub._publish.call_count, 2)
 
     def test_the_payload_carries_both_fields_when_absent(self):
-        from cursor_spend_monitor.daemon import UsageDaemon
+        from tokens_go_brrr.daemon import UsageDaemon
 
         stub = mock.Mock(
             snapshots=[],
@@ -470,7 +470,7 @@ class DaemonColdNoteTest(unittest.TestCase):
         self.addCleanup(self.con.close)
 
     def daemon(self, **config_values):
-        from cursor_spend_monitor.daemon import UsageDaemon
+        from tokens_go_brrr.daemon import UsageDaemon
 
         stub = mock.Mock()
         stub.config = MonitorConfig(**config_values)
@@ -489,7 +489,7 @@ class DaemonColdNoteTest(unittest.TestCase):
         return stub
 
     def opened(self, stub, at: float) -> None:
-        with mock.patch("cursor_spend_monitor.daemon.time.monotonic", return_value=at):
+        with mock.patch("tokens_go_brrr.daemon.time.monotonic", return_value=at):
             stub._start_cold_note = mock.Mock()
             stub.panel_opened()
 
@@ -530,20 +530,20 @@ class DaemonColdNoteTest(unittest.TestCase):
     def test_no_thread_starts_while_one_is_running(self):
         stub = self.daemon()
         stub._cold_running = True
-        with mock.patch("cursor_spend_monitor.daemon.threading.Thread") as thread:
+        with mock.patch("tokens_go_brrr.daemon.threading.Thread") as thread:
             stub.real_start()
         thread.assert_not_called()
 
     def test_no_thread_starts_when_informative_notes_are_unwanted(self):
         stub = self.daemon()
         stub._wanted.return_value = False
-        with mock.patch("cursor_spend_monitor.daemon.threading.Thread") as thread:
+        with mock.patch("tokens_go_brrr.daemon.threading.Thread") as thread:
             stub.real_start()
         thread.assert_not_called()
 
     def test_a_thread_starts_otherwise(self):
         stub = self.daemon()
-        with mock.patch("cursor_spend_monitor.daemon.threading.Thread") as thread:
+        with mock.patch("tokens_go_brrr.daemon.threading.Thread") as thread:
             stub.real_start()
         thread.return_value.start.assert_called_once()
         self.assertTrue(stub._cold_running)
@@ -552,7 +552,7 @@ class DaemonColdNoteTest(unittest.TestCase):
         stub.ledger.worker.return_value.__enter__ = mock.Mock(return_value=self.con)
         stub.ledger.worker.return_value.__exit__ = mock.Mock(return_value=False)
         stub._cold_running = True
-        with mock.patch("cursor_spend_monitor.daemon.GLib") as glib:
+        with mock.patch("tokens_go_brrr.daemon.GLib") as glib:
             stub._cold_worker()
         return glib
 
@@ -592,7 +592,7 @@ class DaemonColdNoteTest(unittest.TestCase):
         stub.ledger.worker.return_value.__enter__ = mock.Mock(return_value=None)
         stub.ledger.worker.return_value.__exit__ = mock.Mock(return_value=False)
         stub._cold_running = True
-        with mock.patch("cursor_spend_monitor.daemon.GLib"):
+        with mock.patch("tokens_go_brrr.daemon.GLib"):
             stub._cold_worker()
         self.assertFalse(stub._cold_running)
 
@@ -615,7 +615,7 @@ class WarmDaemonBase(unittest.TestCase):
         self.addCleanup(self.con.close)
 
     def daemon(self, **config_values):
-        from cursor_spend_monitor.daemon import UsageDaemon
+        from tokens_go_brrr.daemon import UsageDaemon
 
         stub = mock.Mock()
         stub.config = MonitorConfig(**config_values)
@@ -675,7 +675,7 @@ class WarmDaemonBase(unittest.TestCase):
         stub._warm_running = True
         stub._catching_up = True
         stub._run_readers = mock.Mock()
-        with mock.patch("cursor_spend_monitor.daemon.GLib") as glib:
+        with mock.patch("tokens_go_brrr.daemon.GLib") as glib:
             stub._warm_worker(harvest_here)
         return glib
 
@@ -685,7 +685,7 @@ class DaemonWarmNoteTest(WarmDaemonBase):
 
     def open_at(self, stub, at: float) -> None:
         stub._start_warm_note = mock.Mock()
-        with mock.patch("cursor_spend_monitor.daemon.time.monotonic", return_value=at):
+        with mock.patch("tokens_go_brrr.daemon.time.monotonic", return_value=at):
             stub.real_panel_opened()
 
     # -- which tier an open is ----------------------------------------------
@@ -729,7 +729,7 @@ class DaemonWarmNoteTest(WarmDaemonBase):
         self.open_at(stub, 1000.0)
         stub._start_warm_note = mock.Mock(side_effect=lambda: order.append("warm"))
         with mock.patch(
-            "cursor_spend_monitor.daemon.time.monotonic", return_value=1000.0 + 1800
+            "tokens_go_brrr.daemon.time.monotonic", return_value=1000.0 + 1800
         ):
             stub.real_panel_opened()
         self.assertEqual(order[-2:], ["poll", "warm"])
@@ -738,8 +738,8 @@ class DaemonWarmNoteTest(WarmDaemonBase):
 
     def start(self, stub):
         with (
-            mock.patch("cursor_spend_monitor.daemon.threading.Thread") as thread,
-            mock.patch("cursor_spend_monitor.daemon.GLib") as glib,
+            mock.patch("tokens_go_brrr.daemon.threading.Thread") as thread,
+            mock.patch("tokens_go_brrr.daemon.GLib") as glib,
         ):
             stub.real_start()
         return thread, glib
@@ -768,7 +768,7 @@ class DaemonWarmNoteTest(WarmDaemonBase):
     def test_it_does_not_re_read_what_was_read_a_moment_ago(self):
         stub = self.daemon()
         with mock.patch(
-            "cursor_spend_monitor.daemon.time.monotonic", return_value=500.0
+            "tokens_go_brrr.daemon.time.monotonic", return_value=500.0
         ):
             stub._last_harvest_at = 480.0
             thread, _ = self.start(stub)
@@ -825,7 +825,7 @@ class DaemonWarmNoteTest(WarmDaemonBase):
         stub.ledger.worker.return_value.__exit__ = mock.Mock(return_value=False)
         stub._run_readers = mock.Mock(side_effect=RuntimeError("bad file"))
         stub._harvesting = True
-        with mock.patch("cursor_spend_monitor.daemon.GLib"):
+        with mock.patch("tokens_go_brrr.daemon.GLib"):
             stub._warm_worker(True)
         self.assertEqual(len(ledger.pending_messages(self.con)), 1)
         self.assertFalse(stub._harvesting)
@@ -852,7 +852,7 @@ class DaemonWarmNoteTest(WarmDaemonBase):
         def finish(_seconds):
             stub._polling = False
 
-        with mock.patch("cursor_spend_monitor.daemon.time.sleep", side_effect=finish) as sleep:
+        with mock.patch("tokens_go_brrr.daemon.time.sleep", side_effect=finish) as sleep:
             self.run_worker(stub)
         sleep.assert_called_once()
 
@@ -897,7 +897,7 @@ class DaemonWarmWordingTest(WarmDaemonBase):
     """The quick-model wording of a warm note, and the limits around it."""
 
     def warm_message(self):
-        from cursor_spend_monitor import notify_engine as ne
+        from tokens_go_brrr import notify_engine as ne
 
         self.seed()
         message = ne.warm_note(self.con, [])
@@ -905,7 +905,7 @@ class DaemonWarmWordingTest(WarmDaemonBase):
         return message
 
     def generator(self, provider="claude"):
-        from cursor_spend_monitor import llm_composer as llm
+        from tokens_go_brrr import llm_composer as llm
 
         return llm.Generator(
             provider_id=provider, name=provider.title(), model="a-cheap-model",
@@ -913,7 +913,7 @@ class DaemonWarmWordingTest(WarmDaemonBase):
         )
 
     def reworded(self, message):
-        from cursor_spend_monitor.notify_engine import Message
+        from tokens_go_brrr.notify_engine import Message
 
         meta = dict(message.meta)
         meta["composed_by"] = "claude"
@@ -924,7 +924,7 @@ class DaemonWarmWordingTest(WarmDaemonBase):
         )
 
     def wording(self, stub, message, *, generator="default", rewrite="default"):
-        from cursor_spend_monitor import llm_composer as llm
+        from tokens_go_brrr import llm_composer as llm
 
         gen = self.generator() if generator == "default" else generator
         with (
@@ -951,7 +951,7 @@ class DaemonWarmWordingTest(WarmDaemonBase):
         result, _, rewrite = self.wording(stub, message)
         self.assertEqual(result.body, "Model words.")
         self.assertEqual(result.meta["source"], "llm")
-        from cursor_spend_monitor.daemon import WARM_LLM_TIMEOUT_SECONDS
+        from tokens_go_brrr.daemon import WARM_LLM_TIMEOUT_SECONDS
 
         self.assertEqual(rewrite.call_args.kwargs["timeout"], WARM_LLM_TIMEOUT_SECONDS)
         self.assertEqual(rewrite.call_args.kwargs["context"], {"trigger": "open"})
@@ -1015,8 +1015,8 @@ class DaemonWarmWordingTest(WarmDaemonBase):
         self.assertEqual(stub._llm_backoff, {})
 
     def test_a_resting_provider_is_not_offered_as_a_writer(self):
-        from cursor_spend_monitor import llm_composer as llm
-        from cursor_spend_monitor.daemon import UsageDaemon  # noqa: F401
+        from tokens_go_brrr import llm_composer as llm
+        from tokens_go_brrr.daemon import UsageDaemon  # noqa: F401
 
         stub = self.daemon(llm_notifications=True)
         stub.snapshots = [
@@ -1025,7 +1025,7 @@ class DaemonWarmWordingTest(WarmDaemonBase):
             ProviderSnapshot(provider_id="opencode", display_name="OC", icon="o",
                              plan=None, metrics=[], primary_key=""),
         ]
-        with mock.patch("cursor_spend_monitor.daemon.time.monotonic", return_value=100.0):
+        with mock.patch("tokens_go_brrr.daemon.time.monotonic", return_value=100.0):
             stub._llm_backoff = {"claude": 100.0 + 60}
             with mock.patch.object(llm, "choose", return_value=None) as choose:
                 stub._compose(self.con, [self.warm_message()], origin="open")
@@ -1033,14 +1033,14 @@ class DaemonWarmWordingTest(WarmDaemonBase):
         self.assertEqual(offered, ["opencode"])
 
     def test_a_rest_ends(self):
-        from cursor_spend_monitor import llm_composer as llm
+        from tokens_go_brrr import llm_composer as llm
 
         stub = self.daemon(llm_notifications=True)
         stub.snapshots = [
             ProviderSnapshot(provider_id="claude", display_name="Claude", icon="c",
                              plan=None, metrics=[], primary_key=""),
         ]
-        with mock.patch("cursor_spend_monitor.daemon.time.monotonic", return_value=500.0):
+        with mock.patch("tokens_go_brrr.daemon.time.monotonic", return_value=500.0):
             stub._llm_backoff = {"claude": 100.0}
             with mock.patch.object(llm, "choose", return_value=None) as choose:
                 stub._compose(self.con, [self.warm_message()], origin="open")
@@ -1049,7 +1049,7 @@ class DaemonWarmWordingTest(WarmDaemonBase):
     def test_scheduled_composition_is_not_capped(self):
         stub = self.daemon(llm_notifications=True)
         stub.llm_budget = CallBudget(0, 0)
-        from cursor_spend_monitor import llm_composer as llm
+        from tokens_go_brrr import llm_composer as llm
 
         message = self.warm_message()
         with (
@@ -1067,7 +1067,7 @@ class DaemonWarmWordingTest(WarmDaemonBase):
 
     def test_other_messages_get_no_fresh_figures(self):
         stub = self.daemon(llm_notifications=True)
-        from cursor_spend_monitor.notify_engine import INFORMATIVE, Message
+        from tokens_go_brrr.notify_engine import INFORMATIVE, Message
 
         facts = stub._facts_for(self.con, Message(kind=INFORMATIVE, key="k", body="b"))
         self.assertNotIn("now", facts)
@@ -1076,14 +1076,14 @@ class DaemonWarmWordingTest(WarmDaemonBase):
         stub = self.daemon()
         stub._collect_samples = mock.Mock(return_value={("claude", "five_hour"): [(1.0, 2.0)]})
         with (
-            mock.patch("cursor_spend_monitor.daemon.threading.Thread"),
-            mock.patch("cursor_spend_monitor.daemon.GLib"),
+            mock.patch("tokens_go_brrr.daemon.threading.Thread"),
+            mock.patch("tokens_go_brrr.daemon.GLib"),
         ):
             stub.real_start()
         self.assertEqual(stub._warm_samples, {("claude", "five_hour"): [(1.0, 2.0)]})
 
     def test_the_worker_hands_the_history_to_the_note(self):
-        from cursor_spend_monitor import notify_engine as ne
+        from tokens_go_brrr import notify_engine as ne
 
         stub = self.daemon()
         stub._warm_samples = {("claude", "five_hour"): [(1.0, 2.0)]}

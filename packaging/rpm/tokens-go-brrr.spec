@@ -1,6 +1,6 @@
 # Built by packaging/build-rpm.sh. VERSION is passed with --define "ver X.Y.Z".
 # The source tree is supplied as Source0 (a tarball with a top-level dir).
-Name:           cursor-spend-monitor
+Name:           tokens-go-brrr
 Version:        %{ver}
 Release:        1%{?dist}
 Summary:        AI coding usage limits in the GNOME top bar
@@ -22,7 +22,7 @@ Requires:       gnome-shell
 A daemon that tracks usage limits for AI coding tools (Cursor, Claude Code,
 OpenCode) and a GNOME Shell extension that shows them as a status dot in the
 top bar. Log out and back in after installing so GNOME Shell loads the
-extension, then run `cursor-spend-monitor setup`.
+extension, then run `tokens-go-brrr setup`.
 
 %prep
 %autosetup -n %{name}-%{version}
@@ -31,19 +31,19 @@ extension, then run `cursor-spend-monitor setup`.
 packaging/stage.sh %{buildroot}
 # Fonts and their licence are only staged when the source tree has them.
 : > extra.files
-for d in %{_datadir}/fonts/ai-usage %{_datadir}/licenses/cursor-spend-monitor; do
+for d in %{_datadir}/fonts/tokens-go-brrr %{_datadir}/licenses/tokens-go-brrr; do
   [ -d "%{buildroot}$d" ] && echo "$d" >> extra.files
 done
 
 %post
-fc-cache -f /usr/share/fonts/ai-usage >/dev/null 2>&1 || :
+fc-cache -f /usr/share/fonts/tokens-go-brrr >/dev/null 2>&1 || :
 
 %files -f extra.files
-%{_bindir}/cursor-spend-monitor
-%{python3_sitelib}/cursor_spend_monitor
-%{python3_sitelib}/cursor_spend_monitor-*.dist-info
-%{_datadir}/gnome-shell/extensions/ai-usage@fredrickmakoffu.github.io
-%{_prefix}/lib/systemd/user/cursor-spend-monitor.service
+%{_bindir}/tokens-go-brrr
+%{python3_sitelib}/tokens_go_brrr
+%{python3_sitelib}/tokens_go_brrr-*.dist-info
+%{_datadir}/gnome-shell/extensions/tokens-go-brrr@fredrickmakoffu.github.io
+%{_prefix}/lib/systemd/user/tokens-go-brrr.service
 
 %changelog
 * Fri Oct 09 2026 Fredrick Makoffu <42011427+fredrickmakoffu@users.noreply.github.com> - %{version}-1

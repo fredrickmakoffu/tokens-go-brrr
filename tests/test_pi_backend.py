@@ -9,9 +9,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
 
-from cursor_spend_monitor.providers import pi_backend
-from cursor_spend_monitor.providers.base import Meter, ProviderSnapshot
-from cursor_spend_monitor.providers.pi_backend import Backend, BackendResolver, dominant
+from tokens_go_brrr.providers import pi_backend
+from tokens_go_brrr.providers.base import Meter, ProviderSnapshot
+from tokens_go_brrr.providers.pi_backend import Backend, BackendResolver, dominant
 
 
 class SlugTest(unittest.TestCase):
@@ -233,8 +233,8 @@ class BorrowingTest(unittest.TestCase):
     """The daemon step that copies a backend provider's meters onto a harness."""
 
     def setUp(self):
-        from cursor_spend_monitor.daemon import UsageDaemon
-        from cursor_spend_monitor.instances import Instance, InstanceReport, ProcessSpec
+        from tokens_go_brrr.daemon import UsageDaemon
+        from tokens_go_brrr.instances import Instance, InstanceReport, ProcessSpec
 
         self.Instance = Instance
         self.InstanceReport = InstanceReport

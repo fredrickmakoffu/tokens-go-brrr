@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 env:
-  PUBLIC_REPO: fredrickmakoffu/cursor-spend-monitor-releases
+  PUBLIC_REPO: fredrickmakoffu/tokens-go-brrr-releases
 
 jobs:
   publish:

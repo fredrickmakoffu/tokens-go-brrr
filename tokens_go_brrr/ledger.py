@@ -423,7 +423,7 @@ def model_family_of(model: str | None) -> str | None:
 def default_path() -> Path:
     data_home = os.environ.get("XDG_DATA_HOME")
     base = Path(data_home) if data_home else Path.home() / ".local" / "share"
-    return base / "cursor-spend-monitor" / "usage.db"
+    return base / "tokens-go-brrr" / "usage.db"
 
 
 def connect(path: Path | None = None, *, prepare: bool = True) -> sqlite3.Connection:

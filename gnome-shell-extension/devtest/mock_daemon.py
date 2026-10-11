@@ -3,7 +3,7 @@ import sys
 sys.path.insert(0, sys.argv[1])
 from gi.repository import GLib  # type: ignore  # gi has no stubs
 
-from cursor_spend_monitor.dbus_service import UsageService
+from tokens_go_brrr.dbus_service import UsageService
 
 tools = [
     {
@@ -383,7 +383,7 @@ def llm_log(day):
     return {
         "enabled": True,
         "keep_days": 30,
-        "directory": "~/.local/share/cursor-spend-monitor/llm-calls",
+        "directory": "~/.local/share/tokens-go-brrr/llm-calls",
         "days": days,
         "day": chosen,
         "summary": {

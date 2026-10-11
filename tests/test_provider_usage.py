@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from typing import Any
 from unittest import mock
 
-from cursor_spend_monitor.providers import claude, opencode
+from tokens_go_brrr.providers import claude, opencode
 
 
 @dataclass(frozen=True)
@@ -147,7 +147,7 @@ class MeterResetsInTest(unittest.TestCase):
     def test_seconds_until_reset_are_reported(self):
         from datetime import datetime, timedelta, timezone
 
-        from cursor_spend_monitor.providers.base import Meter
+        from tokens_go_brrr.providers.base import Meter
 
         meter = Meter("k", "K", 10, datetime.now(timezone.utc) + timedelta(hours=2), kind="rolling")
         self.assertAlmostEqual(meter.resets_in_seconds(), 7200, delta=2)
@@ -155,13 +155,13 @@ class MeterResetsInTest(unittest.TestCase):
     def test_a_reset_in_the_past_is_zero_not_negative(self):
         from datetime import datetime, timedelta, timezone
 
-        from cursor_spend_monitor.providers.base import Meter
+        from tokens_go_brrr.providers.base import Meter
 
         meter = Meter("k", "K", 10, datetime.now(timezone.utc) - timedelta(hours=1), kind="rolling")
         self.assertEqual(meter.resets_in_seconds(), 0)
 
     def test_an_unknown_reset_is_none(self):
-        from cursor_spend_monitor.providers.base import Meter
+        from tokens_go_brrr.providers.base import Meter
 
         self.assertIsNone(Meter("k", "K", 10, None, kind="weekly").resets_in_seconds())
 
@@ -170,7 +170,7 @@ class MeterElapsedTest(unittest.TestCase):
     def _meter(self, kind, hours_left):
         from datetime import datetime, timedelta, timezone
 
-        from cursor_spend_monitor.providers.base import Meter
+        from tokens_go_brrr.providers.base import Meter
 
         return Meter(
             "k",
@@ -187,7 +187,7 @@ class MeterElapsedTest(unittest.TestCase):
         self.assertIsNone(self._meter("other", 2).elapsed_percent())
 
     def test_a_meter_without_a_reset_time_has_no_pace(self):
-        from cursor_spend_monitor.providers.base import Meter
+        from tokens_go_brrr.providers.base import Meter
 
         self.assertIsNone(Meter("k", "K", 10, None, kind="weekly").elapsed_percent())
 

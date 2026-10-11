@@ -6,8 +6,8 @@ from typing import Any
 
 from gi.repository import Gio, GLib  # type: ignore  # gi has no stubs
 
-BUS_NAME = "io.github.fredrickmakoffu.AIUsage"
-OBJECT_PATH = "/io/github/fredrickmakoffu/AIUsage"
+BUS_NAME = "io.github.fredrickmakoffu.TokensGoBrrr"
+OBJECT_PATH = "/io/github/fredrickmakoffu/TokensGoBrrr"
 INTERFACE = BUS_NAME
 
 
@@ -21,7 +21,7 @@ def _as_int(value: Any) -> int:
 
 INTERFACE_XML = """
 <node>
-  <interface name="io.github.fredrickmakoffu.AIUsage">
+  <interface name="io.github.fredrickmakoffu.TokensGoBrrr">
     <property name="Version" type="s" access="read"/>
     <method name="GetState"><arg type="s" direction="out" name="json"/></method>
     <method name="Refresh"/>

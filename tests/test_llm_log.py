@@ -15,10 +15,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
-from cursor_spend_monitor import llm_composer as llm
-from cursor_spend_monitor import llm_log
-from cursor_spend_monitor.llm_log import LlmLog
-from cursor_spend_monitor.notify_engine import INFORMATIVE, Message
+from tokens_go_brrr import llm_composer as llm
+from tokens_go_brrr import llm_log
+from tokens_go_brrr.llm_log import LlmLog
+from tokens_go_brrr.notify_engine import INFORMATIVE, Message
 
 AT = datetime(2026, 10, 10, 9, 30).astimezone()
 
@@ -279,7 +279,7 @@ class ComposerRecordingTest(unittest.TestCase):
 
 class ConfigTest(unittest.TestCase):
     def test_the_retention_defaults_to_thirty_days(self):
-        from cursor_spend_monitor.config import MonitorConfig
+        from tokens_go_brrr.config import MonitorConfig
 
         self.assertEqual(MonitorConfig().llm_log_days, 30)
 

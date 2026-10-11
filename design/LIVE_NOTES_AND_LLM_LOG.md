@@ -213,7 +213,7 @@ never logged.
 ### 5.3 Storage: a daily log, keyed by timestamp
 
 - One file per local day: `llm-calls/YYYY-MM-DD.jsonl` under the data directory
-  next to `usage.db` (`~/.local/share/cursor-spend-monitor/`), one JSON object
+  next to `usage.db` (`~/.local/share/tokens-go-brrr/`), one JSON object
   per line, appended in time order. JSONL keeps writes atomic and cheap, needs
   no migrations and is trivially greppable.
 - Every line leads with its `ts`, and lookups are by timestamp: the Settings

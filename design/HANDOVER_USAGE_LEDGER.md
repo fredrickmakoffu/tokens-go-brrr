@@ -11,7 +11,7 @@ plan fields. **No code is outstanding.**
 
 | piece | file | the contract it keeps |
 | --- | --- | --- |
-| Ledger | `cursor_spend_monitor/ledger.py` | `usage.db`; keyed upserts, so writing the same session twice changes nothing; `daily`/`hourly` recomputed from sessions rather than incremented |
+| Ledger | `tokens_go_brrr/ledger.py` | `usage.db`; keyed upserts, so writing the same session twice changes nothing; `daily`/`hourly` recomputed from sessions rather than incremented |
 | Harvesters | `harvesters/` (five) | Read each tool's own store, fail-soft: a reader that breaks must not stop the daemon |
 | Notification engine | `notify_engine.py` | Templates first. Digests, fun facts, share lines, events, cooldowns, quiet hours |
 | LLM composer | `llm_composer.py` | Rewords a template when a provider has headroom; **every** failure returns the template |
@@ -33,20 +33,20 @@ python3 -m unittest discover -s tests -q          # 412 tests
 ```
 
 ```bash
-cursor-spend-monitor harvest                  # second run must say "no change" for every reader
-cursor-spend-monitor report --checks          # what the numbers were, not what we assumed
-cursor-spend-monitor quote                    # the newest message
-cursor-spend-monitor quote --generate --slot daily|weekly|monthly
+tokens-go-brrr harvest                  # second run must say "no change" for every reader
+tokens-go-brrr report --checks          # what the numbers were, not what we assumed
+tokens-go-brrr quote                    # the newest message
+tokens-go-brrr quote --generate --slot daily|weekly|monthly
 ```
 
 - **Install:** `./install.sh` — its first step wants `sudo` for `dnf`. To skip that
   (the packages are already there), `pip3 install --user --force-reinstall --no-deps .`
-  then `systemctl --user restart cursor-spend-monitor`.
-- **Ledger:** `~/.local/share/cursor-spend-monitor/usage.db`. It is **WAL**, so the
+  then `systemctl --user restart tokens-go-brrr`.
+- **Ledger:** `~/.local/share/tokens-go-brrr/usage.db`. It is **WAL**, so the
   `.db` mtime lies — read `harvest_state.updated_at` or the `-wal` file to see freshness.
-- **Live state:** `/run/user/$UID/cursor-spend-monitor/state.json` (`billboard`,
+- **Live state:** `/run/user/$UID/tokens-go-brrr/state.json` (`billboard`,
   `latestMessage`, `tools[].metrics`).
-- **Logs:** `journalctl --user -u cursor-spend-monitor`. A successful harvest logs
+- **Logs:** `journalctl --user -u tokens-go-brrr`. A successful harvest logs
   nothing; only failures print.
 
 ## 3. What is left
@@ -70,8 +70,8 @@ and stress daemons.
 The daemon has harvested on its own schedule since 2026-10-08. Review with:
 
 ```bash
-cursor-spend-monitor report --checks          # no FAIL rows; cost_unit should read ok
-cursor-spend-monitor report --week --by provider
+tokens-go-brrr report --checks          # no FAIL rows; cost_unit should read ok
+tokens-go-brrr report --week --by provider
 ```
 
 Then tune these, which were reasoned rather than observed:

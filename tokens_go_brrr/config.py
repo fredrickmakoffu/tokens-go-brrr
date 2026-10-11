@@ -11,10 +11,10 @@ from .providers import DEFAULT_PROVIDERS
 
 CONFIG_DIR = (
     Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
-    / "cursor-spend-monitor"
+    / "tokens-go-brrr"
 )
 CONFIG_FILE = CONFIG_DIR / "config.json"
-STATE_FILE = Path(f"/run/user/{os.getuid()}/cursor-spend-monitor/state.json")
+STATE_FILE = Path(f"/run/user/{os.getuid()}/tokens-go-brrr/state.json")
 
 DEFAULT_PRIMARY_ALERTS = [75, 90, 100]
 DEFAULT_NOTIFY_TYPES = ["informative", "fun", "actionable", "shareable"]

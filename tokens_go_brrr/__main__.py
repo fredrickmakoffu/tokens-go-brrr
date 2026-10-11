@@ -595,9 +595,9 @@ def _add_harvest_parser(sub: argparse._SubParsersAction) -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
-            "  cursor-spend-monitor harvest\n"
-            "  cursor-spend-monitor harvest --provider opencode\n"
-            "  cursor-spend-monitor harvest --full\n"
+            "  tokens-go-brrr harvest\n"
+            "  tokens-go-brrr harvest --provider opencode\n"
+            "  tokens-go-brrr harvest --full\n"
         ),
     )
     parser.add_argument(
@@ -643,7 +643,7 @@ def cmd_quote(args: argparse.Namespace) -> int:
         message = ledger.latest_message(con)
         if message is None:
             print(
-                "No message yet. Run `cursor-spend-monitor quote --generate` "
+                "No message yet. Run `tokens-go-brrr quote --generate` "
                 "or wait for the daemon.",
                 file=sys.stderr,
             )
@@ -685,9 +685,9 @@ def _add_quote_parser(sub: argparse._SubParsersAction) -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
-            "  cursor-spend-monitor quote\n"
-            "  cursor-spend-monitor quote --generate --slot weekly\n"
-            "  cursor-spend-monitor quote --tweet\n"
+            "  tokens-go-brrr quote\n"
+            "  tokens-go-brrr quote --generate --slot weekly\n"
+            "  tokens-go-brrr quote --tweet\n"
         ),
     )
     parser.add_argument(
@@ -722,10 +722,10 @@ def _add_report_parser(sub: argparse._SubParsersAction) -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
-            "  cursor-spend-monitor report\n"
-            "  cursor-spend-monitor report --week --by model\n"
-            "  cursor-spend-monitor report --since 2026-10-01 --until 2026-10-31 --json\n"
-            "  cursor-spend-monitor report --checks\n"
+            "  tokens-go-brrr report\n"
+            "  tokens-go-brrr report --week --by model\n"
+            "  tokens-go-brrr report --since 2026-10-01 --until 2026-10-31 --json\n"
+            "  tokens-go-brrr report --checks\n"
         ),
     )
     parser.add_argument(
@@ -772,9 +772,9 @@ def _add_status_parser(sub: argparse._SubParsersAction) -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
-            "  cursor-spend-monitor status --json\n"
-            '  cursor-spend-monitor status --format "{icon} {pct}%%" --provider claude\n'
-            '  cursor-spend-monitor status --format "{name} {pct}%% ({sessions})"\n'
+            "  tokens-go-brrr status --json\n"
+            '  tokens-go-brrr status --format "{icon} {pct}%%" --provider claude\n'
+            '  tokens-go-brrr status --format "{name} {pct}%% ({sessions})"\n'
         ),
     )
     parser.add_argument("--json", action="store_true", help="Print the payload as JSON")
@@ -818,8 +818,8 @@ def _add_check_parser(sub: argparse._SubParsersAction) -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
-            "  cursor-spend-monitor check --min 20 --provider claude\n"
-            "  cursor-spend-monitor check --min 10 --any --quiet\n"
+            "  tokens-go-brrr check --min 20 --provider claude\n"
+            "  tokens-go-brrr check --min 10 --any --quiet\n"
         ),
     )
     parser.add_argument(
@@ -873,7 +873,7 @@ def _add_best_parser(sub: argparse._SubParsersAction) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="cursor-spend-monitor",
+        prog="tokens-go-brrr",
         description="tokens-go-brrr daemon for the GNOME Shell indicator",
     )
     parser.add_argument(

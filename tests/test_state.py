@@ -11,10 +11,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
-from cursor_spend_monitor import __main__ as cli
-from cursor_spend_monitor import config as config_module
-from cursor_spend_monitor import state
-from cursor_spend_monitor.config import MonitorConfig
+from tokens_go_brrr import __main__ as cli
+from tokens_go_brrr import config as config_module
+from tokens_go_brrr import state
+from tokens_go_brrr.config import MonitorConfig
 
 
 def tool_dict(
@@ -266,7 +266,7 @@ class DaemonPayloadTest(unittest.TestCase):
     """The daemon publishes the same shape the CLI prints."""
 
     def test_daemon_state_payload_carries_the_schema_and_tools(self):
-        from cursor_spend_monitor.daemon import UsageDaemon
+        from tokens_go_brrr.daemon import UsageDaemon
 
         snapshot = mock.Mock()
         snapshot.to_panel_dict.return_value = tool_dict()
@@ -286,7 +286,7 @@ class DaemonPayloadTest(unittest.TestCase):
         self.assertIsNotNone(payload["updated_at"])
 
     def test_daemon_payload_without_a_fetch_yet_has_no_timestamp(self):
-        from cursor_spend_monitor.daemon import UsageDaemon
+        from tokens_go_brrr.daemon import UsageDaemon
 
         stub = mock.Mock(
             snapshots=[],
@@ -340,7 +340,7 @@ class RefreshCooldownTest(unittest.TestCase):
     """A refresh on every menu open must not become a request on every open."""
 
     def _daemon(self, last_fetch):
-        from cursor_spend_monitor.daemon import UsageDaemon
+        from tokens_go_brrr.daemon import UsageDaemon
 
         stub = mock.Mock(spec=UsageDaemon)
         stub._polling = False
@@ -348,9 +348,9 @@ class RefreshCooldownTest(unittest.TestCase):
         return stub
 
     def poll(self, stub, **kwargs):
-        from cursor_spend_monitor.daemon import UsageDaemon
+        from tokens_go_brrr.daemon import UsageDaemon
 
-        with mock.patch("cursor_spend_monitor.daemon.threading.Thread") as thread:
+        with mock.patch("tokens_go_brrr.daemon.threading.Thread") as thread:
             UsageDaemon.poll(stub, **kwargs)
         return thread.called
 
@@ -362,7 +362,7 @@ class RefreshCooldownTest(unittest.TestCase):
         self.assertFalse(self.poll(self._daemon(just_now)))
 
     def test_a_poll_after_the_cooldown_runs(self):
-        from cursor_spend_monitor.daemon import REFRESH_COOLDOWN_SECONDS
+        from tokens_go_brrr.daemon import REFRESH_COOLDOWN_SECONDS
 
         stale = datetime.now(timezone.utc) - timedelta(
             seconds=REFRESH_COOLDOWN_SECONDS + 5
@@ -396,14 +396,14 @@ class DaemonStartupTest(unittest.TestCase):
     """
 
     def test_the_startup_scan_removes_its_idle_source(self):
-        from cursor_spend_monitor.daemon import UsageDaemon
+        from tokens_go_brrr.daemon import UsageDaemon
 
         stub = mock.Mock()
         self.assertFalse(UsageDaemon._startup_scan(stub))
         stub._scan_instances.assert_called_once_with()
 
     def test_the_startup_harvest_removes_its_idle_source(self):
-        from cursor_spend_monitor.daemon import UsageDaemon
+        from tokens_go_brrr.daemon import UsageDaemon
 
         stub = mock.Mock()
         self.assertFalse(UsageDaemon._startup_harvest(stub))

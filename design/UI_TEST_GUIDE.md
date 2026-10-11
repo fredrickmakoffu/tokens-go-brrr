@@ -15,9 +15,9 @@ The extension changed, and GNOME Shell only reads an extension at login. So this
 is the one step where "just restart the daemon" is not enough.
 
 ```bash
-cd ~/Documents/projects/cursor-folder/cursor-spend-monitor
+cd ~/Documents/projects/cursor-folder/tokens-go-brrr
 ./install.sh                    # daemon + extension copy; sudo only for dnf inside
-systemctl --user restart cursor-spend-monitor.service
+systemctl --user restart tokens-go-brrr.service
 ```
 
 Then reload the panel **without logging out**:
@@ -29,7 +29,7 @@ Then reload the panel **without logging out**:
 It prints one line. Press **Alt+F2**, type `lg`, Enter, paste the line, Enter,
 then Esc. The indicator is replaced in place.
 
-**Check first:** `cursor-spend-monitor --version` says **0.5.0**. If it says
+**Check first:** `tokens-go-brrr --version` says **0.5.0**. If it says
 0.4.0, `install.sh` did not pick up the working tree, and nothing below applies.
 
 **To undo later:** `./gnome-shell-extension/devtest/live-reload-reset.sh`, then
@@ -65,7 +65,7 @@ often than not, and that is what stops it appearing on every open.
 You can confirm there is nothing pending:
 
 ```bash
-cursor-spend-monitor quote        # "No message yet..." and exit code 1
+tokens-go-brrr quote        # "No message yet..." and exit code 1
 ```
 
 ### A3. A fresh message lands as a quote
@@ -73,7 +73,7 @@ cursor-spend-monitor quote        # "No message yet..." and exit code 1
 Create one on demand:
 
 ```bash
-cursor-spend-monitor quote --generate --slot monthly
+tokens-go-brrr quote --generate --slot monthly
 ```
 
 Then **close and reopen the popover** (or just open it — the daemon publishes on
@@ -123,7 +123,7 @@ the daemon and the model disagree, which is worth reporting.
 ### A7. A shareable line, and the Copy button
 
 ```bash
-cursor-spend-monitor quote --generate --slot monthly   # the monthly slot carries one
+tokens-go-brrr quote --generate --slot monthly   # the monthly slot carries one
 ```
 
 - [ ] The quote is followed by a line starting `SHARE:`
@@ -134,7 +134,7 @@ cursor-spend-monitor quote --generate --slot monthly   # the monthly slot carrie
 
 ```bash
 # stop the real daemon so the mock can own the bus name
-systemctl --user stop cursor-spend-monitor.service
+systemctl --user stop tokens-go-brrr.service
 python3 gnome-shell-extension/devtest/mock_daemon.py "$PWD"
 ```
 
@@ -148,7 +148,7 @@ Now open the popover.
 
 ```bash
 # Ctrl+C the mock, then
-systemctl --user start cursor-spend-monitor.service
+systemctl --user start tokens-go-brrr.service
 ```
 
 ### A9. The mock cycles its messages (a deterministic billboard)
@@ -178,7 +178,7 @@ These reach the same code paths without waiting.
 python3 - <<'PY'
 import json, os
 from datetime import datetime
-p = os.path.expanduser("~/.config/cursor-spend-monitor/config.json")
+p = os.path.expanduser("~/.config/tokens-go-brrr/config.json")
 cfg = json.load(open(p)) if os.path.exists(p) else {}
 cfg["notify_daily_hour"] = datetime.now().hour
 cfg["notify_enabled"] = True
@@ -186,13 +186,13 @@ os.makedirs(os.path.dirname(p), exist_ok=True)
 json.dump(cfg, open(p, "w"), indent=2)
 print("digest hour ->", cfg["notify_daily_hour"])
 PY
-systemctl --user restart cursor-spend-monitor.service
+systemctl --user restart tokens-go-brrr.service
 ```
 
 The daemon checks its schedule every 5 minutes, so within 5 minutes:
 
 - [ ] A desktop notification arrives with the day's digest
-- [ ] `cursor-spend-monitor quote` prints the same text
+- [ ] `tokens-go-brrr quote` prints the same text
 - [ ] Opening the popover lands on it
 
 Put it back when you are done (`"notify_daily_hour": 18`), or delete the key.
@@ -200,9 +200,9 @@ Put it back when you are done (`"notify_daily_hour": 18`), or delete the key.
 ### B2. The weekly and monthly slots
 
 ```bash
-cursor-spend-monitor quote --generate --slot weekly
-cursor-spend-monitor quote --generate --slot daily
-cursor-spend-monitor quote --generate --slot monthly
+tokens-go-brrr quote --generate --slot weekly
+tokens-go-brrr quote --generate --slot daily
+tokens-go-brrr quote --generate --slot monthly
 ```
 
 - [ ] `--slot weekly` writes a weekly digest *and* a fun fact; the command prints
@@ -219,13 +219,13 @@ The event path needs either a meter at 90% or a burn-rate ETA sooner than
 ```bash
 python3 - <<'PY'
 import json, os
-p = os.path.expanduser("~/.config/cursor-spend-monitor/config.json")
+p = os.path.expanduser("~/.config/tokens-go-brrr/config.json")
 cfg = json.load(open(p)) if os.path.exists(p) else {}
 cfg["wind_down_hours"] = 500        # any meter with a computed ETA now qualifies
 json.dump(cfg, open(p, "w"), indent=2)
 print("wind_down_hours ->", cfg["wind_down_hours"])
 PY
-systemctl --user restart cursor-spend-monitor.service
+systemctl --user restart tokens-go-brrr.service
 ```
 
 - [ ] Within a poll or two, a notification arrives naming a provider, its meter
@@ -242,15 +242,15 @@ in A8/A9 instead — its first message is exactly this case.
 ```bash
 python3 - <<'PY'
 import json, os
-p = os.path.expanduser("~/.config/cursor-spend-monitor/config.json")
+p = os.path.expanduser("~/.config/tokens-go-brrr/config.json")
 cfg = json.load(open(p)) if os.path.exists(p) else {}
 cfg["llm_notifications"] = True
 cfg["llm_generator_provider"] = ""     # "" = whichever has the most headroom
 cfg["llm_generator_model"] = ""
 json.dump(cfg, open(p, "w"), indent=2)
 PY
-systemctl --user restart cursor-spend-monitor.service
-cursor-spend-monitor quote --generate --slot weekly     # not LLM-composed: see note
+systemctl --user restart tokens-go-brrr.service
+tokens-go-brrr quote --generate --slot weekly     # not LLM-composed: see note
 ```
 
 **Note:** `quote --generate` writes straight to the ledger and never calls a
@@ -258,14 +258,14 @@ model — the daemon does that, because only the daemon knows the live meters. S
 wait for the next digest (B1), then check **which** wrote it:
 
 ```bash
-cursor-spend-monitor quote --json | grep -o '"composed_by":[^,}]*' || echo "template wrote it"
+tokens-go-brrr quote --json | grep -o '"composed_by":[^,}]*' || echo "template wrote it"
 ```
 
 - [ ] `"composed_by":"claude"` or `"opencode"` → a model wrote it
 - [ ] No such key → the template wrote it, which is a valid outcome, not a failure
 
 - [ ] The wording reads like a sentence about your work, with the same numbers as
-      `cursor-spend-monitor report`
+      `tokens-go-brrr report`
 - [ ] The featured AI still matches the prose
 
 **Expect:** every failure degrades to the template. If you see an error instead of
@@ -274,9 +274,9 @@ a template, that is a real bug.
 ### B5. The ledger, end to end
 
 ```bash
-cursor-spend-monitor harvest            # first run reads everything (~5-10s)
-cursor-spend-monitor harvest            # second run
-cursor-spend-monitor report
+tokens-go-brrr harvest            # first run reads everything (~5-10s)
+tokens-go-brrr harvest            # second run
+tokens-go-brrr report
 ```
 
 - [ ] The first run reports sessions per provider
@@ -287,9 +287,9 @@ cursor-spend-monitor report
       expected — the unit is unverified and recorded rather than guessed)
 
 ```bash
-cursor-spend-monitor report --week --by model
-cursor-spend-monitor report --checks
-cursor-spend-monitor quote --tweet --no-copy    # prints one SHARE: line
+tokens-go-brrr report --week --by model
+tokens-go-brrr report --checks
+tokens-go-brrr quote --tweet --no-copy    # prints one SHARE: line
 ```
 
 ---
@@ -323,12 +323,12 @@ cursor-spend-monitor quote --tweet --no-copy    # prints one SHARE: line
 ### When something looks wrong
 
 ```bash
-systemctl --user status cursor-spend-monitor.service --no-pager | head -5
-journalctl --user -u cursor-spend-monitor.service -n 200 --no-pager
-cursor-spend-monitor report --checks
+systemctl --user status tokens-go-brrr.service --no-pager | head -5
+journalctl --user -u tokens-go-brrr.service -n 200 --no-pager
+tokens-go-brrr report --checks
 
 # what the panel is being told right now
-python3 -c "import json,os;d=json.load(open('/run/user/%d/cursor-spend-monitor/state.json'%os.getuid()));print(json.dumps({k:v for k,v in d.items() if k in ('billboard','latestMessage','error','version')}, indent=2))"
+python3 -c "import json,os;d=json.load(open('/run/user/%d/tokens-go-brrr/state.json'%os.getuid()));print(json.dumps({k:v for k,v in d.items() if k in ('billboard','latestMessage','error','version')}, indent=2))"
 ```
 
 The last one is the most useful: if `billboard` is `null` the daemon has nothing

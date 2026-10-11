@@ -1,4 +1,4 @@
-const { ExtHeader, ExtStats, ExtButton, ExtSection, ExtMeterRow, ExtListRow, ExtFooter, ExtSessionRow, ExtWindowPicker, ExtFilterChips, ExtGuideItem, ProviderIcon } = window.AIUsageDesignSystem_480680;
+const { ExtHeader, ExtStats, ExtButton, ExtSection, ExtMeterRow, ExtListRow, ExtFooter, ExtSessionRow, ExtWindowPicker, ExtFilterChips, ExtGuideItem, ProviderIcon } = window.TokensGoBrrrDesignSystem_480680;
 const byId = (id) => PROVIDERS.find((p) => p.id === id);
 const sessionsOf = (id) => SESSIONS.filter((s) => s.p === id);
 const sessionMeta = (s) => [s.model ? t("session.via", { model: s.model, via: s.via }) : null, s.tty, s.paused ? t("session.paused") : null].filter(Boolean).join(" · ");

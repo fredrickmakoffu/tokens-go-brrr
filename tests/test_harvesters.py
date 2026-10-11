@@ -18,10 +18,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
 
-from cursor_spend_monitor import __main__ as cli
-from cursor_spend_monitor import ledger
-from cursor_spend_monitor.harvesters import build
-from cursor_spend_monitor.harvesters.opencode_db import OpenCodeHarvester
+from tokens_go_brrr import __main__ as cli
+from tokens_go_brrr import ledger
+from tokens_go_brrr.harvesters import build
+from tokens_go_brrr.harvesters.opencode_db import OpenCodeHarvester
 
 # The columns this reader depends on, which is all a test needs: the real table
 # carries more, and a reader that needed them would be reading more than it says.
@@ -323,7 +323,7 @@ class HarvestCliTest(OpenCodeCase):
                 ledger, "connect", side_effect=lambda: real_connect(self.ledger_path)
             ),
             mock.patch(
-                "cursor_spend_monitor.harvesters.build", return_value=[self.reader]
+                "tokens_go_brrr.harvesters.build", return_value=[self.reader]
             ),
             redirect_stdout(out),
         ):

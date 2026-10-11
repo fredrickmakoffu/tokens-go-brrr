@@ -50,7 +50,7 @@ def default_dir() -> Path:
     """Next to `usage.db`, which is where the rest of the user's data lives."""
     data_home = os.environ.get("XDG_DATA_HOME")
     base = Path(data_home) if data_home else Path.home() / ".local" / "share"
-    return base / "cursor-spend-monitor" / "llm-calls"
+    return base / "tokens-go-brrr" / "llm-calls"
 
 
 def scrub(text: Any, *, limit: int = 400) -> str:
