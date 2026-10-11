@@ -286,3 +286,31 @@ class ConfigTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReportTest(LogCase):
+    def test_the_report_lists_every_day_with_model_tokens_and_time(self):
+        self.log.record(
+            {
+                "provider": "claude",
+                "model": "haiku",
+                "outcome": "ok",
+                "trigger": "warm",
+                "latency_ms": 1200,
+                "tokens_in": 1500,
+                "tokens_out": 40,
+                "prompt": "p",
+                "reply": "r",
+            },
+            at=AT,
+        )
+        self.log.record({"outcome": "error", "error": "boom"}, at=AT - timedelta(days=1))
+        path = self.log.write_report()
+        text = path.read_text()
+        self.assertEqual(path.parent, self.root.parent)
+        for needle in ("2026-10-10", "2026-10-09", "09:30:00  OK", "haiku", "1,500", "1,200 ms", "boom"):
+            self.assertIn(needle, text)
+        self.assertLess(text.index("2026-10-10"), text.index("2026-10-09"))
+
+    def test_an_empty_log_still_produces_a_document(self):
+        self.assertIn("No model calls", self.log.report())

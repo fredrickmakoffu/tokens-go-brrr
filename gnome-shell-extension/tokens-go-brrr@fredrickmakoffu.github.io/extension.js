@@ -40,11 +40,7 @@ const IFACE_XML = `
     <method name="Acknowledge">
       <arg type="u" direction="in" name="id"/>
     </method>
-    <method name="LlmLog">
-      <arg type="s" direction="in" name="day"/>
-      <arg type="s" direction="out" name="json"/>
-    </method>
-    <method name="ClearLlmLog"/>
+    <method name="LlmLogReport"><arg type="s" direction="out" name="path"/></method>
     <method name="Quit"/>
     <signal name="StateChanged"><arg type="s" name="json"/></signal>
   </interface>
@@ -662,8 +658,8 @@ const Row = GObject.registerClass(
             const tag = via
                 ? tr("row.via", { via: via.name })
                 : metered
-                  ? tagText(primary?.label)
-                  : "";
+                    ? tagText(primary?.label)
+                    : "";
             if (tag) {
                 nameRow.add_child(
                     label(tag.toUpperCase(), "tokens-go-brrr-tag", {
@@ -885,24 +881,24 @@ function templateText(template) {
         case "warm": {
             const work = p.sessions
                 ? tr("tpl.warm.main", {
-                      n: p.sessions,
-                      hours: p.hours,
-                      tokens: formatTokens(p.tokens),
-                  }) +
-                  (p.project ? tr("tpl.warm.project", { project: p.project }) : "") +
-                  "."
+                    n: p.sessions,
+                    hours: p.hours,
+                    tokens: formatTokens(p.tokens),
+                }) +
+                (p.project ? tr("tpl.warm.project", { project: p.project }) : "") +
+                "."
                 : tr("tpl.warm.none", { hours: p.hours });
             // Usage the meters saw and this machine did not: said first, because
             // it is the part a person could not have known.
             const away = p.elsewhere
                 ? tr("tpl.warm.elsewhere", {
-                      points: p.elsewhere.points,
-                      provider: p.elsewhere.provider,
-                      label: metricLabel(p.elsewhere.label),
-                      time: GLib.DateTime.new_from_unix_local(p.elsewhere.since).format(
-                          "%H:%M",
-                      ),
-                  })
+                    points: p.elsewhere.points,
+                    provider: p.elsewhere.provider,
+                    label: metricLabel(p.elsewhere.label),
+                    time: GLib.DateTime.new_from_unix_local(p.elsewhere.since).format(
+                        "%H:%M",
+                    ),
+                })
                 : "";
             let text = [away, work].filter(Boolean).join(" ");
             if (p.meter)
@@ -959,10 +955,10 @@ function templateText(template) {
             let text = p.spent
                 ? tr("tpl.actionable.spent", vars)
                 : tr("tpl.actionable.at", vars) +
-                  (p.etaSeconds
-                      ? tr("tpl.actionable.eta", { dur: duration(p.etaSeconds) })
-                      : "") +
-                  ".";
+                (p.etaSeconds
+                    ? tr("tpl.actionable.eta", { dur: duration(p.etaSeconds) })
+                    : "") +
+                ".";
             if (p.better) text += tr("tpl.actionable.better", { better: p.better });
             return text;
         }
@@ -1034,8 +1030,6 @@ const Indicator = GObject.registerClass(
             this._screen = "list";
             this._toolId = null;
             this._sessionsFilter = "active"; // 'active' | 'paused' on the sessions screen
-            this._llmLog = null; // the daemon's LLM log payload for the day on screen
-            this._llmOpen = new Set(); // entries expanded on the LLM activity screen
             this._lastSwapped = null;
             this._firstRender = true;
             this._probedMatch = null; // {toolId, project, title} from async pid probe
@@ -1473,7 +1467,6 @@ const Indicator = GObject.registerClass(
             else if (this._screen === "earlier") this._renderEarlier(screen);
             else if (this._screen === "guide") this._renderGuide(screen);
             else if (this._screen === "about") this._renderAbout(screen);
-            else if (this._screen === "llmlog") this._renderLlmLog(screen);
             else this._renderList(screen);
             this.menu.box.add_child(screen);
 
@@ -1728,9 +1721,9 @@ const Indicator = GObject.registerClass(
                 .sort((a, b) => b.value - a.value)[0];
             const tail = others
                 ? ` ${tr("sent.at", {
-                      label: metricLabel(others.label),
-                      pct: Math.round(clampPct(others.value)),
-                  })}`
+                    label: metricLabel(others.label),
+                    pct: Math.round(clampPct(others.value)),
+                })}`
                 : "";
             const label = metricLabel(primary.label);
             let window;
@@ -1738,10 +1731,10 @@ const Indicator = GObject.registerClass(
                 window =
                     primary.resetsSeconds > 0
                         ? tr("sent.atResets", {
-                              label,
-                              pct,
-                              dur: duration(primary.resetsSeconds),
-                          })
+                            label,
+                            pct,
+                            dur: duration(primary.resetsSeconds),
+                        })
                         : tr("sent.atSoon", { label, pct });
             } else {
                 window = tr("sent.at", { label, pct });
@@ -1813,9 +1806,9 @@ const Indicator = GObject.registerClass(
                 session.backend?.model
                     ? session.backend.name
                         ? tr("session.via", {
-                              model: session.backend.model,
-                              via: session.backend.name,
-                          })
+                            model: session.backend.model,
+                            via: session.backend.name,
+                        })
                         : session.backend.model
                     : null,
                 session.tty || null,
@@ -1885,9 +1878,8 @@ const Indicator = GObject.registerClass(
                         ? tr("list.roomy", { name: roomy.t.name })
                         : "",
                     running
-                        ? `${tr("list.agents", { n: running })}${
-                              projects ? ` ${tr("list.projects", { n: projects })}` : ""
-                          }.`
+                        ? `${tr("list.agents", { n: running })}${projects ? ` ${tr("list.projects", { n: projects })}` : ""
+                        }.`
                         : "",
                 ]
                     .filter(Boolean)
@@ -1906,8 +1898,8 @@ const Indicator = GObject.registerClass(
                 const text = this._state
                     ? tr("empty.noProviders")
                     : tr("empty.noDaemon", {
-                          cmd: "systemctl --user start tokens-go-brrr",
-                      });
+                        cmd: "systemctl --user start tokens-go-brrr",
+                    });
                 screen.add_child(wrappedLabel(text, "tokens-go-brrr-empty"));
                 screen.add_child(this._footer("", [], true));
                 return;
@@ -2061,7 +2053,7 @@ const Indicator = GObject.registerClass(
                             cb: () =>
                                 this._openUri(
                                     tool.dashboardUrl ||
-                                        "https://cursor.com/dashboard",
+                                    "https://cursor.com/dashboard",
                                 ),
                         },
                     ],
@@ -2178,9 +2170,9 @@ const Indicator = GObject.registerClass(
             );
             const daemon = this._state
                 ? tr("about.daemon", {
-                      v: this._state.version ?? "?",
-                      ago: relativeTime(this._state.updated_at),
-                  })
+                    v: this._state.version ?? "?",
+                    ago: relativeTime(this._state.updated_at),
+                })
                 : tr("about.daemonDown");
             const section = this._section();
             section.add_child(
@@ -2208,176 +2200,16 @@ const Indicator = GObject.registerClass(
 
         // -- the LLM activity log ----------------------------------------------
 
+        // Like Settings: the log can run to hundreds of calls after a long day,
+        // so the daemon writes it as a text document and the menu opens that.
         _openLlmLog() {
-            this._llmLog = null;
-            this._llmOpen = new Set();
-            this._loadLlmLog("");
-            this._navigate("llmlog");
-        }
-
-        _loadLlmLog(day) {
-            this._ext.fetchLlmLog(day, (data) => {
-                this._llmLog = data ?? { unavailable: true };
-                this._llmOpen = new Set();
-                if (this._screen === "llmlog" && this.menu.isOpen)
-                    this._render(false);
+            this._ext.llmLogReport((path) => {
+                if (!path) {
+                    Main.notify(tr("brand"), tr("llm.unavailable"));
+                    return;
+                }
+                this._openUri(Gio.File.new_for_path(path).get_uri());
             });
-        }
-
-        _renderLlmLog(screen) {
-            const data = this._llmLog;
-            screen.add_child(
-                this._screenHeader({
-                    kicker: tr("llm.kicker"),
-                    title: tr("llm.title"),
-                    sub: tr("llm.sub"),
-                    back: () => this._navigate("about"),
-                }),
-            );
-            const note = (text) => {
-                const box = this._section();
-                box.add_child(label(text, "tokens-go-brrr-sessions-empty"));
-                screen.add_child(box);
-            };
-            if (!data) {
-                note(tr("llm.loading"));
-                return;
-            }
-            if (data.unavailable) {
-                note(tr("llm.unavailable"));
-                return;
-            }
-            if (!data.enabled) {
-                note(tr("llm.off"));
-                return;
-            }
-            if (!data.days?.length) {
-                note(tr("llm.emptyAll"));
-                screen.add_child(this._llmFooter(data));
-                return;
-            }
-
-            // Newest day first in `days`, so "earlier" is the next index.
-            const at = data.days.indexOf(data.day);
-            const earlier = data.days[at + 1];
-            const later = at > 0 ? data.days[at - 1] : undefined;
-            const nav = new St.BoxLayout({
-                style_class: "tokens-go-brrr-sessions-filters",
-                x_expand: true,
-            });
-            const step = (text, day) => {
-                const btn = new St.Button({
-                    style_class: "tokens-go-brrr-filter-chip",
-                    label: text,
-                    can_focus: day !== undefined,
-                    reactive: day !== undefined,
-                    opacity: day !== undefined ? 255 : 90,
-                    accessible_name: text,
-                    y_align: Clutter.ActorAlign.CENTER,
-                });
-                if (day !== undefined)
-                    btn.connect("clicked", () => this._loadLlmLog(day));
-                return btn;
-            };
-            nav.add_child(step("‹", earlier));
-            nav.add_child(
-                label(data.day, "tokens-go-brrr-kicker", {
-                    x_expand: true,
-                    x_align: Clutter.ActorAlign.CENTER,
-                    y_align: Clutter.ActorAlign.CENTER,
-                }),
-            );
-            nav.add_child(step("›", later));
-            screen.add_child(nav);
-
-            const summary = data.summary ?? {};
-            screen.add_child(
-                wrappedLabel(
-                    tr("llm.summary", {
-                        calls: summary.calls ?? 0,
-                        failed: summary.failures ?? 0,
-                        tin: formatTokens(summary.tokens_in ?? 0),
-                        tout: formatTokens(summary.tokens_out ?? 0),
-                    }),
-                    "tokens-go-brrr-hdr-sub",
-                ),
-            );
-
-            const list = this._section();
-            const entries = [...(data.entries ?? [])].reverse();
-            if (!entries.length) {
-                list.add_child(label(tr("llm.empty"), "tokens-go-brrr-sessions-empty"));
-            }
-            entries.forEach((entry, i) => list.add_child(this._llmRow(entry, i)));
-            screen.add_child(list);
-            screen.add_child(this._llmFooter(data));
-        }
-
-        _llmRow(entry, index) {
-            const open = this._llmOpen.has(index);
-            const outcome = String(entry.outcome ?? "");
-            const time = String(entry.ts ?? "").slice(11, 19);
-            const who = [entry.provider, entry.model].filter(Boolean).join(" · ");
-            const bits = [tr(`llm.outcome.${outcome}`)];
-            if (outcome === "skipped" && entry.reason)
-                bits.push(tr("llm.skipped", { reason: entry.reason }));
-            if (entry.latency_ms !== undefined)
-                bits.push(`${entry.latency_ms} ms`);
-            if (entry.tokens_in !== undefined || entry.tokens_out !== undefined)
-                bits.push(
-                    `${formatTokens(entry.tokens_in ?? 0)} → ${formatTokens(entry.tokens_out ?? 0)}`,
-                );
-
-            const row = new St.Button({
-                style_class: "tokens-go-brrr-list-row",
-                can_focus: true,
-                x_expand: true,
-            });
-            const box = new St.BoxLayout({
-                orientation: Clutter.Orientation.VERTICAL,
-                x_expand: true,
-            });
-            box.add_child(
-                label(
-                    [time, entry.trigger].filter(Boolean).join(" · ").toUpperCase(),
-                    "tokens-go-brrr-kicker",
-                ),
-            );
-            box.add_child(wrappedLabel(who || "—", "tokens-go-brrr-list-title"));
-            box.add_child(wrappedLabel(bits.join(" · "), "tokens-go-brrr-sub"));
-            if (open) {
-                const detail = (title, text) => {
-                    if (!text) return;
-                    box.add_child(
-                        label(title.toUpperCase(), "tokens-go-brrr-section-label"),
-                    );
-                    box.add_child(wrappedLabel(String(text), "tokens-go-brrr-guide-desc"));
-                };
-                detail(tr("llm.prompt"), entry.prompt);
-                detail(tr("llm.reply"), entry.reply);
-                detail(tr("llm.error"), entry.error);
-            }
-            row.set_child(box);
-            row.connect("clicked", () => {
-                if (this._llmOpen.has(index)) this._llmOpen.delete(index);
-                else this._llmOpen.add(index);
-                this._render(false);
-            });
-            return row;
-        }
-
-        _llmFooter(data) {
-            return this._footer(
-                tr("llm.where", { dir: data.directory ?? "" }),
-                [
-                    {
-                        label: tr("llm.clear"),
-                        cb: () =>
-                            this._ext.clearLlmLog(() => this._loadLlmLog("")),
-                    },
-                ],
-                false,
-            );
         }
 
         // -- the landing page and the insights behind it -----------------------
@@ -2694,57 +2526,32 @@ export default class TokensGoBrrrExtension extends Extension {
     }
 
     refresh() {
-        if (this._proxy?.g_name_owner) this._proxy.RefreshRemote(() => {});
+        if (this._proxy?.g_name_owner) this._proxy.RefreshRemote(() => { });
     }
 
     setPrimary(providerId, metricKey) {
         if (this._proxy?.g_name_owner)
-            this._proxy.SetPrimaryRemote(providerId, metricKey, () => {});
+            this._proxy.SetPrimaryRemote(providerId, metricKey, () => { });
     }
 
-    // The LLM log is read through the daemon, never from its files. Defensive
-    // for the same reason as acknowledge(): an older daemon has no such method,
-    // and the screen should say so instead of breaking.
-    fetchLlmLog(day, callback) {
+    // The daemon writes the LLM log to a text file and tells us where. Defensive
+    // like acknowledge(): an older daemon has no such method, so say so instead
+    // of breaking.
+    llmLogReport(callback) {
         if (
             !this._proxy?.g_name_owner ||
-            typeof this._proxy.LlmLogRemote !== "function"
+            typeof this._proxy.LlmLogReportRemote !== "function"
         ) {
-            callback(null);
+            callback("");
             return;
         }
         try {
-            this._proxy.LlmLogRemote(day, (result, error) => {
-                if (error) {
-                    callback(null);
-                    return;
-                }
-                try {
-                    callback(JSON.parse(result[0]));
-                } catch (e) {
-                    console.error(`[tokens-go-brrr] bad LLM log payload: ${e.message}`);
-                    callback(null);
-                }
-            });
+            this._proxy.LlmLogReportRemote((result, error) =>
+                callback(error ? "" : String(result?.[0] ?? "")),
+            );
         } catch (e) {
-            console.error(`[tokens-go-brrr] LLM log failed: ${e.message}`);
-            callback(null);
-        }
-    }
-
-    clearLlmLog(callback) {
-        if (
-            !this._proxy?.g_name_owner ||
-            typeof this._proxy.ClearLlmLogRemote !== "function"
-        ) {
-            callback();
-            return;
-        }
-        try {
-            this._proxy.ClearLlmLogRemote(() => callback());
-        } catch (e) {
-            console.error(`[tokens-go-brrr] clearing the LLM log failed: ${e.message}`);
-            callback();
+            console.error(`[tokens-go-brrr] LLM log report failed: ${e.message}`);
+            callback("");
         }
     }
 
@@ -2757,7 +2564,7 @@ export default class TokensGoBrrrExtension extends Extension {
         if (!this._proxy?.g_name_owner) return;
         if (typeof this._proxy.AcknowledgeRemote !== "function") return;
         try {
-            this._proxy.AcknowledgeRemote(messageId, () => {});
+            this._proxy.AcknowledgeRemote(messageId, () => { });
         } catch (e) {
             console.error(`[tokens-go-brrr] acknowledge failed: ${e.message}`);
         }

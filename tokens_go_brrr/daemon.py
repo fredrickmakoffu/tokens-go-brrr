@@ -133,6 +133,7 @@ class UsageDaemon:
             on_acknowledge=self.acknowledge,
             on_llm_log=self.llm_log_payload,
             on_llm_log_clear=self.llm_log_clear,
+            on_llm_log_report=self.llm_log_report,
             on_quit=self.quit,
             on_name_lost=self._name_lost,
         )
@@ -791,6 +792,14 @@ class UsageDaemon:
     def llm_log_payload(self, day: str = "") -> dict[str, Any]:
         """One day of the LLM log for the Settings screen; newest day if none."""
         return self.llm_log.payload(day or None)
+
+    def llm_log_report(self) -> str:
+        """Write the whole log as a text document and return where it is."""
+        try:
+            return str(self.llm_log.write_report())
+        except OSError as exc:
+            print(f"LLM log: could not write the report: {exc}", file=sys.stderr)
+            return ""
 
     def llm_log_clear(self) -> None:
         self.llm_log.clear()
