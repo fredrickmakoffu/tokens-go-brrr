@@ -36,6 +36,11 @@ INTERFACE_XML = """
     </method>
     <method name="ClearLlmLog"/>
     <method name="LlmLogReport"><arg type="s" direction="out" name="path"/></method>
+    <method name="InstallUpdate"/>
+    <method name="RestartDaemon"/>
+    <method name="SkipUpdate">
+      <arg type="s" direction="in" name="version"/>
+    </method>
     <method name="Quit"/>
     <signal name="StateChanged"><arg type="s" name="json"/></signal>
   </interface>
@@ -60,12 +65,18 @@ class UsageService:
         on_llm_log_clear: Callable[[], None] | None = None,
         on_llm_log_report: Callable[[], str] | None = None,
         on_set_provider_enabled: Callable[[str, bool], None] | None = None,
+        on_install_update: Callable[[], None] | None = None,
+        on_restart: Callable[[], None] | None = None,
+        on_skip_update: Callable[[str], None] | None = None,
     ) -> None:
         self._version = version
         self._get_state = get_state
         self._on_refresh = on_refresh
         self._on_set_primary = on_set_primary
         self._on_set_provider_enabled = on_set_provider_enabled
+        self._on_install_update = on_install_update
+        self._on_restart = on_restart
+        self._on_skip_update = on_skip_update
         self._on_acknowledge = on_acknowledge
         self._on_quit = on_quit
         self._on_llm_log = on_llm_log
@@ -128,6 +139,20 @@ class UsageService:
             # The report is written by the daemon; the extension only opens it.
             path = self._on_llm_log_report() if self._on_llm_log_report else ""
             invocation.return_value(GLib.Variant("(s)", (path,)))
+        elif method == "InstallUpdate":
+            # Returns at once; progress is published through the state.
+            invocation.return_value(None)
+            if self._on_install_update:
+                GLib.idle_add(self._on_install_update)
+        elif method == "RestartDaemon":
+            invocation.return_value(None)
+            if self._on_restart:
+                GLib.idle_add(self._on_restart)
+        elif method == "SkipUpdate":
+            (version,) = params.unpack()
+            if self._on_skip_update:
+                self._on_skip_update(str(version))
+            invocation.return_value(None)
         elif method == "Quit":
             invocation.return_value(None)
             GLib.idle_add(self._on_quit)
