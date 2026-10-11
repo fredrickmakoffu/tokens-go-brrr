@@ -20,7 +20,7 @@ if (billboard && billboard.id !== this._landingShownId) showLandingPage(billboar
 
 - Prefer **data not sentences** over the wire: `resetsSeconds`, `template: {id, params}`. English `text` remains for CLI / LLM rewrite.
 - New user-visible strings: add keys to **all** catalogs in `locales.js` (en, fr, pt-BR) and a `templateText` case when adding a `tpl.*`.
-- Locale override env is still `AI_USAGE_LANG` (legacy name — do not rename without a migration plan).
+- Locale override: prefer `TOKENS_GO_BRRR_LANG`; `AI_USAGE_LANG` remains a legacy alias.
 - Keep `metadata.version` (integer) stable for GNOME hot-reload; bump `version-name` with semver via `scripts/bump_version.py`.
 - D-Bus `IFACE_XML` must match `tokens_go_brrr/dbus_service.py`. Update both in the same change.
 

@@ -21,5 +21,6 @@ if [ -d "$PKG/usr/local" ]; then
 fi
 
 sed "s/@VERSION@/$VER/" /src/packaging/deb/control.in > "$PKG/DEBIAN/control"
+install -m 0644 /src/packaging/deb/copyright "$PKG/DEBIAN/copyright"
 install -m 0755 /src/packaging/deb/postinst "$PKG/DEBIAN/postinst"
 dpkg-deb --root-owner-group --build "$PKG" "/out/tokens-go-brrr_${VER}_all.deb" >/dev/null

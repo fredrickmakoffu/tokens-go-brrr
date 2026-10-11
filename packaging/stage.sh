@@ -22,6 +22,7 @@ rm -rf "$DEST/usr/share/gnome-shell/extensions/$UUID/fonts"
 
 # Always present (possibly empty) so the RPM file list is never empty.
 install -d "$DEST/usr/share/licenses/tokens-go-brrr"
+install -m 0644 "$ROOT/LICENSE" "$DEST/usr/share/licenses/tokens-go-brrr/LICENSE"
 
 # Barlow, the design system's typeface (SIL OFL).
 if compgen -G "$EXT_SRC/fonts/*.ttf" >/dev/null; then

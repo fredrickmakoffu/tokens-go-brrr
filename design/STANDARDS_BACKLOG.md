@@ -27,7 +27,7 @@
 | B20 | Split CLI `__main__` | 6d | P3 | done |
 | B21 | Locale + contrast in CI | 7 | P1 | done |
 | B22 | Extension README schema sample | 7 | P1 | done |
-| B23 | LICENSE decision | — | P2 | open |
-| B24 | Rename `AI_USAGE_LANG` | — | P3 | open |
+| B23 | LICENSE decision | — | P2 | done |
+| B24 | Rename `AI_USAGE_LANG` | — | P3 | done |
 
-P0/P1 items are closed. B23–B24 remain out-of-band (legal + env migration).
+All tracked items closed. Prefer `TOKENS_GO_BRRR_LANG`; `AI_USAGE_LANG` remains a legacy alias.

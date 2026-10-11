@@ -215,7 +215,8 @@ the usual case: the list is already up from last time.
 
 The popover speaks English, French and Brazilian Portuguese, picked from the
 session's locale (`LANGUAGE`, `LC_ALL`, `LC_MESSAGES`, `LANG`, in GLib's order);
-anything else is English. `AI_USAGE_LANG=fr` forces one, for screenshots.
+anything else is English. `TOKENS_GO_BRRR_LANG=fr` forces one, for screenshots
+(`AI_USAGE_LANG` still works as a legacy alias).
 
 Strings live in `locales.js` and are looked up by `tr("key", {vars})` from
 `i18n.js`. It is a plain JS catalog rather than gettext, so the rpm and deb need
@@ -234,7 +235,8 @@ falls back to its English labels.
 
 Dates ("Tue 6 Oct") come from GLib and follow the session's `LC_TIME`.
 
-Run the layout walk in another language with `AI_USAGE_LANG=fr .../layout-smoke.sh`.
+Run the layout walk in another language with
+`TOKENS_GO_BRRR_LANG=fr .../layout-smoke.sh`.
 
 ## Light and dark
 
