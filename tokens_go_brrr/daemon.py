@@ -1008,9 +1008,7 @@ class UsageDaemon:
         self._specs = {
             provider.id: list(getattr(provider, "process_specs", [])) for provider in self.providers
         }
-        kept = {
-            pid: report for pid, report in self._instances.items() if pid in self._specs
-        }
+        kept = {pid: report for pid, report in self._instances.items() if pid in self._specs}
         for provider_id in self._specs:
             kept.setdefault(provider_id, InstanceReport())
         self._instances = kept
