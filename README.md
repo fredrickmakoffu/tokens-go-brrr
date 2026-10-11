@@ -421,3 +421,8 @@ no prompt history, no file contents.
 > provider (`claude-haiku-4-5`, `deepseek-v4-flash`) and have not been verified
 > against the live services. A wrong id is not fatal — the provider refuses and
 > the template is used — but set `llm_generator_model` to pin a specific one.
+
+## License
+
+Application code is [MIT](LICENSE). Bundled Barlow fonts are SIL OFL-1.1
+(`gnome-shell-extension/.../fonts/OFL.txt`).
