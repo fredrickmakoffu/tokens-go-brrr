@@ -81,6 +81,9 @@ class MonitorConfig:
     enabled_providers: list[str] = field(default_factory=lambda: list(DEFAULT_PROVIDERS))
     # provider_id → preferred primary metric key (chip swap)
     primary_overrides: dict[str, str] = field(default_factory=dict)
+    # Panel look: auto follows the DE color-scheme; dark/light force the product palette.
+    ui_theme: str = "auto"
+    ui_density: str = "default"
 
     @classmethod
     def load(cls) -> MonitorConfig:
@@ -141,6 +144,8 @@ class MonitorConfig:
             primary_alerts=[_as_int(x, 0) for x in (alerts or DEFAULT_PRIMARY_ALERTS)],
             enabled_providers=list(data.get("enabled_providers") or DEFAULT_PROVIDERS),
             primary_overrides=dict(data.get("primary_overrides") or {}),
+            ui_theme=_ui_theme(data.get("ui_theme")),
+            ui_density=str(data.get("ui_density") or "default") or "default",
         )
 
     def save(self) -> None:
@@ -179,6 +184,8 @@ class MonitorConfig:
             "primary_alerts": self.primary_alerts,
             "enabled_providers": self.enabled_providers,
             "primary_overrides": self.primary_overrides,
+            "ui_theme": self.ui_theme,
+            "ui_density": self.ui_density,
         }
         CONFIG_FILE.write_text(json.dumps(payload, indent=2) + "\n")
         CONFIG_FILE.chmod(0o600)
@@ -212,6 +219,11 @@ class MonitorConfig:
         self.enabled_providers = current
         self.save()
         return True
+
+
+def _ui_theme(value: Any) -> str:
+    theme = str(value or "auto").strip().lower()
+    return theme if theme in ("auto", "dark", "light") else "auto"
 
 
 def write_state(state: dict[str, Any]) -> None:
