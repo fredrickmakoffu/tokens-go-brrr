@@ -3,11 +3,10 @@ Version: @VERSION@
 Section: utils
 Priority: optional
 Architecture: all
-Depends: python3 (>= 3.11), python3-gi, gir1.2-notify-0.7, libnotify-bin, gnome-shell
+Depends: python3 (>= 3.11), python3-gi, gir1.2-notify-0.7, libnotify-bin
 Maintainer: Fredrick Makoffu <42011427+fredrickmakoffu@users.noreply.github.com>
 Homepage: https://github.com/fredrickmakoffu/cursor-spend-monitor
-Description: AI coding usage limits in the GNOME top bar
- A daemon that tracks usage limits for AI coding tools (Cursor, Claude Code,
- OpenCode, Codex, Pi) and a GNOME Shell extension that shows them as a status
- dot in the top bar. Log out and back in after installing so GNOME Shell loads
- the extension, then run `tokens-go-brrr setup`.
+Description: Daemon and CLI for AI coding usage limits
+ A local daemon and CLI that track usage limits for AI coding tools (Cursor,
+ Claude Code, OpenCode, Codex, Pi). Install tokens-go-brrr-gnome or
+ tokens-go-brrr-plasma for a panel UI. Run `tokens-go-brrr setup` after install.

@@ -1,0 +1,11 @@
+Package: tokens-go-brrr-gnome
+Version: @VERSION@
+Section: gnome
+Priority: optional
+Architecture: all
+Depends: tokens-go-brrr (= @VERSION@), gnome-shell
+Maintainer: Fredrick Makoffu <42011427+fredrickmakoffu@users.noreply.github.com>
+Homepage: https://github.com/fredrickmakoffu/cursor-spend-monitor
+Description: GNOME Shell extension for tokens-go-brrr
+ Shows AI coding usage limits as a status dot in the GNOME top bar. Log out and
+ back in after installing so GNOME Shell loads the extension.
