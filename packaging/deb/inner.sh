@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs inside the debian container. /src is the repo (read-only), /out receives the .deb.
+# Runs inside the debian container. /src is the repo (read-only), /out receives the .deb files.
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq >/dev/null
@@ -9,18 +9,30 @@ VER="$(python3 /src/scripts/bump_version.py --print)"
 WORK="$(mktemp -d)"
 cp -r /src "$WORK/src"
 rm -rf "$WORK/src/.git" "$WORK/src/build" "$WORK/src/dist" "$WORK"/src/*.egg-info
-PKG="$WORK/pkg"; mkdir -p "$PKG/DEBIAN"
 
-"$WORK/src/packaging/stage.sh" "$PKG"
+fold_usr_local() {
+  local PKG="$1"
+  if [ -d "$PKG/usr/local" ]; then
+    cp -a "$PKG/usr/local/." "$PKG/usr/"
+    rm -rf "$PKG/usr/local"
+  fi
+}
 
-# Debian's pip redirects root installs to /usr/local (dist-packages). Packages
-# must own /usr, so fold it back; dist-packages is already the right dir name.
-if [ -d "$PKG/usr/local" ]; then
-  cp -a "$PKG/usr/local/." "$PKG/usr/"
-  rm -rf "$PKG/usr/local"
-fi
+build_one() {
+  local COMP="$1" CONTROL_IN="$2" OUT_NAME="$3" POSTINST="${4:-}"
+  local PKG="$WORK/pkg-$COMP"
+  rm -rf "$PKG"
+  mkdir -p "$PKG/DEBIAN"
+  "$WORK/src/packaging/stage.sh" "$PKG" "$COMP"
+  fold_usr_local "$PKG"
+  sed "s/@VERSION@/$VER/g" "/src/packaging/deb/$CONTROL_IN" > "$PKG/DEBIAN/control"
+  install -m 0644 /src/packaging/deb/copyright "$PKG/DEBIAN/copyright"
+  if [ -n "$POSTINST" ]; then
+    install -m 0755 "/src/packaging/deb/$POSTINST" "$PKG/DEBIAN/postinst"
+  fi
+  dpkg-deb --root-owner-group --build "$PKG" "/out/$OUT_NAME" >/dev/null
+}
 
-sed "s/@VERSION@/$VER/" /src/packaging/deb/control.in > "$PKG/DEBIAN/control"
-install -m 0644 /src/packaging/deb/copyright "$PKG/DEBIAN/copyright"
-install -m 0755 /src/packaging/deb/postinst "$PKG/DEBIAN/postinst"
-dpkg-deb --root-owner-group --build "$PKG" "/out/tokens-go-brrr_${VER}_all.deb" >/dev/null
+build_one daemon control.in "tokens-go-brrr_${VER}_all.deb" postinst
+build_one gnome control-gnome.in "tokens-go-brrr-gnome_${VER}_all.deb"
+build_one plasma control-plasma.in "tokens-go-brrr-plasma_${VER}_all.deb"

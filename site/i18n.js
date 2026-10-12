@@ -105,14 +105,19 @@
     // downloads
     "dl.kind.rpm": "RPM · GNOME",
     "dl.kind.deb": "DEB · GNOME",
+    "dl.kind.rpmGnome": "RPM · daemon + GNOME",
+    "dl.kind.rpmPlasma": "RPM · daemon + Plasma",
+    "dl.kind.debGnome": "DEB · daemon + GNOME",
+    "dl.kind.debPlasma": "DEB · daemon + Plasma",
     "dl.kind.installer": "Installer",
     "dl.kind.dmg": "Disk image",
     "dl.soon": "Coming soon",
     "dl.button": "Download {ext}",
+    "dl.buttonPair": "Download packages",
     "dl.checksum": "Checksum (SHA-256)",
     "dl.checksumFallback": "Listed in SHA256SUMS on the release page.",
     "dl.then1": "Then · 1",
-    "dl.then1.text": "Log out and back in. GNOME Shell loads the extension at login.",
+    "dl.then1.text": "GNOME: log out and back in. Plasma: add the tokens-go-brrr widget to a panel if needed.",
     "dl.then2": "Then · 2",
     "copy.copy": "Copy",
     "copy.copied": "Copied −4k",
@@ -816,7 +821,11 @@
 
   var CATALOGS = { en: en, fr: fr, "pt-BR": pt };
   // Strings that are the same in every locale are written once, in English.
-  ["dl.kind.rpm", "dl.kind.deb"].forEach(function (k) { fr[k] = pt[k] = en[k]; });
+  ["dl.kind.rpm", "dl.kind.deb", "dl.kind.rpmGnome", "dl.kind.rpmPlasma", "dl.kind.debGnome", "dl.kind.debPlasma"].forEach(function (k) { fr[k] = pt[k] = en[k]; });
+  fr["dl.buttonPair"] = "Télécharger les paquets";
+  pt["dl.buttonPair"] = "Baixar pacotes";
+  fr["dl.then1.text"] = "GNOME : déconnectez-vous puis reconnectez-vous. Plasma : ajoutez le widget tokens-go-brrr au panneau si besoin.";
+  pt["dl.then1.text"] = "GNOME: saia da sessão e entre de novo. Plasma: adicione o widget tokens-go-brrr ao painel se precisar.";
 
   var current = "en";
   var listeners = [];

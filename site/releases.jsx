@@ -1,16 +1,42 @@
 const REL_REPO = "fredrickmakoffu/tokens-go-brrr-releases";
 const REL_URL = "https://github.com/" + REL_REPO + "/releases";
 const PLATFORMS = [
-  { id: "fedora", name: "Fedora", kindKey: "dl.kind.rpm", ext: ".rpm", cmd: (f) => "sudo dnf install ./" + f },
-  { id: "debian", name: "Debian / Ubuntu", kindKey: "dl.kind.deb", ext: ".deb", cmd: (f) => "sudo apt install ./" + f },
+  {
+    id: "fedora-gnome", name: "Fedora · GNOME", kindKey: "dl.kind.rpmGnome",
+    match: (n) => /tokens-go-brrr-\d.*\.rpm$/.test(n) && !/-gnome-|-plasma-/.test(n),
+    uiMatch: (n) => /tokens-go-brrr-gnome-/.test(n),
+    cmd: (core, ui) => "sudo dnf install ./" + core + " ./" + ui,
+  },
+  {
+    id: "fedora-plasma", name: "Fedora · Plasma", kindKey: "dl.kind.rpmPlasma",
+    match: (n) => /tokens-go-brrr-\d.*\.rpm$/.test(n) && !/-gnome-|-plasma-/.test(n),
+    uiMatch: (n) => /tokens-go-brrr-plasma-/.test(n),
+    cmd: (core, ui) => "sudo dnf install ./" + core + " ./" + ui,
+  },
+  {
+    id: "debian-gnome", name: "Debian · GNOME", kindKey: "dl.kind.debGnome",
+    match: (n) => /tokens-go-brrr_\d.*_all\.deb$/.test(n) && !/-gnome_|-plasma_/.test(n),
+    uiMatch: (n) => /tokens-go-brrr-gnome_/.test(n),
+    cmd: (core, ui) => "sudo apt install ./" + core + " ./" + ui,
+  },
+  {
+    id: "debian-plasma", name: "Debian · Plasma", kindKey: "dl.kind.debPlasma",
+    match: (n) => /tokens-go-brrr_\d.*_all\.deb$/.test(n) && !/-gnome_|-plasma_/.test(n),
+    uiMatch: (n) => /tokens-go-brrr-plasma_/.test(n),
+    cmd: (core, ui) => "sudo apt install ./" + core + " ./" + ui,
+  },
   { id: "windows", name: "Windows", kindKey: "dl.kind.installer" },
   { id: "macos", name: "macOS", kindKey: "dl.kind.dmg" },
 ];
 const FALLBACK_RELEASES = [{
-  tag: "v0.6.1", date: "2026-10-09", url: REL_URL + "/tag/v0.6.1", notes: [],
+  tag: "v0.7.0", date: "2026-10-12", url: REL_URL + "/tag/v0.7.0", notes: [],
   assets: [
-    { name: "tokens-go-brrr-0.6.1-1.fc44.noarch.rpm", size: 257000, url: REL_URL + "/download/v0.6.1/tokens-go-brrr-0.6.1-1.fc44.noarch.rpm", sha: null },
-    { name: "tokens-go-brrr_0.6.1_all.deb", size: 106000, url: REL_URL + "/download/v0.6.1/tokens-go-brrr_0.6.1_all.deb", sha: null },
+    { name: "tokens-go-brrr-0.7.0-1.fc44.noarch.rpm", size: 200000, url: REL_URL + "/download/v0.7.0/tokens-go-brrr-0.7.0-1.fc44.noarch.rpm", sha: null },
+    { name: "tokens-go-brrr-gnome-0.7.0-1.fc44.noarch.rpm", size: 80000, url: REL_URL + "/download/v0.7.0/tokens-go-brrr-gnome-0.7.0-1.fc44.noarch.rpm", sha: null },
+    { name: "tokens-go-brrr-plasma-0.7.0-1.fc44.noarch.rpm", size: 40000, url: REL_URL + "/download/v0.7.0/tokens-go-brrr-plasma-0.7.0-1.fc44.noarch.rpm", sha: null },
+    { name: "tokens-go-brrr_0.7.0_all.deb", size: 90000, url: REL_URL + "/download/v0.7.0/tokens-go-brrr_0.7.0_all.deb", sha: null },
+    { name: "tokens-go-brrr-gnome_0.7.0_all.deb", size: 70000, url: REL_URL + "/download/v0.7.0/tokens-go-brrr-gnome_0.7.0_all.deb", sha: null },
+    { name: "tokens-go-brrr-plasma_0.7.0_all.deb", size: 35000, url: REL_URL + "/download/v0.7.0/tokens-go-brrr-plasma_0.7.0_all.deb", sha: null },
   ],
 }];
 const fmtSize = (b) => b >= 1e6 ? I18N.num(b / 1e6, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " MB" : Math.round(b / 1000) + " KB";
@@ -43,23 +69,24 @@ function CopyLine({ text, b, dense }) {
   );
 }
 
-function PlatformCard({ p, asset, b }) {
+function PlatformCard({ p, core, ui, b }) {
   const [sha, setSha] = React.useState(false);
-  const soon = !asset;
+  const soon = !core || (p.uiMatch && !ui);
+  const size = (core ? core.size : 0) + (ui ? ui.size : 0);
   return (
     <div className="blueprint" style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14, minWidth: 0, opacity: soon ? 0.75 : 1 }}>
       <Corners />
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         <span style={{ ...HEAD, fontSize: 24, textTransform: "uppercase", letterSpacing: "0.02em" }}>{p.name}</span>
-        <span style={{ fontSize: 13, color: "var(--muted)" }}>{t(p.kindKey) + (asset ? " · " + fmtSize(asset.size) : "")}</span>
+        <span style={{ fontSize: 13, color: "var(--muted)" }}>{t(p.kindKey) + (!soon ? " · " + fmtSize(size) : "")}</span>
       </div>
       {soon ? (
         <div style={{ border: "1px dashed var(--color-divider)", padding: "11px 12px", textAlign: "center", fontSize: 14, fontWeight: 600, color: "var(--muted)" }}>{t("dl.soon")}</div>
       ) : (<>
-        <ExtButton variant="primary" block label={t("dl.button", { ext: p.ext })} onClick={() => window.open(asset.url, "_blank")} />
-        <CopyLine text={p.cmd(asset.name)} b={b} dense />
+        <ExtButton variant="primary" block label={t("dl.buttonPair")} onClick={() => { window.open(core.url, "_blank"); if (ui) window.open(ui.url, "_blank"); }} />
+        <CopyLine text={p.cmd(core.name, ui.name)} b={b} dense />
         <button onClick={() => setSha(!sha)} style={{ alignSelf: "flex-start", border: 0, background: "transparent", padding: 0, cursor: "pointer", fontSize: 13, color: "var(--muted)", fontFamily: "var(--font-body)" }}>{(sha ? "▾ " : "▸ ") + t("dl.checksum")}</button>
-        {sha && <code style={{ ...MONO, fontSize: 12, overflowWrap: "anywhere", color: "var(--muted)", marginTop: -6 }}>{asset.sha || t("dl.checksumFallback")}</code>}
+        {sha && <code style={{ ...MONO, fontSize: 12, overflowWrap: "anywhere", color: "var(--muted)", marginTop: -6 }}>{[core.sha, ui && ui.sha].filter(Boolean).join("\n") || t("dl.checksumFallback")}</code>}
       </>)}
     </div>
   );
@@ -67,11 +94,14 @@ function PlatformCard({ p, asset, b }) {
 
 function Downloads({ b, rel }) {
   const r = rel.latest;
-  const find = (ext) => ext && r.assets.find((a) => a.name.endsWith(ext));
+  const pick = (pred) => r.assets.find((a) => pred(a.name));
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 16 }}>
-        {PLATFORMS.map((p) => <PlatformCard key={p.id} p={p} asset={find(p.ext)} b={b} />)}
+        {PLATFORMS.map((p) => {
+          if (!p.match) return <PlatformCard key={p.id} p={p} core={null} ui={null} b={b} />;
+          return <PlatformCard key={p.id} p={p} core={pick(p.match)} ui={p.uiMatch ? pick(p.uiMatch) : null} b={b} />;
+        })}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: "1px solid var(--color-divider)", paddingTop: 12 }}>
