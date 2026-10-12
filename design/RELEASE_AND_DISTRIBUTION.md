@@ -4,17 +4,22 @@ How a change travels from a feature branch to an installable on a download page.
 
 ## Platform reality
 
-Only the Linux/GNOME build exists. The UI is a GNOME Shell extension talking to the
-daemon over D-Bus, supervised by a systemd user unit. Windows and macOS are not a
-repackaging job: they need a tray/menu-bar client and a non-D-Bus transport
-(localhost HTTP/JSON on the daemon). Plan for that as its own piece of work.
+Linux ships a split package set (see `PLASMA_AND_PACKAGING.md`): `tokens-go-brrr`
+(daemon/CLI) plus optional `tokens-go-brrr-gnome` / `tokens-go-brrr-plasma`, same
+D-Bus contract. Core does not require `gnome-shell` or Plasma. Install detects
+the session (`install.sh --ui=`) so GNOME machines never get Plasma packages and
+vice versa.
 
-| Layer | Linux | Windows | macOS |
-|---|---|---|---|
-| Core daemon (pure Python) | shared | shared | shared |
-| Transport to UI | D-Bus | localhost HTTP | localhost HTTP |
-| UI | GNOME extension | tray app | menu-bar app |
-| Autostart | systemd user unit | Task Scheduler / Startup | launchd agent |
+Windows and macOS are not a repackaging job: they need a tray/menu-bar client and
+a non-D-Bus transport (localhost HTTP/JSON on the daemon). Plan for that as its
+own piece of work.
+
+| Layer | Linux (today) | Linux (planned) | Windows | macOS |
+|---|---|---|---|---|
+| Core daemon (pure Python) | shared | shared | shared | shared |
+| Transport to UI | D-Bus | D-Bus | localhost HTTP | localhost HTTP |
+| UI | GNOME extension | GNOME and/or Plasma | tray app | menu-bar app |
+| Autostart | systemd user unit | systemd user unit | Task Scheduler / Startup | launchd agent |
 
 ## Branches
 
@@ -55,12 +60,15 @@ make packages   # both, plus SHA256SUMS and manifest.json
 ```
 
 `packaging/stage.sh` lays the files out once (FHS paths); the RPM spec and the DEB
-builder both call it so the packages cannot drift.
+builder both call it so the packages cannot drift. Planned: split staging into
+daemon / gnome / plasma (`PLASMA_AND_PACKAGING.md` §3) so each artifact owns one
+row of the matrix.
 
 | Installed to | What |
 |---|---|
 | `/usr/bin/tokens-go-brrr`, Python site/dist-packages | daemon + CLI |
-| `/usr/share/gnome-shell/extensions/<uuid>/` | GNOME extension |
+| `/usr/share/gnome-shell/extensions/<uuid>/` | GNOME extension (today in the same package; planned `-gnome`) |
+| `/usr/share/plasma/plasmoids/<id>/` | Plasma plasmoid (planned `-plasma`) |
 | `/usr/lib/systemd/user/tokens-go-brrr.service` | user unit |
 | `/usr/share/fonts/tokens-go-brrr/` | Barlow (SIL OFL) |
 

@@ -2,8 +2,9 @@
 """Keep the project's version in one place.
 
 pyproject.toml is the source of truth. This script rewrites the other places
-that carry a copy (the package's __version__ and the GNOME extension's
-metadata.json `version-name`) and can check that they agree.
+that carry a copy (the package's __version__, the GNOME extension's
+metadata.json `version-name`, and the Plasma plasmoid Version) and can check
+that they agree.
 
     scripts/bump_version.py 0.6.0     # set everywhere
     scripts/bump_version.py --check   # exit 1 if the copies disagree
@@ -24,18 +25,29 @@ INIT = ROOT / "tokens_go_brrr" / "__init__.py"
 METADATA = (
     ROOT / "gnome-shell-extension" / "tokens-go-brrr@fredrickmakoffu.github.io" / "metadata.json"
 )
+PLASMA_META = ROOT / "plasma" / "org.tokensgobrrr.panel" / "metadata.json"
 
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 PYPROJECT_RE = re.compile(r'^(version\s*=\s*)"([^"]+)"', re.M)
 INIT_RE = re.compile(r'^(__version__\s*=\s*)"([^"]+)"', re.M)
 
 
+def _plasma_version() -> str:
+    if not PLASMA_META.exists():
+        return ""
+    data = json.loads(PLASMA_META.read_text())
+    return str(data.get("KPlugin", {}).get("Version") or "")
+
+
 def read_versions() -> dict[str, str]:
-    return {
+    versions = {
         "pyproject.toml": PYPROJECT_RE.search(PYPROJECT.read_text()).group(2),
         "__init__.py": INIT_RE.search(INIT.read_text()).group(2),
         "metadata.json": json.loads(METADATA.read_text()).get("version-name", ""),
     }
+    if PLASMA_META.exists():
+        versions["plasma/metadata.json"] = _plasma_version()
+    return versions
 
 
 def set_version(version: str) -> None:
@@ -50,6 +62,15 @@ def set_version(version: str) -> None:
             r'(\n\s*)("version"\s*:\s*\d+)', rf'\g<1>\g<2>,\g<1>"version-name": "{version}"', text
         )
     METADATA.write_text(text)
+    if PLASMA_META.exists():
+        ptext = PLASMA_META.read_text()
+        ptext = re.sub(
+            r'("Version"\s*:\s*)"[^"]*"',
+            rf'\g<1>"{version}"',
+            ptext,
+            count=1,
+        )
+        PLASMA_META.write_text(ptext)
 
 
 def main() -> int:
