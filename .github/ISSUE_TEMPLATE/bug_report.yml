@@ -1,0 +1,48 @@
+name: Bug report
+description: Something is wrong, missing or out of date
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Security problems do not go here. See SECURITY.md.
+        Do not paste tokens, API keys or the contents of credential files.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Shown in the panel's About screen.
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Distro and desktop
+      placeholder: Fedora 44, GNOME 49 (or Plasma 6.x)
+    validations:
+      required: true
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Provider involved
+      options: [Cursor, Claude Code, OpenCode, Codex, Pi, Not provider specific]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: status
+    attributes:
+      label: Output of `tokens-go-brrr status --json`
+      description: This payload contains no credentials. Check it before posting anyway.
+      render: json
+  - type: textarea
+    id: logs
+    attributes:
+      label: Daemon log
+      description: "`journalctl --user -u tokens-go-brrr.service -n 100`"
+      render: text

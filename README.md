@@ -1,7 +1,12 @@
 # tokens-go-brrr
 
-GNOME Shell indicator for AI coding limits, plus a small daemon that fetches them.
-Cursor, Claude Code, OpenCode and Pi are all live.
+Panel indicator for AI coding limits, plus a small daemon that fetches them. It shows
+a GNOME Shell extension or a Plasma widget, and tracks Cursor, Claude Code, OpenCode,
+Codex and Pi.
+
+This is an independent project. It is not made by, affiliated with or endorsed by
+Anthropic, OpenAI, Anysphere (Cursor), OpenCode or Pi. Their names and logos belong to
+them and appear only to say which service a meter is for.
 
 ## What you see
 
@@ -121,7 +126,10 @@ that starts and exits between ticks cannot make the panel flicker.
 
 No browser cookies and no scraping. Each provider reuses a login that is already on disk.
 
-**Cursor** reads the IDE login from `~/.config/Cursor/User/globalStorage/state.vscdb`.
+**Cursor** reads the IDE login from `~/.config/Cursor/User/globalStorage/state.vscdb`. When the
+access token has expired, the daemon refreshes it with Cursor's OAuth endpoint and writes the new
+token back to that same database, so the IDE and the daemon stay signed in together. This is the
+only place the daemon modifies another tool's files.
 
 **Claude** reads the Claude Code OAuth token from `~/.claude/.credentials.json` and sends it
 as a bearer token. The file is read, never written: Claude Code owns the refresh cycle, and
@@ -133,6 +141,44 @@ row shows *Claude login expired* until you next run `claude`, which refreshes it
 usage windows. Note that the OpenCode CLI itself only discovers limits reactively, from the
 body of a refused request, so the console endpoint polled here is the only way to see them
 before you hit one.
+
+## Privacy
+
+The daemon runs on your machine and has no account, server or telemetry of its own.
+It contains no analytics code.
+
+**Read locally:** the logins listed under Auth, and, for the usage ledger, the session
+files those tools already keep (Claude Code transcripts, the OpenCode database, Codex
+state, Pi sessions). These are never modified. The one exception is the Cursor token
+refresh described under Auth. Claude, Codex and OpenCode logins are never refreshed or
+written.
+
+**Sent over the network:**
+
+| To | What | When |
+| --- | --- | --- |
+| `api2.cursor.sh` | Your Cursor login, to read usage | Every poll |
+| `api.anthropic.com` | Your Claude Code token, to read usage | Every poll |
+| `opencode.ai` | Your OpenCode key, to read usage | Every poll |
+| `chatgpt.com` | Your Codex login, to read usage | Every poll |
+| `fredrickmakoffu.github.io` | A plain GET for `manifest.json`, to see whether a newer release exists | Every `update_check_hours` (default 6) |
+| `github.com` | A download of the release package for your distro | Only when you press Update |
+| The LLM provider you pick | Usage figures plus provider, model and project folder names, to word a notification | Only if you enable `llm_notifications` (off by default) |
+
+Each credential goes only to the provider it belongs to. Transcript text, prompts and
+file contents are never sent. With LLM wording on, project folder names are. `update_check: false` in the config
+turns the update request off, and leaving `llm_notifications` off keeps the daemon
+to the four provider rows.
+
+**Updating is always your action.** Pressing Update downloads the package, checks its
+sha256 against the manifest, then asks polkit (`pkexec`) to install it with `dnf` or
+`apt-get`. You type your password into the desktop's own dialog; the daemon never sees
+it. The package and the manifest come from the same release, so the check catches a
+corrupted or swapped download, not a compromised release. Packages are not GPG-signed yet.
+
+These usage endpoints are not documented public APIs for the most part. They can change
+or disappear without notice, and when they do the affected row shows an error instead
+of a number.
 
 ## Config
 
@@ -419,8 +465,17 @@ facts sent in the prompt; the daemon validates it and falls back to the derived
 choice, so the badge and the prose cannot disagree.
 
 Claude's token and OpenCode's key are opened **read-only** — never refreshed, so
-this cannot sign you out of either CLI. Only numbers travel: no transcript text,
-no prompt history, no file contents.
+this cannot sign you out of either CLI.
+
+> **Check your plan's terms before using Claude as the generator.** With Claude
+> selected, the daemon sends your Claude Code login token to the Anthropic API to
+> write the text. Whether a subscription login may be used by a program other than
+> Claude Code is set by Anthropic's current terms, not by this project. If you are
+> unsure, leave wording off or use another provider.
+
+What travels is usage figures and names: provider and model names, and the folder
+names of your most-used projects, because the notes mention them ("mostly alpha").
+No transcript text, no prompt history, no file contents.
 
 > **The default model ids may need updating.** They are the cheap end of each
 > provider (`claude-haiku-4-5`, `deepseek-v4-flash`) and have not been verified
@@ -430,4 +485,11 @@ no prompt history, no file contents.
 ## License
 
 Application code is [MIT](LICENSE). Bundled Barlow fonts are SIL OFL-1.1
-(`gnome-shell-extension/.../fonts/OFL.txt`).
+(`gnome-shell-extension/.../fonts/OFL.txt`). Provider logos are trademarks of their
+owners and are not covered by the MIT license. See
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## Contributing and security
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Report security problems privately, as
+described in [SECURITY.md](SECURITY.md).

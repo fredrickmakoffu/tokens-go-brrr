@@ -4,8 +4,13 @@ version = "0.7.0"
 description = "GNOME Shell indicator + daemon for AI usage limits"
 readme = "README.md"
 license = { file = "LICENSE" }
+authors = [{ name = "Fredrick Makoffu" }]
 requires-python = ">=3.11"
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/fredrickmakoffu/tokens-go-brrr"
+Issues = "https://github.com/fredrickmakoffu/tokens-go-brrr/issues"
 
 [project.scripts]
 tokens-go-brrr = "tokens_go_brrr.__main__:main"
