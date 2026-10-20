@@ -23,6 +23,17 @@ PLATFORMS = {
 
 ROOT = Path(__file__).resolve().parent.parent
 EXTENSION_DIR = "gnome-shell-extension/"
+PLASMA_DIR = "plasma/"
+
+
+def artifact_ui(name: str) -> str:
+    """Which panel package this file is: gnome, plasma, or core (daemon)."""
+    stem = name.lower()
+    if "-gnome" in stem or "_gnome" in stem:
+        return "gnome"
+    if "-plasma" in stem or "_plasma" in stem:
+        return "plasma"
+    return "core"
 
 
 def _git(*args: str) -> list[str]:
@@ -52,7 +63,14 @@ def update_info(version: str) -> dict:
     if prev is None:
         return {"requires": "relogin", "since": None, "changes": []}
     try:
-        touched = _git("diff", "--name-only", f"{prev}..HEAD", "--", EXTENSION_DIR)
+        touched = _git(
+            "diff",
+            "--name-only",
+            f"{prev}..HEAD",
+            "--",
+            EXTENSION_DIR,
+            PLASMA_DIR,
+        )
         changes = _git("log", "--no-merges", "--format=%s", f"{prev}..HEAD")
     except (OSError, subprocess.CalledProcessError):
         return {"requires": "relogin", "since": prev, "changes": []}
@@ -85,6 +103,7 @@ def main() -> int:
                 "platform": key,
                 "os": os_name,
                 "label": label,
+                "ui": artifact_ui(path.name),
                 "file": path.name,
                 "size": path.stat().st_size,
                 "sha256": digest,

@@ -100,6 +100,19 @@ class ConfigLoadTest(unittest.TestCase):
         self.assertFalse(cfg.set_provider_enabled("nope", True))
         self.assertEqual(cfg.enabled_providers, before)
 
+    def test_ui_theme_defaults_and_persists(self):
+        found = MonitorConfig.load()
+        self.assertEqual(found.ui_theme, "auto")
+        self.write(json.dumps({"ui_theme": "light"}))
+        found = MonitorConfig.load()
+        self.assertEqual(found.ui_theme, "light")
+        MonitorConfig(ui_theme="dark").save()
+        self.assertEqual(MonitorConfig.load().ui_theme, "dark")
+
+    def test_invalid_ui_theme_falls_back_to_auto(self):
+        self.write(json.dumps({"ui_theme": "neon"}))
+        self.assertEqual(MonitorConfig.load().ui_theme, "auto")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -3,10 +3,10 @@
 Name:           tokens-go-brrr
 Version:        %{ver}
 Release:        1%{?dist}
-Summary:        AI coding usage limits in the GNOME top bar
+Summary:        Daemon and CLI for AI coding usage limits
 # MIT for the application; Barlow fonts (when packaged) are SIL OFL-1.1.
 License:        MIT AND OFL-1.1
-URL:            https://github.com/fredrickmakoffu/cursor-spend-monitor
+URL:            https://github.com/fredrickmakoffu/tokens-go-brrr
 Source0:        %{name}-%{version}.tar.gz
 BuildArch:      noarch
 
@@ -17,19 +17,36 @@ BuildRequires:  python3-wheel
 Requires:       python3 >= 3.11
 Requires:       python3-gobject
 Requires:       libnotify
-Requires:       gnome-shell
 
 %description
-A daemon that tracks usage limits for AI coding tools (Cursor, Claude Code,
-OpenCode, Codex, Pi) and a GNOME Shell extension that shows them as a status
-dot in the top bar. Log out and back in after installing so GNOME Shell loads
-the extension, then run `tokens-go-brrr setup`.
+A local daemon and CLI that track usage limits for AI coding tools (Cursor,
+Claude Code, OpenCode, Codex, Pi). Install tokens-go-brrr-gnome or
+tokens-go-brrr-plasma for a panel UI; this package alone is daemon, CLI,
+notifications, and systemd user unit. Run `tokens-go-brrr setup` after install.
+
+%package gnome
+Summary:        GNOME Shell extension for tokens-go-brrr
+Requires:       %{name} = %{version}-%{release}
+Requires:       gnome-shell
+
+%description gnome
+GNOME Shell extension that shows AI coding usage limits as a status dot in the
+top bar. Log out and back in after installing so GNOME Shell loads the extension.
+
+%package plasma
+Summary:        Plasma plasmoid for tokens-go-brrr
+Requires:       %{name} = %{version}-%{release}
+Requires:       plasma-workspace
+
+%description plasma
+Plasma panel plasmoid that shows AI coding usage limits. Add the widget to a
+panel (or system tray) after installing.
 
 %prep
 %autosetup -n %{name}-%{version}
 
 %install
-packaging/stage.sh %{buildroot}
+packaging/stage.sh %{buildroot} all
 # Fonts and their licence are only staged when the source tree has them.
 : > extra.files
 for d in %{_datadir}/fonts/tokens-go-brrr %{_datadir}/licenses/tokens-go-brrr; do
@@ -43,9 +60,15 @@ fc-cache -f /usr/share/fonts/tokens-go-brrr >/dev/null 2>&1 || :
 %{_bindir}/tokens-go-brrr
 %{python3_sitelib}/tokens_go_brrr
 %{python3_sitelib}/tokens_go_brrr-*.dist-info
-%{_datadir}/gnome-shell/extensions/tokens-go-brrr@fredrickmakoffu.github.io
 %{_prefix}/lib/systemd/user/tokens-go-brrr.service
+%{_datadir}/tokens-go-brrr/
+
+%files gnome
+%{_datadir}/gnome-shell/extensions/tokens-go-brrr@fredrickmakoffu.github.io
+
+%files plasma
+%{_datadir}/plasma/plasmoids/org.tokensgobrrr.panel
 
 %changelog
-* Fri Oct 09 2026 Fredrick Makoffu <42011427+fredrickmakoffu@users.noreply.github.com> - %{version}-1
-- Packaged build; see the GitHub release notes for changes.
+* Mon Oct 12 2026 Fredrick Makoffu <42011427+fredrickmakoffu@users.noreply.github.com> - %{version}-1
+- Split daemon / GNOME / Plasma packages; see design/PLASMA_AND_PACKAGING.md.

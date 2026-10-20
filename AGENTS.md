@@ -36,11 +36,13 @@ python3 scripts/gen_light_css.py
 | `tokens_go_brrr/ledger/` | Usage DB (schema / sessions / messages / queries facades) |
 | `tokens_go_brrr/notify_engine/` | Digests, live notes, billboard |
 | `tokens_go_brrr/coerce.py` `http_json.py` | Shared parsing + HTTPS JSON |
+| `ui/` | Shared tokens + locales for panel clients |
 | `gnome-shell-extension/` | GJS popover + top bar |
+| `plasma/` | Plasma plasmoid (same D-Bus contract) |
 | `site/` | Marketing page (no bundler) |
-| `design/` | Product intent + `VISUAL_TRUTH.md` |
+| `design/` | Product intent + `VISUAL_TRUTH.md` + `PLASMA_AND_PACKAGING.md` |
 | `tests/` | unittest suite |
-| `packaging/` `systemd/` | Distro install |
+| `packaging/` `systemd/` | Distro install (core / gnome / plasma) |
 
 ## Do not
 

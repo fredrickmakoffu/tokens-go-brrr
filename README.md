@@ -21,12 +21,17 @@ caution, so an idle-but-healthy tool costs a logo and two characters.
 ## Install
 
 ```bash
-chmod +x install.sh && ./install.sh
+chmod +x install.sh && ./install.sh          # --ui=auto (GNOME, Plasma, or daemon-only)
+# ./install.sh --ui=gnome | --ui=plasma | --ui=none
 tokens-go-brrr setup
 systemctl --user enable --now tokens-go-brrr.service
 ```
 
-`install.sh` also installs the Barlow fonts the popover is set in (to `~/.local/share/fonts/tokens-go-brrr/`); `./install-fonts.sh` does only that. Log out and back in so GNOME Shell picks up the extension. Needs GNOME Shell 45 or newer.
+`install.sh` installs the daemon, Barlow fonts (`~/.local/share/fonts/tokens-go-brrr/`),
+and one panel UI matched to the session (never both). GNOME needs Shell 45+ and a
+log out/in; Plasma users add the `tokens-go-brrr` widget to a panel if needed.
+Distro packages split the same way: `tokens-go-brrr` (core) plus
+`tokens-go-brrr-gnome` or `tokens-go-brrr-plasma`.
 
 ## Providers
 
