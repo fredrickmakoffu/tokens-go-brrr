@@ -1,42 +1,48 @@
 const REL_REPO = "fredrickmakoffu/tokens-go-brrr";
 const REL_URL = "https://github.com/" + REL_REPO + "/releases";
+// Core packages: prefer the split rename (tokens-go-brrr), fall back to the
+// pre-rename monolith (cursor-spend-monitor) that is still what v0.7.0 ships.
+const isRpmCore = (n) =>
+  (/^tokens-go-brrr-\d.*\.rpm$/.test(n) && !/-gnome-|-plasma-/.test(n)) ||
+  /^cursor-spend-monitor-\d.*\.rpm$/.test(n);
+const isDebCore = (n) =>
+  (/^tokens-go-brrr_\d.*_all\.deb$/.test(n) && !/-gnome_|-plasma_/.test(n)) ||
+  /^cursor-spend-monitor_\d.*_all\.deb$/.test(n);
+const dnfCmd = (core, ui) => ui ? "sudo dnf install ./" + core + " ./" + ui : "sudo dnf install ./" + core;
+const aptCmd = (core, ui) => ui ? "sudo apt install ./" + core + " ./" + ui : "sudo apt install ./" + core;
 const PLATFORMS = [
   {
     id: "fedora-gnome", name: "Fedora · GNOME", kindKey: "dl.kind.rpmGnome",
-    match: (n) => /tokens-go-brrr-\d.*\.rpm$/.test(n) && !/-gnome-|-plasma-/.test(n),
+    match: isRpmCore,
     uiMatch: (n) => /tokens-go-brrr-gnome-/.test(n),
-    cmd: (core, ui) => "sudo dnf install ./" + core + " ./" + ui,
+    cmd: dnfCmd,
   },
   {
     id: "fedora-plasma", name: "Fedora · Plasma", kindKey: "dl.kind.rpmPlasma",
-    match: (n) => /tokens-go-brrr-\d.*\.rpm$/.test(n) && !/-gnome-|-plasma-/.test(n),
+    match: isRpmCore,
     uiMatch: (n) => /tokens-go-brrr-plasma-/.test(n),
-    cmd: (core, ui) => "sudo dnf install ./" + core + " ./" + ui,
+    cmd: dnfCmd,
   },
   {
     id: "debian-gnome", name: "Debian · GNOME", kindKey: "dl.kind.debGnome",
-    match: (n) => /tokens-go-brrr_\d.*_all\.deb$/.test(n) && !/-gnome_|-plasma_/.test(n),
+    match: isDebCore,
     uiMatch: (n) => /tokens-go-brrr-gnome_/.test(n),
-    cmd: (core, ui) => "sudo apt install ./" + core + " ./" + ui,
+    cmd: aptCmd,
   },
   {
     id: "debian-plasma", name: "Debian · Plasma", kindKey: "dl.kind.debPlasma",
-    match: (n) => /tokens-go-brrr_\d.*_all\.deb$/.test(n) && !/-gnome_|-plasma_/.test(n),
+    match: isDebCore,
     uiMatch: (n) => /tokens-go-brrr-plasma_/.test(n),
-    cmd: (core, ui) => "sudo apt install ./" + core + " ./" + ui,
+    cmd: aptCmd,
   },
   { id: "windows", name: "Windows", kindKey: "dl.kind.installer" },
   { id: "macos", name: "macOS", kindKey: "dl.kind.dmg" },
 ];
 const FALLBACK_RELEASES = [{
-  tag: "v0.7.0", date: "2026-10-12", url: REL_URL + "/tag/v0.7.0", notes: [],
+  tag: "v0.7.0", date: "2026-10-10", url: REL_URL + "/tag/v0.7.0", notes: [],
   assets: [
-    { name: "tokens-go-brrr-0.7.0-1.fc44.noarch.rpm", size: 200000, url: REL_URL + "/download/v0.7.0/tokens-go-brrr-0.7.0-1.fc44.noarch.rpm", sha: null },
-    { name: "tokens-go-brrr-gnome-0.7.0-1.fc44.noarch.rpm", size: 80000, url: REL_URL + "/download/v0.7.0/tokens-go-brrr-gnome-0.7.0-1.fc44.noarch.rpm", sha: null },
-    { name: "tokens-go-brrr-plasma-0.7.0-1.fc44.noarch.rpm", size: 40000, url: REL_URL + "/download/v0.7.0/tokens-go-brrr-plasma-0.7.0-1.fc44.noarch.rpm", sha: null },
-    { name: "tokens-go-brrr_0.7.0_all.deb", size: 90000, url: REL_URL + "/download/v0.7.0/tokens-go-brrr_0.7.0_all.deb", sha: null },
-    { name: "tokens-go-brrr-gnome_0.7.0_all.deb", size: 70000, url: REL_URL + "/download/v0.7.0/tokens-go-brrr-gnome_0.7.0_all.deb", sha: null },
-    { name: "tokens-go-brrr-plasma_0.7.0_all.deb", size: 35000, url: REL_URL + "/download/v0.7.0/tokens-go-brrr-plasma_0.7.0_all.deb", sha: null },
+    { name: "cursor-spend-monitor-0.7.0-1.fc44.noarch.rpm", size: 535088, url: REL_URL + "/download/v0.7.0/cursor-spend-monitor-0.7.0-1.fc44.noarch.rpm", sha: "4410dc7618a9588d0dfe1bc85c336909db1bbd9fb29aec0c273763e2cc4d381e" },
+    { name: "cursor-spend-monitor_0.7.0_all.deb", size: 328544, url: REL_URL + "/download/v0.7.0/cursor-spend-monitor_0.7.0_all.deb", sha: "ccd84bdbeaf7192671d7c734a09dba77a1de0c07a804a512fea9b36021e8d418" },
   ],
 }];
 const fmtSize = (b) => b >= 1e6 ? I18N.num(b / 1e6, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " MB" : Math.round(b / 1000) + " KB";
@@ -71,8 +77,12 @@ function CopyLine({ text, b, dense }) {
 
 function PlatformCard({ p, core, ui, b }) {
   const [sha, setSha] = React.useState(false);
-  const soon = !core || (p.uiMatch && !ui);
-  const size = (core ? core.size : 0) + (ui ? ui.size : 0);
+  // UI packages are optional: older releases ship a single monolith (daemon +
+  // GNOME). Require only the core asset so those tiles stay downloadable.
+  const soon = !core;
+  const hasUi = !!(ui && p.uiMatch);
+  const size = (core ? core.size : 0) + (hasUi ? ui.size : 0);
+  const btnLabel = hasUi ? t("dl.buttonPair") : t("dl.button", { ext: /\.rpm$/.test(core && core.name || "") ? "RPM" : "DEB" });
   return (
     <div className="blueprint" style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14, minWidth: 0, opacity: soon ? 0.75 : 1 }}>
       <Corners />
@@ -83,10 +93,10 @@ function PlatformCard({ p, core, ui, b }) {
       {soon ? (
         <div style={{ border: "1px dashed var(--color-divider)", padding: "11px 12px", textAlign: "center", fontSize: 14, fontWeight: 600, color: "var(--muted)" }}>{t("dl.soon")}</div>
       ) : (<>
-        <ExtButton variant="primary" block label={t("dl.buttonPair")} onClick={() => { window.open(core.url, "_blank"); if (ui) window.open(ui.url, "_blank"); }} />
-        <CopyLine text={p.cmd(core.name, ui.name)} b={b} dense />
+        <ExtButton variant="primary" block label={btnLabel} onClick={() => { window.open(core.url, "_blank"); if (hasUi) window.open(ui.url, "_blank"); }} />
+        <CopyLine text={p.cmd(core.name, hasUi ? ui.name : null)} b={b} dense />
         <button onClick={() => setSha(!sha)} style={{ alignSelf: "flex-start", border: 0, background: "transparent", padding: 0, cursor: "pointer", fontSize: 13, color: "var(--muted)", fontFamily: "var(--font-body)" }}>{(sha ? "▾ " : "▸ ") + t("dl.checksum")}</button>
-        {sha && <code style={{ ...MONO, fontSize: 12, overflowWrap: "anywhere", color: "var(--muted)", marginTop: -6 }}>{[core.sha, ui && ui.sha].filter(Boolean).join("\n") || t("dl.checksumFallback")}</code>}
+        {sha && <code style={{ ...MONO, fontSize: 12, overflowWrap: "anywhere", color: "var(--muted)", marginTop: -6 }}>{[core.sha, hasUi && ui.sha].filter(Boolean).join("\n") || t("dl.checksumFallback")}</code>}
       </>)}
     </div>
   );
