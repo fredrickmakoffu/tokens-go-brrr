@@ -78,9 +78,9 @@ changes what it serves (this hid the theme toggle for a while). Serve from a
 
 ## 4. Publishing
 
-Merged is not live. `publish-public.yml` copies `site/*` to `gh-pages` of the public
-repo **when a release is published**, so the site changes above reach the world with the
-next release. New files in `site/` are picked up by the `cp site/*`.
+Merged is not live. `pages.yml` deploys `site/` to GitHub Pages **when a release is
+published** and when `site/` changes on `main`. New files in `site/` are picked up by the
+`cp -r site/.`.
 
 ## 5. Not verified by eye
 

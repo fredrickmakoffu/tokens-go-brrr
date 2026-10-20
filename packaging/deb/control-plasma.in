@@ -5,6 +5,6 @@ Priority: optional
 Architecture: all
 Depends: tokens-go-brrr (= @VERSION@), plasma-workspace
 Maintainer: Fredrick Makoffu <42011427+fredrickmakoffu@users.noreply.github.com>
-Homepage: https://github.com/fredrickmakoffu/cursor-spend-monitor
+Homepage: https://github.com/fredrickmakoffu/tokens-go-brrr
 Description: Plasma plasmoid for tokens-go-brrr
  Shows AI coding usage limits in the Plasma panel. Add the widget after install.

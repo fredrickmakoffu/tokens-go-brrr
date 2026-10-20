@@ -13,7 +13,7 @@
         "License": "MIT",
         "Name": "tokens-go-brrr",
         "Version": "0.7.0",
-        "Website": "https://github.com/fredrickmakoffu/cursor-spend-monitor"
+        "Website": "https://github.com/fredrickmakoffu/tokens-go-brrr"
     },
     "X-Plasma-API-Minimum-Version": "6.0",
     "X-Plasma-NotificationArea": "true",

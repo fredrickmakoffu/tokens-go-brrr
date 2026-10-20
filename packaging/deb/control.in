@@ -5,7 +5,7 @@ Priority: optional
 Architecture: all
 Depends: python3 (>= 3.11), python3-gi, gir1.2-notify-0.7, libnotify-bin
 Maintainer: Fredrick Makoffu <42011427+fredrickmakoffu@users.noreply.github.com>
-Homepage: https://github.com/fredrickmakoffu/cursor-spend-monitor
+Homepage: https://github.com/fredrickmakoffu/tokens-go-brrr
 Description: Daemon and CLI for AI coding usage limits
  A local daemon and CLI that track usage limits for AI coding tools (Cursor,
  Claude Code, OpenCode, Codex, Pi). Install tokens-go-brrr-gnome or
