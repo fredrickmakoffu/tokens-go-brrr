@@ -1,5 +1,6 @@
 const REL_REPO = "fredrickmakoffu/tokens-go-brrr";
 const REL_URL = "https://github.com/" + REL_REPO + "/releases";
+const SPONSOR_URL = "https://github.com/sponsors/fredrickmakoffu";
 // Core packages: prefer the split rename (tokens-go-brrr), fall back to the
 // pre-rename monolith (cursor-spend-monitor) that is still what v0.7.0 ships.
 const isRpmCore = (n) =>
@@ -262,4 +263,4 @@ function Facts() {
   );
 }
 
-Object.assign(window, { REL_URL, useReleases, Downloads, Releases, Facts });
+Object.assign(window, { REL_URL, SPONSOR_URL, useReleases, Downloads, Releases, Facts });

@@ -148,6 +148,7 @@
     // footer and modal
     "foot.line": "Tokens go brrr · a usage meter for GNOME Shell · ",
     "foot.releases": "Releases",
+    "foot.sponsor": "Sponsor",
     "foot.marks": "Provider names and marks belong to their owners and are used only to identify each service.",
     "modal.kicker": "429 · Rate limited",
     "modal.meta": "Resets in {dur}",
@@ -412,6 +413,7 @@
 
     "foot.line": "Tokens go brrr · une jauge d’usage pour GNOME Shell · ",
     "foot.releases": "Versions",
+    "foot.sponsor": "Soutenir",
     "foot.marks": "Les noms et marques des fournisseurs appartiennent à leurs propriétaires et servent uniquement à identifier chaque service.",
     "modal.kicker": "429 · Limite atteinte",
     "modal.meta": "Remise à zéro dans {dur}",
@@ -673,6 +675,7 @@
 
     "foot.line": "Tokens go brrr · um medidor de uso para o GNOME Shell · ",
     "foot.releases": "Versões",
+    "foot.sponsor": "Apoiar",
     "foot.marks": "Os nomes e marcas dos provedores pertencem aos seus donos e são usados apenas para identificar cada serviço.",
     "modal.kicker": "429 · Limite atingido",
     "modal.meta": "Reinicia em {dur}",

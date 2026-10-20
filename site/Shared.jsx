@@ -158,7 +158,7 @@ function Faq() {
 function SiteFooter() {
   return (
     <footer style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 16, padding: "20px 0 40px", borderTop: "1px solid var(--color-divider)", fontSize: 13, color: "var(--muted)" }}>
-      <span>{t("foot.line")}<a href={REL_URL} target="_blank">{t("foot.releases")}</a></span>
+      <span>{t("foot.line")}<a href={REL_URL} target="_blank">{t("foot.releases")}</a> · <a href={SPONSOR_URL} target="_blank" rel="noopener">{t("foot.sponsor")}</a></span>
       <span>{t("foot.marks")}</span><LangSwitch />
     </footer>
   );

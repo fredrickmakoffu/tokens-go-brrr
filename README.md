@@ -482,6 +482,12 @@ No transcript text, no prompt history, no file contents.
 > against the live services. A wrong id is not fatal — the provider refuses and
 > the template is used — but set `llm_generator_model` to pin a specific one.
 
+## Support
+
+The app is free. If it is useful to you, you can
+[sponsor its development on GitHub](https://github.com/sponsors/fredrickmakoffu),
+as a one-time amount or monthly.
+
 ## License
 
 Application code is [MIT](LICENSE). Bundled Barlow fonts are SIL OFL-1.1
