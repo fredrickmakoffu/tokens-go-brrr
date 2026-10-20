@@ -11,7 +11,7 @@ Use GitHub's private reporting: on the repository page go to **Security** then
 **Report a vulnerability**. Include what you found, how to reproduce it, and which
 version you tested (the panel's About screen shows it).
 
-I will acknowledge a report within a few days and tell you what I plan to do about it.
+I will acknowledge a report within a week and tell you what I plan to do about it.
 This is a one-person project, so please be patient, and I will credit you in the
 release notes if you want that.
 
