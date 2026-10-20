@@ -22,8 +22,8 @@ from . import __version__
 from . import config as _config
 from .http_json import request_json_url
 
-RELEASES_REPO = "fredrickmakoffu/tokens-go-brrr-releases"
-MANIFEST_URL = "https://fredrickmakoffu.github.io/tokens-go-brrr-releases/manifest.json"
+RELEASES_REPO = "fredrickmakoffu/tokens-go-brrr"
+MANIFEST_URL = "https://fredrickmakoffu.github.io/tokens-go-brrr/manifest.json"
 DOWNLOAD_BASE = f"https://github.com/{RELEASES_REPO}/releases/download"
 
 # What a release asks of the installed copy: restart the daemon, or log out

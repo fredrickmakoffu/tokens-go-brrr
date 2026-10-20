@@ -1,0 +1,63 @@
+name: Pages
+
+# Deploys site/ to GitHub Pages, together with the manifest.json of the latest
+# published release. Both are read from the public site: the download page lists
+# releases, and the daemon's update check fetches manifest.json (see
+# tokens_go_brrr/updates.py).
+#
+# Pressing "Publish" on the draft release is the audit sign-off, and it is what
+# redeploys the site. Edits under site/ on main redeploy it too, so copy fixes do
+# not need a release.
+#
+# One-time setup: Settings > Pages > Source: GitHub Actions. Pages on the Free
+# plan needs a public repository.
+on:
+  release:
+    types: [published]
+  push:
+    branches: [main]
+    paths: ['site/**', '.github/workflows/pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time; a later one waits instead of cancelling a running one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble the site
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Empty unless a release was just published; then that exact release,
+          # otherwise the latest published one. Drafts are never "latest".
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          mkdir out
+          cp -r site/. out/
+          if gh release download ${RELEASE_TAG:+"$RELEASE_TAG"} \
+               --repo "$GITHUB_REPOSITORY" --pattern manifest.json --dir out --clobber; then
+            echo "manifest.json: $(python3 -c 'import json;print(json.load(open("out/manifest.json")).get("version"))')" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No published release has a manifest.json yet: deploying the site without one." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out
+      - id: deploy
+        uses: actions/deploy-pages@v4

@@ -6,7 +6,7 @@ Release:        1%{?dist}
 Summary:        Daemon and CLI for AI coding usage limits
 # MIT for the application; Barlow fonts (when packaged) are SIL OFL-1.1.
 License:        MIT AND OFL-1.1
-URL:            https://github.com/fredrickmakoffu/cursor-spend-monitor
+URL:            https://github.com/fredrickmakoffu/tokens-go-brrr
 Source0:        %{name}-%{version}.tar.gz
 BuildArch:      noarch
 

@@ -94,12 +94,28 @@ Audit step: download the draft's artifacts, install in a VM, run
 `design/QA_CHECKLIST.md`, then press **Publish**. Windows and macOS jobs slot into
 the same workflow later.
 
+Releases, the code and the download site all live in this one repository. Pressing
+**Publish** fires `pages.yml`, which redeploys the site (see below).
+
 ## Download site
 
-A static `site/` (plain HTML/CSS/JS, Barlow, the same palette) that reads
-`manifest.json` of the latest published release and renders one card per platform:
-version, size, sha256, install command, with the visitor's OS highlighted. Platforms
-not built yet show "coming soon". Not built yet.
+A static `site/` (plain HTML/CSS/JS, Barlow, the same palette) served by GitHub
+Pages at `https://fredrickmakoffu.github.io/tokens-go-brrr/`. It lists releases from
+the GitHub API and renders one card per platform: version, size, sha256, install
+command, with the visitor's OS highlighted. Platforms not built yet show "coming
+soon".
+
+`pages.yml` assembles the deploy: everything in `site/`, plus the `manifest.json` of
+the latest published release. The daemon's update check reads that same
+`manifest.json` (`tokens_go_brrr/updates.py`), so the site deploy is part of
+shipping, not decoration. It runs on:
+
+- a release being **published** (the exact release's manifest is used),
+- a push to `main` that touches `site/`, using the latest published manifest,
+- a manual run from the Actions tab.
+
+One-time setup: **Settings > Pages > Source: GitHub Actions**. No tokens or secrets
+are involved; the workflow uses the built-in `GITHUB_TOKEN`.
 
 ## GitHub Free plan constraints
 
@@ -112,12 +128,11 @@ Verify against GitHub's current plan page; these were true when this was written
 | Branch protection / rulesets need a public repo on Free | Private: the "PRs only, CI must pass" rules are convention, not enforced. |
 | Actions: 2,000 min/month on private repos (unlimited on public) | Linux builds are ~1-3 min each; fine. Windows runs count 2x, macOS 10x: build them only on tags. |
 
-**Decision needed: make the repo public.** It unlocks Pages, unlimited Actions
-minutes, and enforceable branch protection, and it makes release downloads linkable.
-Before flipping it: grep history for secrets, and add a LICENSE (there is none today;
-the RPM spec carries a placeholder). The alternative is keeping the code private and
-publishing releases to a separate public repo, or hosting the site and files on
-Cloudflare Pages/R2, at the cost of extra moving parts.
+The repo has to be **public** for any of this to work: it unlocks Pages, unlimited
+Actions minutes and enforceable branch protection, and it makes release downloads
+linkable. That removed the need for a second public "releases" repo, a fine-grained
+`TOKEN` secret and the workflow that copied assets between the two. Before flipping
+visibility: scan the full history for secrets (`gitleaks detect`).
 
 ## Later
 
