@@ -1,4 +1,4 @@
-const REL_REPO = "fredrickmakoffu/tokens-go-brrr-releases";
+const REL_REPO = "fredrickmakoffu/tokens-go-brrr";
 const REL_URL = "https://github.com/" + REL_REPO + "/releases";
 const PLATFORMS = [
   {

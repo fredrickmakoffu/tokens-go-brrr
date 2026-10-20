@@ -11,7 +11,7 @@ alwaysApply: true
 | Python import | `tokens_go_brrr` | mixed casing |
 | Marketing display | `Tokens go brrr` | `AI usage`, `AI Usage` (except design-system name) |
 | Design system (internal) | AI Usage design system | rename casually |
-| GitHub repo (legacy) | `cursor-spend-monitor` OK for remote/path | do not rebrand installs to this |
+| GitHub repo | `fredrickmakoffu/tokens-go-brrr` | `cursor-spend-monitor` (old name; GitHub redirects it, keep it out of new code) |
 
 ## Freeze — do not change (breaks upgrades)
 

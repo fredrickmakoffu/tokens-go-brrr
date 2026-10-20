@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: tokens-go-brrr
-Source: https://github.com/fredrickmakoffu/cursor-spend-monitor
+Source: https://github.com/fredrickmakoffu/tokens-go-brrr
 
 Files: *
 Copyright: 2026 Fredrick Makoffu

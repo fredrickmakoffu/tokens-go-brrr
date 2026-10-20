@@ -25,5 +25,5 @@ alwaysApply: false
 
 - No bundler today: React/Babel from CDN + plain JSX. Do not introduce a build step casually.
 - `ds_bundle.js` is vendored; if regenerated, re-apply `window.t` patches and scrub stale `"AI usage"` kit titles.
-- Public releases repo is `tokens-go-brrr-releases` (not `cursor-spend-monitor-releases`).
+- Releases and the site live in the one repo, `tokens-go-brrr` (GitHub Pages from `.github/workflows/pages.yml`). There is no separate releases repo.
 - Keep `ABOUT.version` in `data.jsx` aligned with `pyproject.toml` when cutting site-visible releases.
