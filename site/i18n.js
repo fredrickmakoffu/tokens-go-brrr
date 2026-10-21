@@ -51,6 +51,10 @@
     "sec.faq.title": "Before you install.",
     "sec.releases.kicker": "Releases",
     "sec.releases.title": "Every release.",
+    "sec.support.kicker": "Support",
+    "sec.support.title": "Free, and kept going by people who use it.",
+    "support.body": "Tokens go brrr is free, with no ads, accounts or telemetry, and it is maintained by one person. If it saves you from hitting a limit blind, you can sponsor it, once or monthly.",
+    "support.cta": "Sponsor on GitHub",
     "sec.cost": "Costs ~{n} to scroll",
 
     // facts
@@ -329,6 +333,10 @@
     "sec.faq.title": "Avant d’installer.",
     "sec.releases.kicker": "Versions",
     "sec.releases.title": "Toutes les versions.",
+    "sec.support.kicker": "Soutien",
+    "sec.support.title": "Gratuit, et porté par celles et ceux qui l’utilisent.",
+    "support.body": "Tokens go brrr est gratuit, sans publicité, sans compte ni télémétrie, et maintenu par une seule personne. S’il vous évite de heurter une limite sans prévenir, vous pouvez le soutenir, une fois ou chaque mois.",
+    "support.cta": "Soutenir sur GitHub",
     "sec.cost": "Défiler coûte ~{n}",
 
     "fact.bar.t": "Barre du haut",
@@ -591,6 +599,10 @@
     "sec.faq.title": "Antes de instalar.",
     "sec.releases.kicker": "Versões",
     "sec.releases.title": "Todas as versões.",
+    "sec.support.kicker": "Apoio",
+    "sec.support.title": "Gratuito, mantido por quem usa.",
+    "support.body": "O Tokens go brrr é gratuito, sem anúncios, contas ou telemetria, e mantido por uma única pessoa. Se ele evita que você bata em um limite sem aviso, você pode apoiar o projeto, uma vez ou mensalmente.",
+    "support.cta": "Apoiar no GitHub",
     "sec.cost": "Rolar custa ~{n}",
 
     "fact.bar.t": "Barra superior",

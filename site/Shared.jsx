@@ -138,6 +138,17 @@ function Privacy() {
   );
 }
 
+function Support() {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20, alignItems: "flex-start", padding: "20px 0", borderTop: "1px solid var(--color-divider)" }}>
+      <p style={{ margin: 0, fontSize: 17, lineHeight: 1.5, maxWidth: 620, textWrap: "pretty" }}>{t("support.body")}</p>
+      <a href={SPONSOR_URL} target="_blank" rel="noopener" style={{ textDecoration: "none" }}>
+        <ExtButton variant="primary" label={t("support.cta")} />
+      </a>
+    </div>
+  );
+}
+
 function Faq() {
   const [open, setOpen] = React.useState(0);
   return (
@@ -158,7 +169,7 @@ function Faq() {
 function SiteFooter() {
   return (
     <footer style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 16, padding: "20px 0 40px", borderTop: "1px solid var(--color-divider)", fontSize: 13, color: "var(--muted)" }}>
-      <span>{t("foot.line")}<a href={REL_URL} target="_blank">{t("foot.releases")}</a> · <a href={SPONSOR_URL} target="_blank" rel="noopener">{t("foot.sponsor")}</a></span>
+      <span>{t("foot.line")}<a href={REL_URL} target="_blank">{t("foot.releases")}</a> · <a href="#support" onClick={(e) => { e.preventDefault(); goTo("support"); }}>{t("foot.sponsor")}</a></span>
       <span>{t("foot.marks")}</span><LangSwitch />
     </footer>
   );
@@ -178,4 +189,4 @@ function LimitModal({ b, dark, onDismiss }) {
   );
 }
 
-Object.assign(window, { HEAD, KICK, MONO, stColor, Corners, goTo, TopBar, PagePopover, SectionHead, Gallery, Privacy, Faq, SiteFooter, LimitModal });
+Object.assign(window, { HEAD, KICK, MONO, stColor, Corners, goTo, TopBar, PagePopover, SectionHead, Gallery, Privacy, Support, Faq, SiteFooter, LimitModal });

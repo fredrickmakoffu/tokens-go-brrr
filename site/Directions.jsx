@@ -19,9 +19,13 @@ function Sections({ b, dark }) {
       <SectionHead n="04" kicker={t("sec.faq.kicker")} title={t("sec.faq.title")} b={b} />
       <Faq />
     </section>
-    <section id="releases" style={{ ...sec, paddingBottom: 72 }} data-screen-label="Releases">
+    <section id="releases" style={sec} data-screen-label="Releases">
       <SectionHead n="05" kicker={t("sec.releases.kicker")} title={t("sec.releases.title")} b={b} />
       <Releases rel={rel} b={b} />
+    </section>
+    <section id="support" style={{ ...sec, paddingBottom: 72 }} data-screen-label="Support">
+      <SectionHead n="06" kicker={t("sec.support.kicker")} title={t("sec.support.title")} b={b} />
+      <Support />
     </section>
     <SiteFooter />
   </>);
